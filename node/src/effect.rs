@@ -82,14 +82,15 @@ use crate::{
         storage::{self, DeployHashes, DeployHeaderResults, DeployResults, StorageType, Value},
     },
     reactor::{EventQueueHandle, QueueKind},
-    types::{Deploy, ExecutedBlock, ProtoBlock},
+    types::{Deploy, DeployHash, ExecutedBlock, ProtoBlock},
     Chainspec,
 };
 use announcements::{
     ApiServerAnnouncement, ConsensusAnnouncement, NetworkAnnouncement, StorageAnnouncement,
 };
 use requests::{
-    ContractRuntimeRequest, DeployQueueRequest, MetricsRequest, NetworkRequest, StorageRequest,
+    ContractRuntimeRequest, DeployFetcherRequest, DeployQueueRequest, MetricsRequest,
+    NetworkRequest, StorageRequest,
 };
 
 /// A pinned, boxed future that produces one or more events.
@@ -465,6 +466,28 @@ impl<REv> EffectBuilder<REv> {
         self.make_request(
             |responder| StorageRequest::GetBlock {
                 block_hash,
+                responder,
+            },
+            QueueKind::Regular,
+        )
+        .await
+    }
+
+    /// Gets the requested deploy using the `DeployFetcher`.
+    #[allow(dead_code)]
+    pub(crate) async fn fetch_deploy<I>(
+        self,
+        deploy_hash: DeployHash,
+        peer: I,
+    ) -> Option<Box<Deploy>>
+    where
+        REv: From<DeployFetcherRequest<I>>,
+        I: Send + 'static,
+    {
+        self.make_request(
+            |responder| DeployFetcherRequest::FetchDeploy {
+                hash: deploy_hash,
+                peer,
                 responder,
             },
             QueueKind::Regular,
