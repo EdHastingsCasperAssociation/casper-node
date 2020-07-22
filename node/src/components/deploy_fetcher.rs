@@ -1,29 +1,26 @@
-use std::{
-    collections::HashMap,
-    fmt::{self, Display, Formatter},
-    time::Duration,
-};
+mod event;
+mod message;
+// mod tests;
+
+use std::{collections::HashMap, time::Duration};
 
 use rand::Rng;
-use serde::{Deserialize, Serialize};
 use smallvec::smallvec;
 use tracing::{debug, error};
 
 use crate::{
-    components::{
-        storage::{self, Storage},
-        Component,
-    },
+    components::{deploy_fetcher::event::DeployResponder, storage::Storage, Component},
     effect::{
         requests::{NetworkRequest, StorageRequest},
-        EffectBuilder, EffectExt, Effects, Responder,
+        EffectBuilder, EffectExt, Effects,
     },
     small_network::NodeId,
     types::{Deploy, DeployHash},
     GossipTableConfig,
 };
 
-type DeployResponder = Responder<Option<Box<Deploy>>>;
+pub use event::{Event, RequestDirection};
+pub use message::Message;
 
 trait ReactorEvent:
     From<Event> + From<NetworkRequest<NodeId, Message>> + From<StorageRequest<Storage>> + Send
@@ -33,105 +30,6 @@ trait ReactorEvent:
 impl<T> ReactorEvent for T where
     T: From<Event> + From<NetworkRequest<NodeId, Message>> + From<StorageRequest<Storage>> + Send
 {
-}
-
-#[derive(Debug, PartialEq)]
-pub enum RequestDirection {
-    Inbound,
-    Outbound,
-}
-
-/// `DeployFetcher` events.
-#[derive(Debug)]
-pub enum Event {
-    /// The initiating event to get a `Deploy` by `DeployHash`
-    FetchDeploy {
-        deploy_hash: DeployHash,
-        peer: NodeId,
-        maybe_responder: Option<DeployResponder>,
-    },
-    /// The result of the `DeployFetcher` getting a deploy from the storage component.  If the
-    /// result is not `Ok`, the deploy should be requested from the peer.
-    GetFromStoreResult {
-        request_direction: RequestDirection,
-        deploy_hash: DeployHash,
-        peer: NodeId,
-        result: Box<storage::Result<Deploy>>,
-    },
-    /// The timeout for waiting for the full deploy body has elapsed and we should clean up
-    /// state.
-    TimeoutPeer {
-        deploy_hash: DeployHash,
-        peer: NodeId,
-    },
-    /// An incoming gossip network message.
-    MessageReceived { sender: NodeId, message: Message },
-    /// The result of the `DeployFetcher` putting a deploy to the storage component.  If the
-    /// result is `Ok`, the deploy hash should be gossiped onwards.
-    PutToStoreResult {
-        deploy_hash: DeployHash,
-        maybe_sender: Option<NodeId>,
-        result: storage::Result<bool>,
-    },
-}
-
-impl Display for Event {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Event::TimeoutPeer { deploy_hash, peer } => write!(
-                formatter,
-                "check get from peer timeout for {} with {}",
-                deploy_hash, peer
-            ),
-            Event::FetchDeploy {
-                deploy_hash,
-                peer: _,
-                maybe_responder: _,
-            } => write!(formatter, "request to get deploy at hash {}", deploy_hash),
-            Event::MessageReceived { sender, message } => {
-                write!(formatter, "{} received from {}", message, sender)
-            }
-            Event::PutToStoreResult {
-                deploy_hash,
-                result,
-                ..
-            } => {
-                if result.is_ok() {
-                    write!(formatter, "put {} to store", deploy_hash)
-                } else {
-                    write!(formatter, "failed to put {} to store", deploy_hash)
-                }
-            }
-            Event::GetFromStoreResult {
-                deploy_hash,
-                result,
-                ..
-            } => {
-                if result.is_ok() {
-                    write!(formatter, "got {} from store", deploy_hash)
-                } else {
-                    write!(formatter, "failed to get {} from store", deploy_hash)
-                }
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum Message {
-    /// Requesting `Deploy`.
-    GetRequest(DeployHash),
-    /// Received `Deploy` from peer.
-    GetResponse(Box<Deploy>),
-}
-
-impl Display for Message {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Message::GetRequest(deploy_hash) => write!(formatter, "get-request({})", deploy_hash),
-            Message::GetResponse(deploy) => write!(formatter, "get-response({})", deploy.id()),
-        }
-    }
 }
 
 /// The component which gossips `Deploy`s to peers and handles incoming `Deploy`s which have been
@@ -247,6 +145,7 @@ impl DeployFetcher {
         let ret = effect_builder
             .put_deploy_to_storage(deploy.clone())
             .ignore();
+
         if let Some(responders) = self.responders.remove(&(*deploy.id(), peer)) {
             for responder in responders {
                 responder
@@ -265,8 +164,7 @@ impl DeployFetcher {
 
     /// Remove any remaining in flight fetch requests for provided deploy_hash and peer.
     fn timeout_peer(&mut self, deploy_hash: DeployHash, peer: NodeId) -> Effects<Event> {
-        let key = (deploy_hash, peer);
-        if let Some(responders) = self.responders.remove(&key) {
+        if let Some(responders) = self.responders.remove(&(deploy_hash, peer)) {
             for responder in responders {
                 responder.respond(None).ignore::<Event>();
             }
