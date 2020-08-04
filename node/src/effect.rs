@@ -653,7 +653,7 @@ impl<REv> EffectBuilder<REv> {
         REv: From<BlockExecutorRequest>,
     {
         self.make_request(
-            |responder| BlockExecutorRequest::ExecuteBlock {
+            |responder| BlockExecutorRequest::ExecuteFinalizedBlock {
                 finalized_block,
                 responder,
             },

@@ -427,15 +427,15 @@ impl<I, T: FetcherItem> Display for FetcherRequest<I, T> {
     }
 }
 
-/// A contract runtime request.
+/// Finalized block execution request.
 #[derive(Debug)]
 #[must_use]
 pub enum BlockExecutorRequest {
-    /// A request to execute finalized block.
-    ExecuteBlock {
-        /// The finalized block.
+    /// Execute a finalized block.
+    ExecuteFinalizedBlock {
+        /// The finalized block to be executed.
         finalized_block: FinalizedBlock,
-        /// Responder to call with the result.
+        /// Responder to call with the result of execution.
         responder: Responder<ExecutedBlock>,
     },
 }
@@ -443,7 +443,7 @@ pub enum BlockExecutorRequest {
 impl Display for BlockExecutorRequest {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            BlockExecutorRequest::ExecuteBlock {
+            BlockExecutorRequest::ExecuteFinalizedBlock {
                 finalized_block, ..
             } => write!(f, "execute block {}", finalized_block),
         }

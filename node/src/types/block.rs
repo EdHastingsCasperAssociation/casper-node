@@ -44,6 +44,16 @@ impl ProtoBlock {
             &bincode::serialize(self).expect("serialize ProtoBlock"),
         ))
     }
+
+    /// Get all deploy hashes in the block.
+    pub fn deploy_hashes(&self) -> Vec<DeployHash> {
+        self.deploys.clone().into_iter().collect()
+    }
+
+    /// False if block has at least one deploy hash, else true.
+    pub fn is_empty(&self) -> bool {
+        self.deploys.is_empty()
+    }
 }
 
 /// System transactions like slashing and rewards.
@@ -85,6 +95,18 @@ impl Display for FinalizedBlock {
             self.timestamp,
             instructions.join(", ")
         )
+    }
+}
+
+impl FinalizedBlock {
+    /// Get all deploy hashes in the block.
+    pub fn deploy_hashes(&self) -> Vec<DeployHash> {
+        self.proto_block.deploy_hashes()
+    }
+
+    /// False if block has at least one deploy hash, else true.
+    pub fn is_empty(&self) -> bool {
+        self.proto_block.is_empty()
     }
 }
 
