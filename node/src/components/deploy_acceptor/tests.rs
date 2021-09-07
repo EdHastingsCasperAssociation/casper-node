@@ -476,15 +476,15 @@ async fn run_deploy_acceptor_without_timeout(
                     )
                 )
             }
-            // Check that repeated valid deploys raise the `PutToStorageResult` with the
-            // `is_new` flag as false.
-            TestScenario::FromClientRepeatedValidDeploy
-            | TestScenario::FromPeerRepeatedValidDeploy => {
-                matches!(
-                    event,
-                    Event::DeployAcceptor(super::Event::PutToStorageResult { is_new: false, .. })
-                )
-            }
+            // // Check that repeated valid deploys raise the `PutToStorageResult` with the
+            // // `is_new` flag as false.
+            // TestScenario::FromClientRepeatedValidDeploy
+            // | TestScenario::FromPeerRepeatedValidDeploy => {
+            //     matches!(
+            //         event,
+            //         Event::DeployAcceptor(super::Event::PutToStorageResult { is_new: false, .. })
+            //     )
+            // }
             // Deploys received from a peer should not raise `ContractRuntimeRequest` events
             // as part of the validation process.
             // This test scenario should therefore, keep running and eventually timeout.
@@ -545,7 +545,10 @@ async fn should_accept_valid_deploy_from_peer() {
 #[tokio::test]
 async fn should_reject_invalid_deploy_from_peer() {
     let result = run_deploy_acceptor(TestScenario::FromPeerInvalidDeploy).await;
-    assert!(matches!(result, Err(super::Error::InvalidDeploy(_))))
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidDeployConfiguration(_))
+    ))
 }
 
 #[tokio::test]
@@ -557,7 +560,10 @@ async fn should_accept_valid_deploy_from_client() {
 #[tokio::test]
 async fn should_reject_invalid_deploy_from_client() {
     let result = run_deploy_acceptor(TestScenario::FromClientInvalidDeploy).await;
-    assert!(matches!(result, Err(super::Error::InvalidDeploy(_))))
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidDeployConfiguration(_))
+    ))
 }
 
 #[tokio::test]

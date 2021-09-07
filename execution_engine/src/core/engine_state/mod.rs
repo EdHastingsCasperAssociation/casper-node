@@ -528,6 +528,8 @@ where
         deploy_item: DeployItem,
         proposer: PublicKey,
     ) -> Result<ExecutionResult, Error> {
+        // in the case that the tracking copy errors the EE is in an invalid state;
+        // this is not really a precondition error
         let tracking_copy = match self.tracking_copy(prestate_hash) {
             Err(error) => return Ok(ExecutionResult::precondition_failure(error)),
             Ok(None) => return Err(Error::RootNotFound(prestate_hash)),
@@ -543,14 +545,17 @@ where
             match tracking_copy.borrow_mut().get_system_module(&preprocessor) {
                 Ok(module) => module,
                 Err(error) => {
+                    // this is a systemic error; the EE itself is misconfigured
+                    // precondition failure is not a useful error for this
+                    // extreme case. should be unreachable baring programmer error
                     return Ok(ExecutionResult::precondition_failure(error.into()));
                 }
             }
         };
 
         let base_key = Key::Account(deploy_item.address);
-
-        let account_public_key = match base_key.into_account() {
+        // deploy claims to be from an account that doesn't actually exist
+        let account_hash = match base_key.into_account() {
             Some(account_addr) => account_addr,
             None => {
                 return Ok(ExecutionResult::precondition_failure(
@@ -561,9 +566,12 @@ where
 
         let authorization_keys = deploy_item.authorization_keys;
 
+        // this is a bit misleading; it checks if the account exists, and if the associated keys
+        // are correct, and if the associated keys have sufficient weight to authorize the deploy
+        // so really three different errors
         let account = match self.get_authorized_account(
             correlation_id,
-            account_public_key,
+            account_hash,
             &authorization_keys,
             Rc::clone(&tracking_copy),
         ) {
@@ -571,6 +579,8 @@ where
             Err(e) => return Ok(ExecutionResult::precondition_failure(e)),
         };
 
+        // this is a systemic error; the proposer of the block this deploy is contained in doesn't
+        // have a account in global state
         let proposer_addr = proposer.to_account_hash();
         let proposer_account = match tracking_copy
             .borrow_mut()
@@ -595,6 +605,7 @@ where
         {
             Ok(contract) => contract,
             Err(error) => {
+                // this is a systemic error; EE is misconfigured
                 return Ok(ExecutionResult::precondition_failure(error.into()));
             }
         };
@@ -620,6 +631,7 @@ where
         {
             Ok(contract) => contract,
             Err(error) => {
+                // this is a systemic error; EE is misconfigured
                 return Ok(ExecutionResult::precondition_failure(error.into()));
             }
         };
@@ -640,15 +652,17 @@ where
         ) {
             Some(motes) => motes,
             None => {
+                // this is a systemic error; EE is misconfigured
                 return Ok(ExecutionResult::precondition_failure(
                     Error::GasConversionOverflow,
-                ))
+                ));
             }
         };
 
         let proposer_main_purse_balance_key = {
             let proposer_main_purse = proposer_account.main_purse();
-
+            // this is a systemic error; the proposer of the block this deploy is contained in doesn't
+            // have a account in global state
             match tracking_copy
                 .borrow_mut()
                 .get_purse_balance_key(correlation_id, proposer_main_purse.into())
@@ -662,6 +676,8 @@ where
 
         let account_main_purse = account.main_purse();
 
+        // this takes the main purse of the account and turns it into a Key; should not be
+        // possible for this to fail
         let account_main_purse_balance_key = match tracking_copy
             .borrow_mut()
             .get_purse_balance_key(correlation_id, account_main_purse.into())
@@ -670,6 +686,7 @@ where
             Err(error) => return Ok(ExecutionResult::precondition_failure(Error::Exec(error))),
         };
 
+        // if this fails, the mint has failed
         let account_main_purse_balance = match tracking_copy
             .borrow_mut()
             .get_purse_balance(correlation_id, account_main_purse_balance_key)
@@ -697,6 +714,7 @@ where
         ) {
             Ok(execution_result) => execution_result,
             Err(error) => {
+                // should be unreachable baring programmer error
                 let exec_error = ExecError::from(error);
                 ExecutionResult::precondition_failure(exec_error.into())
             }
