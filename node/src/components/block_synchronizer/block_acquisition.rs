@@ -692,7 +692,8 @@ impl BlockAcquisitionState {
                 if !need_execution_state =>
             {
                 info!(
-                    "BlockAcquisition: registering marked complete for: {}",
+                    "BlockAcquisition: registering marked complete({}) for: {}",
+                    block.height(),
                     block.id()
                 );
                 if deploy_acquisition.needs_deploy().is_some() {
@@ -711,7 +712,8 @@ impl BlockAcquisitionState {
                 // this must be a block w/ no deploys and thus also no execution effects or
                 // approvals hashes; we can go straight to strict finality
                 info!(
-                    "BlockAcquisition: registering marked complete for: {}",
+                    "BlockAcquisition: registering marked complete({}) for: {}",
+                    block.height(),
                     block.id()
                 );
                 BlockAcquisitionState::HaveStrictFinalitySignatures(
@@ -721,7 +723,8 @@ impl BlockAcquisitionState {
             }
             BlockAcquisitionState::HaveAllDeploys(header, acquired_signatures) => {
                 info!(
-                    "BlockAcquisition: registering marked complete for: {}",
+                    "BlockAcquisition: registering marked complete({}) for: {}",
+                    header.height(),
                     header.block_hash()
                 );
                 BlockAcquisitionState::HaveStrictFinalitySignatures(

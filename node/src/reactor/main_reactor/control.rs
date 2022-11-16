@@ -362,9 +362,9 @@ impl MainReactor {
                             Ok(None) => {
                                 debug!("CatchUp: waiting to store genesis immediate switch block");
                                 return CatchUpInstruction::CheckLater(
-                                    "CatchUp: waiting for genesis immediate switch block to be stored"
+                                    "waiting for genesis immediate switch block to be stored"
                                         .to_string(),
-                                    self.control_logic_default_delay.into()
+                                    self.control_logic_default_delay.into(),
                                 );
                             }
                             Err(err) => {
