@@ -93,7 +93,7 @@ impl MainReactor {
                     Ok(effects) => {
                         info!("CatchUp: switch to Validate at genesis");
                         self.state = ReactorState::Validate;
-                        (Duration::ZERO, effects)
+                        (Duration::from_secs(2), effects)
                     }
                     Err(msg) => (
                         Duration::ZERO,
@@ -337,8 +337,7 @@ impl MainReactor {
                                     let diff = timestamp.saturating_diff(Timestamp::now());
                                     if diff > TimeDiff::default() {
                                         return CatchUpInstruction::CheckLater(
-                                            "CatchUp: waiting for genesis activation point"
-                                                .to_string(),
+                                            "waiting for genesis activation point".to_string(),
                                             Duration::from(diff),
                                         );
                                     } else {
