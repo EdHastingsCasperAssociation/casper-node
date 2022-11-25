@@ -165,14 +165,19 @@ impl BlockSynchronizer {
         }
     }
 
-    pub(crate) fn purge(&mut self, historical_only: bool) {
+    pub(crate) fn purge(&mut self) {
+        self.purge_historical();
+        self.purge_forward();
+    }
+
+    pub(crate) fn purge_historical(&mut self) {
         if let Some(builder) = &self.historical {
             debug!(%builder, "BlockSynchronizer: purging block builder");
         }
         self.historical = None;
-        if historical_only {
-            return;
-        }
+    }
+
+    pub(crate) fn purge_forward(&mut self) {
         if let Some(builder) = &self.forward {
             debug!(%builder, "BlockSynchronizer: purging block builder");
         }
@@ -453,8 +458,10 @@ impl BlockSynchronizer {
                         results.extend(
                             effect_builder
                                 .mark_block_completed(block_height)
-                                .event(move |_| Event::MarkBlockCompleted(block_hash)),
+                                .event(move |_| Event::MarkBlockSynched(block_hash)),
                         )
+                    } else {
+                        builder.register_marked_complete();
                     }
                 }
                 NeedNext::Peers(block_hash) => {
@@ -927,7 +934,10 @@ impl<REv: ReactorEvent> Component<REv> for BlockSynchronizer {
         event: Self::Event,
     ) -> Effects<Self::Event> {
         if self.paused {
-            warn!(%event, "BlockSynchronizer: not currently enabled - ignoring event");
+            debug!(%event, "BlockSynchronizer: not currently enabled - ignoring event");
+            if let Event::Request(BlockSynchronizerRequest::Status { responder }) = event {
+                return responder.respond(self.status()).ignore();
+            }
             return Effects::new();
         }
 
@@ -1095,7 +1105,7 @@ impl<REv: ReactorEvent> Component<REv> for BlockSynchronizer {
                     }
 
                     // do not hook need next; we're finished sync'ing this block
-                    Event::MarkBlockCompleted(block_hash) => {
+                    Event::MarkBlockSynched(block_hash) => {
                         self.register_marked_complete(&block_hash);
                         Effects::new()
                     }

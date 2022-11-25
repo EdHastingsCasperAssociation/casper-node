@@ -24,7 +24,7 @@ pub(crate) enum Event {
     Request(BlockSynchronizerRequest),
 
     DisconnectFromPeer(NodeId), // todo!() [RC] - Should we add `justification` here?
-    MarkBlockCompleted(BlockHash),
+    MarkBlockSynched(BlockHash),
     ValidatorMatrixUpdated,
     #[from]
     BlockHeaderFetched(FetchResult<BlockHeader>),
@@ -142,7 +142,7 @@ impl Display for Event {
             Event::AccumulatedPeers(..) => {
                 write!(f, "accumulated peers")
             }
-            Event::MarkBlockCompleted(..) => {
+            Event::MarkBlockSynched(..) => {
                 write!(f, "MarkedComplete")
             }
         }

@@ -18,7 +18,7 @@ pub(crate) enum Event {
         era_id: Option<EraId>,
         sender: NodeId,
     },
-    ReceivedBlock {
+    ReceivedGossipedBlock {
         block: Box<Block>,
         sender: NodeId,
     },
@@ -60,7 +60,7 @@ impl Display for Event {
                     sender, block_hash
                 )
             }
-            Event::ReceivedBlock { block, sender } => {
+            Event::ReceivedGossipedBlock { block, sender } => {
                 write!(f, "received {} from {}", block, sender)
             }
             Event::CreatedFinalitySignature { finality_signature } => {

@@ -171,6 +171,7 @@ impl BlockAccumulator {
         // AFTER the f-seq cant help you, SYNC-all-state
         // |------------- future chain ------------------------> ?
         if starting_with.is_executable_block() {
+            debug!(?starting_with, "BlockAccumulator: checking for child");
             let next_block_hash = {
                 let mut ret: Option<BlockHash> = None;
                 if let Some(highest_perceived) = self.highest_usable_block_height() {
@@ -180,9 +181,15 @@ impl BlockAccumulator {
                         block_height,
                         highest_perceived
                     );
+
+                    debug!(?block_height, ?highest_perceived, "BlockAccumulator");
                     if highest_perceived.saturating_sub(self.attempt_execution_threshold)
                         <= block_height
                     {
+                        debug!(
+                            block_height = block_height + 1,
+                            "BlockAccumulator: child within attempt_execution_threshold"
+                        );
                         // this will short circuit the block synchronizer to start syncing the
                         // child of this block after enqueueing this block for execution
                         ret = self.next_syncable_block_hash(block_hash)
@@ -203,16 +210,17 @@ impl BlockAccumulator {
 
         if self.should_sync(block_height) {
             let block_hash_to_sync = match (
-                starting_with.is_synced_block_identifier(),
+                starting_with.should_use_child_hash(),
                 self.next_syncable_block_hash(block_hash),
             ) {
                 (true, None) => {
-                    // the block we just finished syncing appears to have no perceived children
+                    // the block we just finished syncing or local tip
+                    // has no perceived child with sufficient finality
                     // and is either at tip or within execution range of tip
                     None
                 }
                 (true, Some(child_hash)) => {
-                    // we know of the child of this synced block
+                    // we know of the child of this synced or local tip block
                     Some(child_hash)
                 }
                 (false, _) => Some(block_hash),
@@ -730,7 +738,7 @@ impl<REv: ReactorEvent> Component<REv> for BlockAccumulator {
                 self.upsert_acceptor(block_hash, era_id, Some(sender));
                 Effects::new()
             }
-            Event::ReceivedBlock { block, sender } => {
+            Event::ReceivedGossipedBlock { block, sender } => {
                 self.register_block(effect_builder, *block, Some(sender), false)
             }
             Event::CreatedFinalitySignature { finality_signature } => {

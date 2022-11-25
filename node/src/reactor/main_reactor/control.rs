@@ -483,7 +483,7 @@ impl MainReactor {
                 }
             }
         }
-        self.block_synchronizer.purge(false);
+        self.block_synchronizer.purge();
         // there are no catch up or shutdown instructions, so we must be caught up
         CatchUpInstruction::CaughtUp
     }
@@ -581,7 +581,7 @@ impl MainReactor {
                 }
                 Ok(None) => {
                     error!("KeepUp: block synchronizer idle, local storage has no complete blocks");
-                    self.block_synchronizer.purge(false);
+                    self.block_synchronizer.purge();
                     return KeepUpInstruction::CatchUp;
                 }
                 Err(error) => {
@@ -605,7 +605,7 @@ impl MainReactor {
         debug!("KeepUp: sync_instruction {:?}", sync_instruction);
         match sync_instruction {
             SyncInstruction::Leap { .. } => {
-                self.block_synchronizer.purge(false);
+                self.block_synchronizer.purge();
                 return KeepUpInstruction::CatchUp;
             }
             SyncInstruction::BlockSync { block_hash } => {
@@ -639,6 +639,8 @@ impl MainReactor {
                                 true,
                                 self.chainspec.core_config.simultaneous_peer_requests,
                             );
+                        } else {
+                            self.block_synchronizer.purge_forward();
                         }
                         if false == effects.is_empty() {
                             return KeepUpInstruction::Do(Duration::ZERO, effects);
@@ -762,7 +764,7 @@ impl MainReactor {
                         }),
                     );
                 } else {
-                    self.block_synchronizer.purge(true);
+                    self.block_synchronizer.purge_historical();
                     KeepUpInstruction::CheckLater(
                         "Historical: purged".to_string(),
                         self.control_logic_default_delay.into(),

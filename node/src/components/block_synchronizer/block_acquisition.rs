@@ -840,7 +840,13 @@ impl BlockAcquisitionState {
                     acquired_signatures.clone(),
                 )
             }
-
+            BlockAcquisitionState::HaveStrictFinalitySignatures(header, ..) => {
+                info!(
+                    "BlockAcquisition:StrictFinalitySignatures: registering marked complete for: {}",
+                    header.block_hash()
+                );
+                return Ok(());
+            }
             BlockAcquisitionState::Initialized(..)
             | BlockAcquisitionState::HaveWeakFinalitySignatures(..)
             | BlockAcquisitionState::HaveBlockHeader(..)
@@ -848,7 +854,6 @@ impl BlockAcquisitionState {
             | BlockAcquisitionState::HaveGlobalState(..)
             | BlockAcquisitionState::HaveAllExecutionResults(..)
             | BlockAcquisitionState::HaveApprovalsHashes(..)
-            | BlockAcquisitionState::HaveStrictFinalitySignatures(..)
             | BlockAcquisitionState::Failed(..) => {
                 return Ok(());
             }

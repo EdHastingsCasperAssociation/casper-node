@@ -36,8 +36,13 @@ impl StartingWith {
         matches!(self, StartingWith::ExecutableBlock(_, _, _))
     }
 
-    pub(crate) fn is_synced_block_identifier(&self) -> bool {
-        matches!(self, StartingWith::SyncedBlockIdentifier(_, _, _))
+    pub(crate) fn should_use_child_hash(&self) -> bool {
+        match self {
+            StartingWith::Hash(_)
+            | StartingWith::BlockIdentifier(_, _)
+            | StartingWith::ExecutableBlock(_, _, _) => false,
+            StartingWith::SyncedBlockIdentifier(_, _, _) | StartingWith::LocalTip(_, _, _) => true,
+        }
     }
 
     pub(crate) fn maybe_local_tip_identifier(&self) -> Option<(u64, EraId)> {

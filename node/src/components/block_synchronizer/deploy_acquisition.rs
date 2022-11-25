@@ -90,8 +90,20 @@ impl DeployAcquisition {
 
     pub(super) fn needs_deploy(&self) -> Option<DeployIdentifier> {
         match self {
-            DeployAcquisition::ByHash(acq) => acq.needs_deploy().map(DeployIdentifier::ByHash),
-            DeployAcquisition::ById(acq) => acq.needs_deploy().map(DeployIdentifier::ById),
+            DeployAcquisition::ByHash(acq) => {
+                debug!(
+                    "DeployAcquisition: needed_deploys: {}",
+                    acq.needed_deploys()
+                );
+                acq.needs_deploy().map(DeployIdentifier::ByHash)
+            }
+            DeployAcquisition::ById(acq) => {
+                debug!(
+                    "DeployAcquisition: needed_deploys: {}",
+                    acq.needed_deploys()
+                );
+                acq.needs_deploy().map(DeployIdentifier::ById)
+            }
         }
     }
 }
@@ -134,6 +146,13 @@ impl<T: Copy + Ord> Acquisition<T> {
             }
         }
         None
+    }
+
+    fn needed_deploys(&self) -> usize {
+        self.inner
+            .iter()
+            .filter(|(_, state)| matches!(state, DeployState::Vacant))
+            .count()
     }
 
     fn needs_deploy(&self) -> Option<T> {

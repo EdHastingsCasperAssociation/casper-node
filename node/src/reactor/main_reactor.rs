@@ -747,7 +747,7 @@ impl reactor::Reactor for MainReactor {
                 self.block_accumulator.handle_event(
                     effect_builder,
                     rng,
-                    block_accumulator::Event::ReceivedBlock {
+                    block_accumulator::Event::ReceivedGossipedBlock {
                         block: item,
                         sender,
                     },
