@@ -626,10 +626,11 @@ impl MainReactor {
             }
             SyncInstruction::BlockExec {
                 block_hash,
+                block_height,
                 next_block_hash,
             } => {
                 debug!("KeepUp: BlockExec: {:?}", block_hash);
-                match self.enqueue_executable_block(effect_builder, block_hash) {
+                match self.enqueue_executable_block(effect_builder, block_hash, block_height) {
                     Ok(effects) => {
                         if let Some(sync_block_hash) = next_block_hash {
                             debug!("KeepUp: BlockSync: {:?}", sync_block_hash);
@@ -1212,6 +1213,7 @@ impl MainReactor {
         &mut self,
         effect_builder: EffectBuilder<MainEvent>,
         block_hash: BlockHash,
+        block_height: u64,
     ) -> Result<Effects<MainEvent>, String> {
         let mut effects = Effects::new();
         match self.storage.make_executable_block(&block_hash) {
@@ -1229,6 +1231,7 @@ impl MainReactor {
                     "KeepUp: idempotent enqueue_executable_block: {:?}",
                     block_hash
                 );
+                effects.extend(effect_builder.mark_block_completed(block_height).ignore());
             }
             Err(err) => {
                 return Err(format!(

@@ -7,6 +7,7 @@ pub(crate) enum SyncInstruction {
     },
     BlockExec {
         block_hash: BlockHash,
+        block_height: u64,
         next_block_hash: Option<BlockHash>,
     },
     BlockSync {

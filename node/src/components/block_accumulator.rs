@@ -199,6 +199,7 @@ impl BlockAccumulator {
             };
             return SyncInstruction::BlockExec {
                 block_hash,
+                block_height,
                 next_block_hash,
             };
         }
