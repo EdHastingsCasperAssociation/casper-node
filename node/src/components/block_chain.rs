@@ -1,5 +1,6 @@
 use crate::types::{BlockHash, BlockHeader};
 use casper_types::EraId;
+use itertools::Itertools;
 use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HashEntry;
 use std::collections::{BTreeMap, HashMap};
@@ -95,7 +96,7 @@ impl BlockChainEntry {
         }
     }
 
-    /// Is this instance the complete variant?
+    /// Is this instance a switch block?
     pub(crate) fn is_switch_block(&self) -> Option<bool> {
         match self {
             BlockChainEntry::Vacant { .. }
@@ -108,12 +109,25 @@ impl BlockChainEntry {
         }
     }
 
-    /// Is this instance the incomplete variant?
+    /// Is this instance complete a switch block?
+    pub(crate) fn is_complete_switch_block(&self) -> bool {
+        match self {
+            BlockChainEntry::Vacant { .. }
+            | BlockChainEntry::Proposed { .. }
+            | BlockChainEntry::Finalized { .. }
+            | BlockChainEntry::Incomplete { .. } => false,
+            BlockChainEntry::Complete {
+                is_switch_block, ..
+            } => *is_switch_block,
+        }
+    }
+
+    /// Is this instance the proposed variant?
     pub(crate) fn is_proposed(&self) -> bool {
         matches!(self, BlockChainEntry::Proposed { .. })
     }
 
-    /// Is this instance the incomplete variant?
+    /// Is this instance the finalized variant?
     pub(crate) fn is_finalized(&self) -> bool {
         matches!(self, BlockChainEntry::Finalized { .. })
     }
@@ -232,6 +246,30 @@ impl BlockChain {
             .max_by(|x, y| x.block_height().cmp(&y.block_height()))
     }
 
+    /// Returns the lowest switch block entry, if any.
+    pub(crate) fn lowest_switch_block(&self) -> Option<&BlockChainEntry> {
+        self.chain
+            .values()
+            .filter(|x| x.is_complete() && x.is_switch_block().unwrap_or(false))
+            .min_by(|x, y| x.block_height().cmp(&y.block_height()))
+    }
+
+    /// Returns the highest switch block entry, if any.
+    pub(crate) fn highest_switch_block(&self) -> Option<&BlockChainEntry> {
+        self.chain
+            .values()
+            .filter(|x| x.is_complete() && x.is_switch_block().unwrap_or(false))
+            .max_by(|x, y| x.block_height().cmp(&y.block_height()))
+    }
+
+    /// Returns the highest entry (by block height) where the predicate is true, if any.
+    pub(crate) fn all_by<F>(&self, predicate: F) -> Vec<&BlockChainEntry>
+    where
+        F: Fn(&BlockChainEntry) -> bool,
+    {
+        self.chain.values().filter(|x| predicate(x)).collect_vec()
+    }
+
     /// Returns the highest entry (by block height) where the predicate is true, if any.
     pub(crate) fn lowest_sequence<F>(&self, predicate: F) -> Vec<BlockChainEntry>
     where
@@ -326,8 +364,28 @@ impl BlockChain {
 #[cfg(test)]
 mod tests {
     use crate::components::block_chain::{BlockChain, BlockChainEntry};
-    use crate::types::Block;
+    use crate::types::{Block, BlockHash};
     use casper_types::testing::TestRng;
+    use casper_types::EraId;
+
+    impl BlockChain {
+        /// Register a block that has been marked complete from parts.
+        pub(crate) fn register_complete_from_parts(
+            &mut self,
+            block_height: u64,
+            block_hash: BlockHash,
+            era_id: EraId,
+            is_switch_block: bool,
+        ) {
+            let entry = BlockChainEntry::Complete {
+                block_height,
+                block_hash,
+                era_id,
+                is_switch_block,
+            };
+            self.register(entry);
+        }
+    }
 
     #[test]
     fn should_construct_empty() {
@@ -501,6 +559,54 @@ mod tests {
                 .block_height(),
             14,
             "expected last entry by predicate"
+        );
+    }
+
+    #[test]
+    fn should_find_switch_blocks() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let mut era_id = EraId::new(0);
+        let mut change_era = false;
+        for height in 0..11 {
+            if change_era {
+                era_id = era_id.successor();
+                change_era = false;
+            }
+            let mut is_switch_block = false;
+            if height == 0 || height % 5 == 0 {
+                is_switch_block = true;
+                change_era = true;
+            }
+            block_chain.register_complete_from_parts(
+                height,
+                BlockHash::random(&mut rng),
+                era_id,
+                is_switch_block,
+            );
+        }
+        assert_eq!(
+            block_chain
+                .lowest(BlockChainEntry::is_complete_switch_block)
+                .expect("should have switch blocks")
+                .block_height(),
+            0,
+            "block at height 0 should be highest switch"
+        );
+        assert_eq!(
+            block_chain
+                .highest(BlockChainEntry::is_complete_switch_block)
+                .expect("should have switch blocks")
+                .block_height(),
+            10,
+            "block at height 10 should be highest switch"
+        );
+        assert_eq!(
+            block_chain
+                .all_by(BlockChainEntry::is_complete_switch_block)
+                .len(),
+            3,
+            "unexpected number of switch blocks"
         );
     }
 }
