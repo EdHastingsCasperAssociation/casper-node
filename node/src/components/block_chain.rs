@@ -304,12 +304,34 @@ impl BlockChain {
             .max_by(|x, y| x.block_height().cmp(&y.block_height()))
     }
 
-    /// Returns the highest entry (by block height) where the predicate is true, if any.
+    /// Returns all actual entries where the predicate is true, if any.
     pub(crate) fn all_by<F>(&self, predicate: F) -> Vec<&BlockChainEntry>
     where
         F: Fn(&BlockChainEntry) -> bool,
     {
         self.chain.values().filter(|x| predicate(x)).collect_vec()
+    }
+
+    /// Returns a range, including vacancies.
+    pub(crate) fn range(&self, lbound: Option<u64>, ubound: Option<u64>) -> Vec<BlockChainEntry> {
+        let mut ret = vec![];
+        if self.chain.is_empty() {
+            return ret;
+        }
+        let low = lbound.unwrap_or(0);
+        let hi = ubound.unwrap_or(*self.chain.keys().max().unwrap_or(&0));
+        if low > hi {
+            return ret;
+        }
+        for height in low..=hi {
+            match self.chain.get(&height) {
+                None => {
+                    ret.push(BlockChainEntry::vacant(height));
+                }
+                Some(entry) => ret.push(*entry),
+            }
+        }
+        ret
     }
 
     /// Returns the highest entry (by block height) where the predicate is true, if any.
@@ -372,6 +394,10 @@ impl BlockChain {
     }
 
     fn register(&mut self, item: BlockChainEntry) {
+        // don't waste mem on actual vacant entries
+        if item.is_vacant() {
+            return;
+        }
         let block_height = item.block_height();
         // maintain the reverse lookup by block_hash where able
         if let Some(block_hash) = item.block_hash() {
@@ -410,6 +436,7 @@ mod tests {
         types::{Block, BlockHash},
     };
     use casper_types::{testing::TestRng, EraId};
+    use itertools::Itertools;
 
     impl BlockChain {
         /// Register a block that has been marked complete from parts.
@@ -501,7 +528,7 @@ mod tests {
     }
 
     #[test]
-    fn should_by_hash() {
+    fn should_find_by_hash() {
         let mut block_chain = BlockChain::new();
         let mut rng = TestRng::new();
         let block_header1 = {
@@ -664,7 +691,7 @@ mod tests {
     }
 
     #[test]
-    fn should_by_parent() {
+    fn should_find_by_parent() {
         let mut rng = TestRng::new();
         let mut block_chain = BlockChain::new();
         let era_id = EraId::new(0);
@@ -691,7 +718,7 @@ mod tests {
     }
 
     #[test]
-    fn should_by_child() {
+    fn should_find_by_child() {
         let mut rng = TestRng::new();
         let mut block_chain = BlockChain::new();
         let era_id = EraId::new(0);
@@ -782,5 +809,63 @@ mod tests {
             result,
             "should detect non-tail proposal"
         )
+    }
+
+    #[test]
+    fn should_find_all_actual_entries() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let mut expected = vec![];
+        for height in 5..15 {
+            if height >= 8 && height < 10 {
+                continue;
+            }
+            let block_hash = &BlockHash::random(&mut rng);
+            block_chain.register_incomplete(height, block_hash);
+            expected.push(BlockChainEntry::new_incomplete(height, block_hash));
+        }
+        let all = block_chain.all_by(BlockChainEntry::all);
+        assert_eq!(
+            expected.iter().map(|x| x).collect_vec(),
+            all,
+            "should have actual entries only"
+        );
+    }
+
+    #[test]
+    fn should_find_all_virtual_entries() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let mut expected = vec![];
+        let lbound = 0;
+        let ubound = 14;
+        for height in lbound..=ubound {
+            if height == 0 || height % 2 == 0 {
+                expected.push(BlockChainEntry::Vacant {
+                    block_height: height,
+                });
+                continue;
+            }
+            let block_hash = &BlockHash::random(&mut rng);
+            block_chain.register_incomplete(height, block_hash);
+            expected.push(BlockChainEntry::new_incomplete(height, block_hash));
+        }
+        let all = block_chain.all_by(BlockChainEntry::all);
+        let range = block_chain.range(Some(lbound), Some(ubound));
+        assert!(all.len() < range.len(), "all should not include vacancies");
+        assert_ne!(
+            all,
+            range.iter().map(|x| x).collect_vec(),
+            "range should include vacancies"
+        );
+        assert_eq!(expected, range, "should have entire range");
+        let range = block_chain.range(None, Some(ubound));
+        assert_eq!(expected, range, "should have entire range default lbound");
+
+        expected.pop(); // get rid of tail vacancy
+        let range = block_chain.range(Some(lbound), None);
+        assert_eq!(expected, range, "should have entire range default ubound");
+        let range = block_chain.range(None, None);
+        assert_eq!(expected, range, "should have entire range unbounded");
     }
 }
