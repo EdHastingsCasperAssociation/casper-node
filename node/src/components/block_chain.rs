@@ -668,22 +668,18 @@ mod tests {
         let mut block_chain = BlockChain::new();
         let mut era_id = EraId::new(0);
         let mut change_era = false;
-        for height in 0..11 {
+        for height in 0..=10 {
             if change_era {
                 era_id = era_id.successor();
-                change_era = false;
             }
-            let mut is_switch_block = false;
-            if height == 0 || height % 5 == 0 {
-                is_switch_block = true;
-                change_era = true;
-            }
+            let is_switch_block = height == 0 || height % 5 == 0;
             block_chain.register_complete_from_parts(
                 height,
                 BlockHash::random(&mut rng),
                 era_id,
                 is_switch_block,
             );
+            change_era = is_switch_block;
         }
         assert_eq!(
             block_chain
@@ -691,7 +687,7 @@ mod tests {
                 .expect("should have switch blocks")
                 .block_height(),
             0,
-            "block at height 0 should be highest switch"
+            "block at height 0 should be lowest switch"
         );
         assert_eq!(
             block_chain
@@ -720,20 +716,18 @@ mod tests {
         for height in 0..=10 {
             if change_era {
                 era_id = era_id.successor();
-                change_era = false;
             }
-            let mut is_switch_block = false;
-            if height == 0 || height % div == 0 || height - 1 % div == 0 {
-                is_switch_block = true;
-                change_era = true;
-            }
+            let switch = height % div == 0;
+            let immediate = height == 0 || height - 1 % div == 0;
             block_chain.register_complete_from_parts(
                 height,
                 BlockHash::random(&mut rng),
                 era_id,
-                is_switch_block,
+                switch || immediate,
             );
-            let expected = Some(height == 0 || height - 1 % div == 0);
+            change_era = switch || immediate;
+
+            let expected = Some(immediate);
             let actual = block_chain.is_immediate_switch_block(height);
             assert_eq!(
                 expected, actual,
