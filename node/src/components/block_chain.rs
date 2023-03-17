@@ -1,9 +1,7 @@
 use crate::types::{BlockHash, BlockHeader};
 use casper_types::EraId;
 use itertools::Itertools;
-use std::collections::btree_map::Entry;
-use std::collections::hash_map::Entry as HashEntry;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{btree_map::Entry, hash_map::Entry as HashEntry, BTreeMap, HashMap};
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Error {
@@ -407,10 +405,11 @@ impl BlockChain {
 
 #[cfg(test)]
 mod tests {
-    use crate::components::block_chain::{BlockChain, BlockChainEntry, Error};
-    use crate::types::{Block, BlockHash};
-    use casper_types::testing::TestRng;
-    use casper_types::EraId;
+    use crate::{
+        components::block_chain::{BlockChain, BlockChainEntry, Error},
+        types::{Block, BlockHash},
+    };
+    use casper_types::{testing::TestRng, EraId};
 
     impl BlockChain {
         /// Register a block that has been marked complete from parts.
