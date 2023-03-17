@@ -177,6 +177,17 @@ impl BlockChain {
         BlockChain::default()
     }
 
+    pub(crate) fn remove(&mut self, block_height: u64) -> Option<BlockChainEntry> {
+        if let Some(entry) = self.chain.remove(&block_height) {
+            if let Some(block_hash) = entry.block_hash() {
+                let _ = self.index.remove(&block_hash);
+            }
+            Some(entry)
+        } else {
+            None
+        }
+    }
+
     /// Register a block that is proposed.
     pub(crate) fn register_proposed(&mut self, block_height: u64) -> Result<(), Error> {
         if let Some(highest) = self.highest(BlockChainEntry::all_non_vacant) {
@@ -589,6 +600,55 @@ mod tests {
             None,
             "finalized should not be indexed by hash"
         );
+    }
+
+    #[test]
+    fn should_remove() {
+        let mut block_chain = BlockChain::new();
+        let block_height = 0;
+        assert!(
+            block_chain.remove(block_height).is_none(),
+            "nothing to remove"
+        );
+        assert!(
+            block_chain.register_proposed(block_height).is_ok(),
+            "should be ok"
+        );
+        assert_eq!(
+            false,
+            block_chain.chain.is_empty(),
+            "chain should not be empty"
+        );
+        let removed = block_chain.remove(block_height).expect("should exist");
+        assert_eq!(removed.block_height(), block_height, "removed wrong item");
+        assert!(block_chain.chain.is_empty(), "chain should be empty");
+    }
+
+    #[test]
+    fn should_remove_index() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let block_height = 0;
+        block_chain.register_complete_from_parts(
+            block_height,
+            BlockHash::random(&mut rng),
+            EraId::from(0),
+            false,
+        );
+        assert_eq!(
+            false,
+            block_chain.chain.is_empty(),
+            "chain should not be empty"
+        );
+        assert_eq!(
+            false,
+            block_chain.index.is_empty(),
+            "index should not be empty"
+        );
+        let removed = block_chain.remove(block_height).expect("should exist");
+        assert_eq!(removed.block_height(), block_height, "removed wrong item");
+        assert!(block_chain.chain.is_empty(), "chain should be empty");
+        assert!(block_chain.index.is_empty(), "index should be empty");
     }
 
     fn irregular_sequence(
