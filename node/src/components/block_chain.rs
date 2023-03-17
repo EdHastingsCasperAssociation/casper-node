@@ -266,6 +266,26 @@ impl BlockChain {
             .unwrap_or(None)
     }
 
+    /// Is block at height an immediate switch block?
+    pub(crate) fn is_immediate_switch_block(&self, block_height: u64) -> Option<bool> {
+        if let Some(switch) = self.is_switch_block(block_height) {
+            if block_height == 0 {
+                // on legacy chains, first block is not a switch block,
+                // on post 1.5 chains it is, and is considered to be an
+                // immediate switch block though it has no parent as
+                // it is the head of the chain
+                return Some(true);
+            }
+            return if switch {
+                // immediate switch block == block @ height is switch && parent is also switch
+                self.is_switch_block(block_height.saturating_sub(1))
+            } else {
+                Some(false)
+            };
+        }
+        None
+    }
+
     /// Returns the lowest entry (by block height) where the predicate is true, if any.
     pub(crate) fn lowest<F>(&self, predicate: F) -> Option<&BlockChainEntry>
     where
@@ -688,6 +708,39 @@ mod tests {
             3,
             "unexpected number of switch blocks"
         );
+    }
+
+    #[test]
+    fn should_find_immediate_switch_blocks() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let mut era_id = EraId::new(0);
+        let mut change_era = false;
+        let div = 5;
+        for height in 0..=10 {
+            if change_era {
+                era_id = era_id.successor();
+                change_era = false;
+            }
+            let mut is_switch_block = false;
+            if height == 0 || height % div == 0 || height - 1 % div == 0 {
+                is_switch_block = true;
+                change_era = true;
+            }
+            block_chain.register_complete_from_parts(
+                height,
+                BlockHash::random(&mut rng),
+                era_id,
+                is_switch_block,
+            );
+            let expected = Some(height == 0 || height - 1 % div == 0);
+            let actual = block_chain.is_immediate_switch_block(height);
+            assert_eq!(
+                expected, actual,
+                "at height {} expected: {:?} actual: {:?}",
+                height, expected, actual
+            );
+        }
     }
 
     #[test]
