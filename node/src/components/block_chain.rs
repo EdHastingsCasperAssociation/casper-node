@@ -1,5 +1,6 @@
 use crate::types::{BlockHash, BlockHeader};
 use casper_types::EraId;
+use datasize::DataSize;
 use itertools::Itertools;
 use std::{
     cmp::Ordering,
@@ -12,7 +13,7 @@ pub(crate) enum Error {
     AttemptToFinalizeAboveTail,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(DataSize, Debug, Copy, Clone, PartialEq)]
 pub(crate) enum BlockChainEntry {
     Vacant {
         block_height: u64,
@@ -190,7 +191,7 @@ impl BlockChainEntry {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(DataSize, Debug, Default)]
 pub(crate) struct BlockChain {
     chain: BTreeMap<u64, BlockChainEntry>,
     index: HashMap<BlockHash, u64>,
@@ -279,6 +280,12 @@ impl BlockChain {
             return Some(self.by_height(height.saturating_sub(1)));
         }
         None
+    }
+
+    pub(crate) fn switch_block_by_era(&self, era_id: EraId) -> Option<&BlockChainEntry> {
+        self.chain
+            .values()
+            .find_or_first(|x| x.is_switch_block().unwrap_or(false) && x.era_id() == Some(era_id))
     }
 
     /// Is block at height incomplete?
@@ -510,6 +517,7 @@ mod tests {
     };
     use casper_types::{testing::TestRng, EraId};
     use itertools::Itertools;
+    use num_traits::FromPrimitive;
     use std::collections::HashMap;
 
     impl BlockChain {
@@ -875,6 +883,48 @@ mod tests {
                 expected, actual,
                 "at height {} expected: {:?} actual: {:?}",
                 height, expected, actual
+            );
+        }
+    }
+
+    #[test]
+    fn should_find_switch_block_by_era() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let mut era_id = EraId::new(0);
+        let mut change_era = false;
+        let div = 5;
+        let genesis = 0;
+        let ubound = 15;
+        for height in genesis..=ubound {
+            if change_era {
+                era_id = era_id.successor();
+            }
+            let is_switch_block = height == genesis || height % div == 0;
+            block_chain.register_complete_from_parts(
+                height,
+                BlockHash::random(&mut rng),
+                era_id,
+                is_switch_block,
+            );
+            change_era = is_switch_block;
+        }
+        let all_switch_blocks = block_chain.all_by(BlockChainEntry::is_complete_switch_block);
+        let expected_era_count = 4;
+        let actual_era_count: u64 =
+            u64::from_usize(all_switch_blocks.len()).expect("should convert");
+        assert_eq!(
+            expected_era_count, actual_era_count,
+            "should have {} switch blocks but found {}",
+            expected_era_count, actual_era_count
+        );
+        for era_id in genesis..=expected_era_count {
+            assert!(
+                block_chain
+                    .switch_block_by_era(EraId::new(era_id))
+                    .is_some(),
+                "should have era entry for {}",
+                era_id
             );
         }
     }
