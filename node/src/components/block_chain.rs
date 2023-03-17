@@ -90,25 +90,22 @@ impl BlockChainEntry {
 
     /// Get era id from item, if present.
     pub(crate) fn era_id(&self) -> Option<EraId> {
-        match self {
-            BlockChainEntry::Vacant { .. }
-            | BlockChainEntry::Proposed { .. }
-            | BlockChainEntry::Finalized { .. }
-            | BlockChainEntry::Incomplete { .. } => None,
-            BlockChainEntry::Complete { era_id, .. } => Some(*era_id),
+        if let BlockChainEntry::Complete { era_id, .. } = self {
+            Some(*era_id)
+        } else {
+            None
         }
     }
 
     /// Is this instance a switch block?
     pub(crate) fn is_switch_block(&self) -> Option<bool> {
-        match self {
-            BlockChainEntry::Vacant { .. }
-            | BlockChainEntry::Proposed { .. }
-            | BlockChainEntry::Finalized { .. }
-            | BlockChainEntry::Incomplete { .. } => None,
-            BlockChainEntry::Complete {
-                is_switch_block, ..
-            } => Some(*is_switch_block),
+        if let BlockChainEntry::Complete {
+            is_switch_block, ..
+        } = self
+        {
+            Some(*is_switch_block)
+        } else {
+            None
         }
     }
 
@@ -522,7 +519,7 @@ mod tests {
     #[test]
     fn should_be_incomplete() {
         let mut block_chain = BlockChain::new();
-        let block_hash = crate::types::BlockHash::default();
+        let block_hash = BlockHash::default();
         block_chain.register_incomplete(0, &block_hash);
         assert_eq!(
             block_chain.by_height(0),
@@ -577,9 +574,9 @@ mod tests {
     }
 
     #[test]
-    fn should_not_by_hash() {
+    fn should_not_find_by_hash() {
         let mut block_chain = BlockChain::new();
-        let block_hash = crate::types::BlockHash::default();
+        let block_hash = BlockHash::default();
         assert!(block_chain.register_proposed(0).is_ok(), "should be ok");
         assert_eq!(
             block_chain.by_hash(&block_hash),
@@ -594,11 +591,15 @@ mod tests {
         );
     }
 
-    #[test]
-    fn should_find_low_sequence() {
+    fn irregular_sequence(
+        lbound: u64,
+        ubound: u64,
+        start_break: u64,
+        end_break: u64,
+    ) -> BlockChain {
         let mut block_chain = BlockChain::new();
-        for height in 0..15 {
-            if height >= 5 && height < 10 {
+        for height in lbound..=ubound {
+            if height >= start_break && height <= end_break {
                 block_chain.register_finalized(height);
                 continue;
             }
@@ -608,14 +609,23 @@ mod tests {
                 height
             );
         }
+        block_chain
+    }
+
+    #[test]
+    fn should_find_low_sequence() {
+        let lbound = 0;
+        let ubound = 14;
+        let start_break = 5;
+        let block_chain = irregular_sequence(lbound, ubound, start_break, ubound - start_break);
         let low = block_chain.lowest_sequence(BlockChainEntry::is_proposed);
-        assert!(low.is_empty() == false, "sequence should not be empty");
+        assert_eq!(low.is_empty(), false, "sequence should not be empty");
         assert_eq!(
             low.iter()
                 .min_by(|x, y| x.block_height().cmp(&y.block_height()))
                 .expect("should have entry")
                 .block_height(),
-            0,
+            lbound,
             "expected first entry by predicate"
         );
         assert_eq!(
@@ -623,33 +633,25 @@ mod tests {
                 .max_by(|x, y| x.block_height().cmp(&y.block_height()))
                 .expect("should have entry")
                 .block_height(),
-            4,
+            start_break - 1,
             "expected last entry by predicate"
         );
     }
 
     #[test]
     fn should_find_high_sequence() {
-        let mut block_chain = BlockChain::new();
-        for height in 0..15 {
-            if height >= 5 && height < 10 {
-                block_chain.register_finalized(height);
-                continue;
-            }
-            assert!(
-                block_chain.register_proposed(height).is_ok(),
-                "should be ok {}",
-                height
-            );
-        }
+        let lbound = 0;
+        let ubound = 14;
+        let start_break = 5;
+        let block_chain = irregular_sequence(lbound, ubound, start_break, ubound - start_break);
         let hi = block_chain.highest_sequence(BlockChainEntry::is_proposed);
-        assert!(hi.is_empty() == false, "sequence should not be empty");
+        assert_eq!(hi.is_empty(), false, "sequence should not be empty");
         assert_eq!(
             hi.iter()
                 .min_by(|x, y| x.block_height().cmp(&y.block_height()))
                 .expect("should have entry")
                 .block_height(),
-            10,
+            ubound - start_break + 1,
             "expected first entry by predicate"
         );
         assert_eq!(
@@ -657,7 +659,7 @@ mod tests {
                 .max_by(|x, y| x.block_height().cmp(&y.block_height()))
                 .expect("should have entry")
                 .block_height(),
-            14,
+            ubound,
             "expected last entry by predicate"
         );
     }
