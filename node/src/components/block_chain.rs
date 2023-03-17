@@ -1,11 +1,15 @@
 use crate::types::{BlockHash, BlockHeader};
 use casper_types::EraId;
 use itertools::Itertools;
-use std::collections::{btree_map::Entry, hash_map::Entry as HashEntry, BTreeMap, HashMap};
+use std::{
+    cmp::Ordering,
+    collections::{btree_map::Entry, hash_map::Entry as HashEntry, BTreeMap, HashMap},
+};
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Error {
     AttemptToProposeAboveTail,
+    AttemptToFinalizeAboveTail,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -162,6 +166,28 @@ impl BlockChainEntry {
     pub(crate) fn is_complete(&self) -> bool {
         matches!(self, BlockChainEntry::Complete { .. })
     }
+
+    fn status(&self) -> u8 {
+        match self {
+            BlockChainEntry::Vacant { .. } => 0,
+            BlockChainEntry::Proposed { .. } => 1,
+            BlockChainEntry::Finalized { .. } => 2,
+            BlockChainEntry::Incomplete { .. } => 3,
+            BlockChainEntry::Complete { .. } => 4,
+        }
+    }
+
+    pub(crate) fn higher_status(&self, other: &BlockChainEntry) -> Ordering {
+        self.status().cmp(&other.status())
+    }
+
+    pub(crate) fn higher_height_and_status(&self, other: &BlockChainEntry) -> Ordering {
+        let height_order = self.block_height().cmp(&other.block_height());
+        if height_order == Ordering::Greater {
+            return self.status().cmp(&other.status());
+        }
+        height_order
+    }
 }
 
 #[derive(Debug, Default)]
@@ -177,6 +203,7 @@ impl BlockChain {
         BlockChain::default()
     }
 
+    /// Remove an item by block height.
     pub(crate) fn remove(&mut self, block_height: u64) -> Option<BlockChainEntry> {
         if let Some(entry) = self.chain.remove(&block_height) {
             if let Some(block_hash) = entry.block_hash() {
@@ -191,7 +218,7 @@ impl BlockChain {
     /// Register a block that is proposed.
     pub(crate) fn register_proposed(&mut self, block_height: u64) -> Result<(), Error> {
         if let Some(highest) = self.highest(BlockChainEntry::all_non_vacant) {
-            if highest.block_height() > block_height {
+            if false == highest.is_proposed() {
                 return Err(Error::AttemptToProposeAboveTail);
             }
         }
@@ -200,8 +227,12 @@ impl BlockChain {
     }
 
     /// Register a block that is finalized.
-    pub(crate) fn register_finalized(&mut self, block_height: u64) {
+    pub(crate) fn register_finalized(&mut self, block_height: u64) -> Result<(), Error> {
+        if let Some(highest) = self.higher_by_status(BlockChainEntry::all_non_vacant) {
+            return Err(Error::AttemptToFinalizeAboveTail);
+        }
         self.register(BlockChainEntry::new_finalized(block_height));
+        Ok(())
     }
 
     /// Register a block that is not yet complete.
@@ -316,6 +347,17 @@ impl BlockChain {
             .max_by(|x, y| x.block_height().cmp(&y.block_height()))
     }
 
+    /// Returns the highest entry (by block height) where the predicate is true, if any.
+    pub(crate) fn higher_by_status<F>(&self, predicate: F) -> Option<&BlockChainEntry>
+    where
+        F: Fn(&BlockChainEntry) -> bool,
+    {
+        self.chain
+            .values()
+            .filter(|x| predicate(x))
+            .max_by(|x, y| x.higher_height_and_status(y))
+    }
+
     /// Returns the lowest switch block entry, if any.
     pub(crate) fn lowest_switch_block(&self) -> Option<&BlockChainEntry> {
         self.chain
@@ -394,31 +436,34 @@ impl BlockChain {
     }
 
     /// Returns the highest entry (by block height) where the predicate is true, if any.
-    pub(crate) fn highest_sequence<F>(&self, predicate: F) -> Vec<&BlockChainEntry>
+    pub(crate) fn highest_sequence<F>(&self, predicate: F) -> Vec<BlockChainEntry>
     where
         F: Fn(&BlockChainEntry) -> bool,
     {
-        let mut ret = vec![];
-
-        for height in self.chain.keys().into_iter().rev() {
-            match self.chain.get(height) {
-                None => {
-                    break;
-                }
-                Some(item) => {
-                    if predicate(item) {
+        match self
+            .chain
+            .values()
+            .filter(|x| predicate(x))
+            .max_by(|x, y| x.block_height().cmp(&y.block_height()))
+        {
+            None => {
+                vec![]
+            }
+            Some(entry) => {
+                let mut ret = vec![*entry];
+                let mut idx = entry.block_height() - 1;
+                loop {
+                    let item = self.by_height(idx);
+                    if predicate(&item) {
                         ret.push(item);
-                        continue;
-                    }
-                    if !ret.is_empty() {
-                        // sequence is broken
+                        idx -= 1;
+                    } else {
                         break;
                     }
-                    // still seeking start of sequence
                 }
+                ret
             }
         }
-        ret
     }
 
     fn register(&mut self, item: BlockChainEntry) {
@@ -465,6 +510,7 @@ mod tests {
     };
     use casper_types::{testing::TestRng, EraId};
     use itertools::Itertools;
+    use std::collections::HashMap;
 
     impl BlockChain {
         /// Register a block that has been marked complete from parts.
@@ -519,7 +565,10 @@ mod tests {
     #[test]
     fn should_be_finalized() {
         let mut block_chain = BlockChain::new();
-        block_chain.register_finalized(0);
+        assert!(
+            block_chain.register_finalized(0).is_ok(),
+            "should register finalized"
+        );
         assert_eq!(
             block_chain.by_height(0),
             BlockChainEntry::new_finalized(0),
@@ -553,6 +602,37 @@ mod tests {
             BlockChainEntry::new_complete(&block_header),
             "should be complete"
         );
+    }
+
+    #[test]
+    fn should_recognize_higher_status() {
+        let mut entries = HashMap::new();
+        let mut inserter = |bce: BlockChainEntry| {
+            entries.insert(bce.status(), bce);
+        };
+        inserter(BlockChainEntry::vacant(0));
+        inserter(BlockChainEntry::new_proposed(0));
+        inserter(BlockChainEntry::new_finalized(0));
+
+        let mut rng = TestRng::new();
+        let block_header = {
+            let tmp = Block::random(&mut rng);
+            tmp.header().clone()
+        };
+        inserter(BlockChainEntry::new_incomplete(
+            block_header.height(),
+            &block_header.block_hash(),
+        ));
+        inserter(BlockChainEntry::new_complete(&block_header));
+        let max = entries.keys().max().expect("should have entries");
+        for key in entries.keys() {
+            if key == max {
+                break;
+            }
+            let x = entries.get(&key).expect("x should exist");
+            let y = entries.get(&(key + 1)).expect("y should exist");
+            assert!(x.status() < y.status(), "should be lower status");
+        }
     }
 
     #[test]
@@ -594,7 +674,7 @@ mod tests {
             None,
             "proposed should not be indexed by hash"
         );
-        block_chain.register_finalized(1);
+        let _ = block_chain.register_finalized(1);
         assert_eq!(
             block_chain.by_hash(&block_hash),
             None,
@@ -660,7 +740,7 @@ mod tests {
         let mut block_chain = BlockChain::new();
         for height in lbound..=ubound {
             if height >= start_break && height <= end_break {
-                block_chain.register_finalized(height);
+                let _ = block_chain.register_finalized(height);
                 continue;
             }
             assert!(
@@ -917,6 +997,31 @@ mod tests {
             Err(Error::AttemptToProposeAboveTail),
             result,
             "should detect non-tail proposal"
+        )
+    }
+
+    #[test]
+    fn should_not_allow_finalized_with_higher_status_descendants() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let era_id = EraId::new(0);
+        let block_to_skip = 3;
+        for height in 0..5 {
+            if height == block_to_skip {
+                continue;
+            }
+            block_chain.register_complete_from_parts(
+                height,
+                BlockHash::random(&mut rng),
+                era_id,
+                false,
+            );
+        }
+        let result = block_chain.register_finalized(block_to_skip);
+        assert_eq!(
+            Err(Error::AttemptToFinalizeAboveTail),
+            result,
+            "should detect non-tail finalization"
         )
     }
 
