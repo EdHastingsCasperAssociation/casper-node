@@ -5,6 +5,11 @@ use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HashEntry;
 use std::collections::{BTreeMap, HashMap};
 
+#[derive(Debug, PartialEq)]
+pub(crate) enum Error {
+    AttemptToProposeAboveTail,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub(crate) enum BlockChainEntry {
     Vacant {
@@ -122,6 +127,27 @@ impl BlockChainEntry {
         }
     }
 
+    /// All non-vacant entries.
+    pub(crate) fn all_non_vacant(&self) -> bool {
+        match self {
+            BlockChainEntry::Vacant { .. } => false,
+            BlockChainEntry::Proposed { .. }
+            | BlockChainEntry::Finalized { .. }
+            | BlockChainEntry::Incomplete { .. }
+            | BlockChainEntry::Complete { .. } => true,
+        }
+    }
+
+    /// All entries.
+    pub(crate) fn all(&self) -> bool {
+        true
+    }
+
+    /// Is this instance the vacant variant?
+    pub(crate) fn is_vacant(&self) -> bool {
+        matches!(self, BlockChainEntry::Vacant { .. })
+    }
+
     /// Is this instance the proposed variant?
     pub(crate) fn is_proposed(&self) -> bool {
         matches!(self, BlockChainEntry::Proposed { .. })
@@ -157,8 +183,14 @@ impl BlockChain {
     }
 
     /// Register a block that is proposed.
-    pub(crate) fn register_proposed(&mut self, block_height: u64) {
+    pub(crate) fn register_proposed(&mut self, block_height: u64) -> Result<(), Error> {
+        if let Some(highest) = self.highest(BlockChainEntry::all_non_vacant) {
+            if highest.block_height() > block_height {
+                return Err(Error::AttemptToProposeAboveTail);
+            }
+        }
         self.register(BlockChainEntry::new_proposed(block_height));
+        Ok(())
     }
 
     /// Register a block that is finalized.
@@ -196,6 +228,18 @@ impl BlockChain {
     pub(crate) fn by_parent(&self, parent_block_hash: &BlockHash) -> Option<BlockChainEntry> {
         if let Some(height) = self.index.get(parent_block_hash) {
             return Some(self.by_height(height + 1));
+        }
+        None
+    }
+
+    /// Returns entry of parent, if present.
+    pub(crate) fn by_child(&self, child_block_hash: &BlockHash) -> Option<BlockChainEntry> {
+        if let Some(height) = self.index.get(child_block_hash) {
+            if height.eq(&0) {
+                // genesis cannot have a parent
+                return None;
+            }
+            return Some(self.by_height(height.saturating_sub(1)));
         }
         None
     }
@@ -363,7 +407,7 @@ impl BlockChain {
 
 #[cfg(test)]
 mod tests {
-    use crate::components::block_chain::{BlockChain, BlockChainEntry};
+    use crate::components::block_chain::{BlockChain, BlockChainEntry, Error};
     use crate::types::{Block, BlockHash};
     use casper_types::testing::TestRng;
     use casper_types::EraId;
@@ -407,7 +451,10 @@ mod tests {
     #[test]
     fn should_be_proposed() {
         let mut block_chain = BlockChain::new();
-        block_chain.register_proposed(0);
+        assert!(
+            block_chain.register_proposed(0).is_ok(),
+            "should register proposed"
+        );
         assert_eq!(
             block_chain.by_height(0),
             BlockChainEntry::new_proposed(0),
@@ -487,7 +534,7 @@ mod tests {
     fn should_not_by_hash() {
         let mut block_chain = BlockChain::new();
         let block_hash = crate::types::BlockHash::default();
-        block_chain.register_proposed(0);
+        assert!(block_chain.register_proposed(0).is_ok(), "should be ok");
         assert_eq!(
             block_chain.by_hash(&block_hash),
             None,
@@ -509,9 +556,12 @@ mod tests {
                 block_chain.register_finalized(height);
                 continue;
             }
-            block_chain.register_proposed(height);
+            assert!(
+                block_chain.register_proposed(height).is_ok(),
+                "should be ok {}",
+                height
+            );
         }
-        println!("{:?}", block_chain);
         let low = block_chain.lowest_sequence(BlockChainEntry::is_proposed);
         assert!(low.is_empty() == false, "sequence should not be empty");
         assert_eq!(
@@ -540,7 +590,11 @@ mod tests {
                 block_chain.register_finalized(height);
                 continue;
             }
-            block_chain.register_proposed(height);
+            assert!(
+                block_chain.register_proposed(height).is_ok(),
+                "should be ok {}",
+                height
+            );
         }
         let hi = block_chain.highest_sequence(BlockChainEntry::is_proposed);
         assert!(hi.is_empty() == false, "sequence should not be empty");
@@ -608,5 +662,126 @@ mod tests {
             3,
             "unexpected number of switch blocks"
         );
+    }
+
+    #[test]
+    fn should_by_parent() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let era_id = EraId::new(0);
+        for height in 0..5 {
+            block_chain.register_complete_from_parts(
+                height,
+                BlockHash::random(&mut rng),
+                era_id,
+                false,
+            );
+        }
+        for height in 0..4 {
+            let parent = block_chain.by_height(height);
+            assert!(parent.is_complete(), "should be complete");
+            let child = block_chain
+                .by_parent(&parent.block_hash().expect("should have block_hash"))
+                .expect("should have child");
+            assert_eq!(
+                child.block_height().saturating_sub(1),
+                parent.block_height(),
+                "invalid child detected"
+            )
+        }
+    }
+
+    #[test]
+    fn should_by_child() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let era_id = EraId::new(0);
+        for height in 0..5 {
+            block_chain.register_complete_from_parts(
+                height,
+                BlockHash::random(&mut rng),
+                era_id,
+                false,
+            );
+        }
+        for height in 5..1 {
+            let child = block_chain.by_height(height);
+            assert!(child.is_complete(), "should be complete");
+            let parent = block_chain
+                .by_child(&child.block_hash().expect("should have block_hash"))
+                .expect("should have child");
+            assert_eq!(
+                parent.block_height() + 1,
+                child.block_height(),
+                "invalid child detected"
+            )
+        }
+    }
+
+    #[test]
+    fn should_have_childless_tail() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let era_id = EraId::new(0);
+        for height in 0..5 {
+            block_chain.register_complete_from_parts(
+                height,
+                BlockHash::random(&mut rng),
+                era_id,
+                false,
+            );
+        }
+        let highest = block_chain
+            .highest(BlockChainEntry::all_non_vacant)
+            .expect("should have some");
+        let child = block_chain
+            .by_parent(&highest.block_hash().expect("should have block_hash"))
+            .expect("should return vacant entry");
+        assert!(child.is_vacant(), "tail should not have child");
+    }
+
+    #[test]
+    fn should_have_parentless_head() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let era_id = EraId::new(0);
+        for height in 0..5 {
+            block_chain.register_complete_from_parts(
+                height,
+                BlockHash::random(&mut rng),
+                era_id,
+                false,
+            );
+        }
+        let lowest = block_chain
+            .lowest(BlockChainEntry::all_non_vacant)
+            .expect("should have some");
+        let parent = block_chain.by_child(&lowest.block_hash().expect("should have block_hash"));
+        assert!(parent.is_none(), "head should not have parent");
+    }
+
+    #[test]
+    fn should_not_allow_proposed_with_higher_status_descendants() {
+        let mut rng = TestRng::new();
+        let mut block_chain = BlockChain::new();
+        let era_id = EraId::new(0);
+        let block_to_skip = 3;
+        for height in 0..5 {
+            if height == block_to_skip {
+                continue;
+            }
+            block_chain.register_complete_from_parts(
+                height,
+                BlockHash::random(&mut rng),
+                era_id,
+                false,
+            );
+        }
+        let result = block_chain.register_proposed(block_to_skip);
+        assert_eq!(
+            Err(Error::AttemptToProposeAboveTail),
+            result,
+            "should detect non-tail proposal"
+        )
     }
 }
