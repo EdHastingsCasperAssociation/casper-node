@@ -127,6 +127,15 @@ impl BlockChainEntry {
         }
     }
 
+    /// Is this instance complete a switch block?
+    pub(crate) fn is_complete_in_era(&self, era_id: EraId) -> bool {
+        if let BlockChainEntry::Complete { era_id: eid, .. } = self {
+            eid.eq(&era_id)
+        } else {
+            false
+        }
+    }
+
     /// All non-vacant entries.
     pub(crate) fn all_non_vacant(&self) -> bool {
         match self {
@@ -812,72 +821,77 @@ mod tests {
         );
     }
 
-    #[test]
-    fn should_find_switch_blocks() {
+    fn complete_with_switches<F>(
+        start: u64,
+        end: u64,
+        blocks_per_era: u64,
+        is_switch_block: F,
+    ) -> BlockChain
+    where
+        F: FnOnce(u64) -> bool + Copy,
+    {
         let mut rng = TestRng::new();
         let mut block_chain = BlockChain::new();
-        let mut era_id = EraId::new(0);
+        let mut era_id = EraId::new(start / blocks_per_era);
         let mut change_era = false;
-        for height in 0..=10 {
+        for height in start..=end {
             if change_era {
                 era_id = era_id.successor();
             }
-            let is_switch_block = height == 0 || height % 5 == 0;
+            let switch = is_switch_block(height);
             block_chain.register_complete_from_parts(
                 height,
                 BlockHash::random(&mut rng),
                 era_id,
-                is_switch_block,
+                switch,
             );
-            change_era = is_switch_block;
+            change_era = switch;
         }
+        block_chain
+    }
+
+    #[test]
+    fn should_find_switch_blocks() {
+        let (start, end, blocks_per_era) = (0, 10, 5);
+        let block_chain = complete_with_switches(start, end, blocks_per_era, |h: u64| {
+            h == start || h % blocks_per_era == 0
+        });
         assert_eq!(
             block_chain
                 .lowest(BlockChainEntry::is_complete_switch_block)
                 .expect("should have switch blocks")
                 .block_height(),
-            0,
-            "block at height 0 should be lowest switch"
+            start,
+            "block at height {} should be lowest switch",
+            start
         );
         assert_eq!(
             block_chain
                 .highest(BlockChainEntry::is_complete_switch_block)
                 .expect("should have switch blocks")
                 .block_height(),
-            10,
-            "block at height 10 should be highest switch"
+            end,
+            "block at height {} should be highest switch",
+            end
         );
-        assert_eq!(
+        let actual: u64 = u64::from_usize(
             block_chain
                 .all_by(BlockChainEntry::is_complete_switch_block)
                 .len(),
-            3,
-            "unexpected number of switch blocks"
-        );
+        )
+        .expect("should have value");
+        let expected = end / blocks_per_era + 1;
+        assert_eq!(actual, expected, "unexpected number of switch blocks");
     }
 
     #[test]
     fn should_find_immediate_switch_blocks() {
-        let mut rng = TestRng::new();
-        let mut block_chain = BlockChain::new();
-        let mut era_id = EraId::new(0);
-        let mut change_era = false;
-        let div = 5;
-        for height in 0..=10 {
-            if change_era {
-                era_id = era_id.successor();
-            }
-            let switch = height % div == 0;
-            let immediate = height == 0 || height - 1 % div == 0;
-            block_chain.register_complete_from_parts(
-                height,
-                BlockHash::random(&mut rng),
-                era_id,
-                switch || immediate,
-            );
-            change_era = switch || immediate;
-
-            let expected = Some(immediate);
+        let (start, end, blocks_per_era) = (0, 10, 5);
+        let block_chain = complete_with_switches(start, end, blocks_per_era, |h: u64| {
+            h == 0 || h % blocks_per_era == 0 || h - 1 % blocks_per_era == 0
+        });
+        for height in start..=end {
+            let expected = Some(height == 0 || height - 1 % blocks_per_era == 0);
             let actual = block_chain.is_immediate_switch_block(height);
             assert_eq!(
                 expected, actual,
@@ -889,28 +903,12 @@ mod tests {
 
     #[test]
     fn should_find_switch_block_by_era() {
-        let mut rng = TestRng::new();
-        let mut block_chain = BlockChain::new();
-        let mut era_id = EraId::new(0);
-        let mut change_era = false;
-        let div = 5;
-        let genesis = 0;
-        let ubound = 15;
-        for height in genesis..=ubound {
-            if change_era {
-                era_id = era_id.successor();
-            }
-            let is_switch_block = height == genesis || height % div == 0;
-            block_chain.register_complete_from_parts(
-                height,
-                BlockHash::random(&mut rng),
-                era_id,
-                is_switch_block,
-            );
-            change_era = is_switch_block;
-        }
+        let (start, end, blocks_per_era) = (0, 15, 5);
+        let block_chain = complete_with_switches(start, end, blocks_per_era, |h: u64| {
+            h == start || h % blocks_per_era == 0
+        });
         let all_switch_blocks = block_chain.all_by(BlockChainEntry::is_complete_switch_block);
-        let expected_era_count = 4;
+        let expected_era_count = end / blocks_per_era + 1;
         let actual_era_count: u64 =
             u64::from_usize(all_switch_blocks.len()).expect("should convert");
         assert_eq!(
@@ -918,13 +916,33 @@ mod tests {
             "should have {} switch blocks but found {}",
             expected_era_count, actual_era_count
         );
-        for era_id in genesis..=expected_era_count {
+        for era_id in start..=expected_era_count {
             assert!(
                 block_chain
                     .switch_block_by_era(EraId::new(era_id))
                     .is_some(),
                 "should have era entry for {}",
                 era_id
+            );
+        }
+    }
+
+    #[test]
+    fn should_find_blocks_by_era() {
+        let (start, end, blocks_per_era) = (0, 15, 5);
+        let block_chain = complete_with_switches(start, end, blocks_per_era, |h: u64| {
+            h == start || h % blocks_per_era == 0
+        });
+        println!("{:?}", block_chain);
+        let expected_era_count = end / blocks_per_era;
+        // era 0 only has genesis
+        for era_id in 1..=expected_era_count {
+            let all_in_era = block_chain.all_by(|bce| bce.is_complete_in_era(EraId::new(era_id)));
+            let actual = u64::from_usize(all_in_era.len()).expect("should have value");
+            assert_eq!(
+                blocks_per_era, actual,
+                "should have {} blocks per era but found {}",
+                blocks_per_era, actual
             );
         }
     }
