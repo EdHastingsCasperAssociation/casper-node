@@ -23,10 +23,12 @@ pub(crate) enum BlockChainEntry {
     },
     Finalized {
         block_height: u64,
+        era_id: EraId,
     },
     Incomplete {
-        block_hash: BlockHash,
         block_height: u64,
+        block_hash: BlockHash,
+        era_id: EraId,
     },
     Complete {
         block_height: u64,
@@ -49,15 +51,19 @@ impl BlockChainEntry {
     }
 
     /// Create a new finalize item.
-    pub(crate) fn new_finalized(block_height: u64) -> Self {
-        BlockChainEntry::Finalized { block_height }
+    pub(crate) fn new_finalized(block_height: u64, era_id: EraId) -> Self {
+        BlockChainEntry::Finalized {
+            block_height,
+            era_id,
+        }
     }
 
     /// Create a new incomplete item.
-    pub(crate) fn new_incomplete(block_height: u64, block_hash: &BlockHash) -> Self {
+    pub(crate) fn new_incomplete(block_height: u64, block_hash: BlockHash, era_id: EraId) -> Self {
         BlockChainEntry::Incomplete {
             block_height,
-            block_hash: *block_hash,
+            block_hash,
+            era_id,
         }
     }
 
@@ -76,7 +82,7 @@ impl BlockChainEntry {
         match self {
             BlockChainEntry::Vacant { block_height }
             | BlockChainEntry::Proposed { block_height }
-            | BlockChainEntry::Finalized { block_height }
+            | BlockChainEntry::Finalized { block_height, .. }
             | BlockChainEntry::Incomplete { block_height, .. }
             | BlockChainEntry::Complete { block_height, .. } => *block_height,
         }
@@ -95,10 +101,19 @@ impl BlockChainEntry {
 
     /// Get era id from item, if present.
     pub(crate) fn era_id(&self) -> Option<EraId> {
-        if let BlockChainEntry::Complete { era_id, .. } = self {
-            Some(*era_id)
-        } else {
-            None
+        match self {
+            BlockChainEntry::Vacant { .. } | BlockChainEntry::Proposed { .. } => None,
+            BlockChainEntry::Finalized { era_id, .. }
+            | BlockChainEntry::Incomplete { era_id, .. }
+            | BlockChainEntry::Complete { era_id, .. } => Some(*era_id),
+        }
+    }
+
+    /// Is this instance finalized or higher and in the imputed era?
+    pub(crate) fn is_definitely_in_era(&self, era_id: EraId) -> bool {
+        match self.era_id() {
+            Some(eid) => eid.eq(&era_id),
+            None => false,
         }
     }
 
@@ -114,7 +129,7 @@ impl BlockChainEntry {
         }
     }
 
-    /// Is this instance complete a switch block?
+    /// Is this instance complete and a switch block?
     pub(crate) fn is_complete_switch_block(&self) -> bool {
         match self {
             BlockChainEntry::Vacant { .. }
@@ -124,15 +139,6 @@ impl BlockChainEntry {
             BlockChainEntry::Complete {
                 is_switch_block, ..
             } => *is_switch_block,
-        }
-    }
-
-    /// Is this instance complete a switch block?
-    pub(crate) fn is_complete_in_era(&self, era_id: EraId) -> bool {
-        if let BlockChainEntry::Complete { era_id: eid, .. } = self {
-            eid.eq(&era_id)
-        } else {
-            false
         }
     }
 
@@ -237,17 +243,30 @@ impl BlockChain {
     }
 
     /// Register a block that is finalized.
-    pub(crate) fn register_finalized(&mut self, block_height: u64) -> Result<(), Error> {
+    pub(crate) fn register_finalized(
+        &mut self,
+        block_height: u64,
+        era_id: EraId,
+    ) -> Result<(), Error> {
         if let Some(highest) = self.higher_by_status(BlockChainEntry::all_non_vacant) {
             return Err(Error::AttemptToFinalizeAboveTail);
         }
-        self.register(BlockChainEntry::new_finalized(block_height));
+        self.register(BlockChainEntry::new_finalized(block_height, era_id));
         Ok(())
     }
 
     /// Register a block that is not yet complete.
-    pub(crate) fn register_incomplete(&mut self, block_height: u64, block_hash: &BlockHash) {
-        self.register(BlockChainEntry::new_incomplete(block_height, block_hash));
+    pub(crate) fn register_incomplete(
+        &mut self,
+        block_height: u64,
+        block_hash: BlockHash,
+        era_id: EraId,
+    ) {
+        self.register(BlockChainEntry::new_incomplete(
+            block_height,
+            block_hash,
+            era_id,
+        ));
     }
 
     /// Register a block that has been marked complete.
@@ -583,12 +602,12 @@ mod tests {
     fn should_be_finalized() {
         let mut block_chain = BlockChain::new();
         assert!(
-            block_chain.register_finalized(0).is_ok(),
+            block_chain.register_finalized(0, EraId::new(0)).is_ok(),
             "should register finalized"
         );
         assert_eq!(
             block_chain.by_height(0),
-            BlockChainEntry::new_finalized(0),
+            BlockChainEntry::new_finalized(0, EraId::new(0)),
             "should be finalized"
         );
     }
@@ -597,10 +616,10 @@ mod tests {
     fn should_be_incomplete() {
         let mut block_chain = BlockChain::new();
         let block_hash = BlockHash::default();
-        block_chain.register_incomplete(0, &block_hash);
+        block_chain.register_incomplete(0, block_hash, EraId::new(0));
         assert_eq!(
             block_chain.by_height(0),
-            BlockChainEntry::new_incomplete(0, &block_hash),
+            BlockChainEntry::new_incomplete(0, block_hash, EraId::new(0)),
             "should be incomplete"
         );
     }
@@ -629,7 +648,7 @@ mod tests {
         };
         inserter(BlockChainEntry::vacant(0));
         inserter(BlockChainEntry::new_proposed(0));
-        inserter(BlockChainEntry::new_finalized(0));
+        inserter(BlockChainEntry::new_finalized(0, EraId::new(0)));
 
         let mut rng = TestRng::new();
         let block_header = {
@@ -638,7 +657,8 @@ mod tests {
         };
         inserter(BlockChainEntry::new_incomplete(
             block_header.height(),
-            &block_header.block_hash(),
+            block_header.block_hash(),
+            EraId::new(0),
         ));
         inserter(BlockChainEntry::new_complete(&block_header));
         let max = entries.keys().max().expect("should have entries");
@@ -670,12 +690,17 @@ mod tests {
             let tmp = Block::random(&mut rng);
             tmp.header().clone()
         };
-        block_chain.register_incomplete(block_header2.height(), &block_header2.block_hash());
+        block_chain.register_incomplete(
+            block_header2.height(),
+            block_header2.block_hash(),
+            EraId::new(0),
+        );
         assert_eq!(
             block_chain.by_hash(&block_header2.block_hash()),
             Some(BlockChainEntry::new_incomplete(
                 block_header2.height(),
-                &block_header2.block_hash()
+                block_header2.block_hash(),
+                EraId::new(0)
             )),
             "should find incomplete block by hash"
         );
@@ -691,7 +716,7 @@ mod tests {
             None,
             "proposed should not be indexed by hash"
         );
-        let _ = block_chain.register_finalized(1);
+        let _ = block_chain.register_finalized(1, EraId::new(1));
         assert_eq!(
             block_chain.by_hash(&block_hash),
             None,
@@ -757,7 +782,7 @@ mod tests {
         let mut block_chain = BlockChain::new();
         for height in lbound..=ubound {
             if height >= start_break && height <= end_break {
-                let _ = block_chain.register_finalized(height);
+                let _ = block_chain.register_finalized(height, EraId::new(0));
                 continue;
             }
             assert!(
@@ -933,11 +958,10 @@ mod tests {
         let block_chain = complete_with_switches(start, end, blocks_per_era, |h: u64| {
             h == start || h % blocks_per_era == 0
         });
-        println!("{:?}", block_chain);
         let expected_era_count = end / blocks_per_era;
         // era 0 only has genesis
         for era_id in 1..=expected_era_count {
-            let all_in_era = block_chain.all_by(|bce| bce.is_complete_in_era(EraId::new(era_id)));
+            let all_in_era = block_chain.all_by(|bce| bce.is_definitely_in_era(EraId::new(era_id)));
             let actual = u64::from_usize(all_in_era.len()).expect("should have value");
             assert_eq!(
                 blocks_per_era, actual,
@@ -1085,7 +1109,7 @@ mod tests {
                 false,
             );
         }
-        let result = block_chain.register_finalized(block_to_skip);
+        let result = block_chain.register_finalized(block_to_skip, era_id);
         assert_eq!(
             Err(Error::AttemptToFinalizeAboveTail),
             result,
@@ -1102,9 +1126,13 @@ mod tests {
             if height >= 8 && height < 10 {
                 continue;
             }
-            let block_hash = &BlockHash::random(&mut rng);
-            block_chain.register_incomplete(height, block_hash);
-            expected.push(BlockChainEntry::new_incomplete(height, block_hash));
+            let block_hash = BlockHash::random(&mut rng);
+            block_chain.register_incomplete(height, block_hash, EraId::new(0));
+            expected.push(BlockChainEntry::new_incomplete(
+                height,
+                block_hash,
+                EraId::new(0),
+            ));
         }
         let all = block_chain.all_by(BlockChainEntry::all);
         assert_eq!(
@@ -1128,9 +1156,13 @@ mod tests {
                 });
                 continue;
             }
-            let block_hash = &BlockHash::random(&mut rng);
-            block_chain.register_incomplete(height, block_hash);
-            expected.push(BlockChainEntry::new_incomplete(height, block_hash));
+            let block_hash = BlockHash::random(&mut rng);
+            block_chain.register_incomplete(height, block_hash, EraId::new(0));
+            expected.push(BlockChainEntry::new_incomplete(
+                height,
+                block_hash,
+                EraId::new(0),
+            ));
         }
         let all = block_chain.all_by(BlockChainEntry::all);
         let range = block_chain.range(Some(lbound), Some(ubound));
