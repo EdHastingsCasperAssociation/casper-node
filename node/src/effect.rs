@@ -114,7 +114,6 @@ use smallvec::{smallvec, SmallVec};
 use tokio::{sync::Semaphore, time};
 use tracing::{debug, error, warn};
 
-use casper_execution_engine::engine_state::{self};
 use casper_storage::data_access_layer::{
     BalanceRequest, BalanceResult, BidsRequest, BidsResult, QueryRequest, QueryResult,
 };
@@ -127,9 +126,8 @@ use casper_storage::data_access_layer::{
 use casper_types::{
     contract_messages::Messages,
     execution::{Effects as ExecutionEffects, ExecutionResult, ExecutionResultV2},
-    package::Package,
     Block, BlockHash, BlockHeader, BlockSignatures, BlockV2, ChainspecRawBytes, DeployHash, Digest,
-    EraId, FinalitySignature, FinalitySignatureId, Key, PublicKey, TimeDiff, Timestamp,
+    EraId, FinalitySignature, FinalitySignatureId, Key, Package, PublicKey, TimeDiff, Timestamp,
     Transaction, TransactionHash, TransactionHeader, TransactionId, Transfer, U512,
 };
 
@@ -140,6 +138,7 @@ use crate::{
             TrieAccumulatorError, TrieAccumulatorResponse,
         },
         consensus::{ClContext, EraDump, ProposedBlock, ValidatorChange},
+        contract_runtime::{SpeculativeExecutionError, SpeculativeExecutionState},
         diagnostics_port::StopAtSpec,
         fetcher::{FetchItem, FetchResult},
         gossiper::GossipItem,
@@ -147,7 +146,6 @@ use crate::{
         transaction_acceptor,
         upgrade_watcher::NextUpgrade,
     },
-    contract_runtime::SpeculativeExecutionState,
     failpoints::FailpointActivation,
     reactor::{main_reactor::ReactorState, EventQueueHandle, QueueKind},
     types::{
@@ -2210,7 +2208,7 @@ impl<REv> EffectBuilder<REv> {
         self,
         execution_prestate: SpeculativeExecutionState,
         transaction: Box<Transaction>,
-    ) -> Result<Option<(ExecutionResultV2, Messages)>, engine_state::Error>
+    ) -> Result<(ExecutionResultV2, Messages), SpeculativeExecutionError>
     where
         REv: From<ContractRuntimeRequest>,
     {

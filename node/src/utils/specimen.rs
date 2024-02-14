@@ -27,8 +27,8 @@ use casper_types::{
     FinalitySignature, FinalitySignatureId, PackageHash, ProtocolVersion, RewardedSignatures,
     RuntimeArgs, SecretKey, SemVer, SignedBlockHeader, SingleBlockRewardedSignatures, TimeDiff,
     Timestamp, Transaction, TransactionApprovalsHash, TransactionHash, TransactionId,
-    TransactionV1, TransactionV1Approval, TransactionV1ApprovalsHash, TransactionV1Builder,
-    TransactionV1Hash, URef, KEY_HASH_LENGTH, U512,
+    TransactionSessionKind, TransactionV1, TransactionV1Approval, TransactionV1ApprovalsHash,
+    TransactionV1Builder, TransactionV1Hash, URef, KEY_HASH_LENGTH, U512,
 };
 
 use crate::{
@@ -985,14 +985,19 @@ impl LargestSpecimen for TransactionV1Hash {
 
 impl LargestSpecimen for TransactionV1 {
     fn largest_specimen<E: SizeEstimator>(estimator: &E, cache: &mut Cache) -> Self {
-        TransactionV1Builder::new_transfer(
-            LargestSpecimen::largest_specimen(estimator, cache),
-            LargestSpecimen::largest_specimen(estimator, cache),
-            U512::largest_specimen(estimator, cache),
-            LargestSpecimen::largest_specimen(estimator, cache),
-            LargestSpecimen::largest_specimen(estimator, cache),
+        // See comment in `impl LargestSpecimen for ExecutableDeployItem` below for rationale here.
+        let max_size_with_margin =
+            estimator.parameter::<i32>("max_transaction_size").max(0) as usize + 10 * 4;
+
+        TransactionV1Builder::new_session(
+            TransactionSessionKind::Installer,
+            Bytes::from(vec_of_largest_specimen(
+                estimator,
+                max_size_with_margin,
+                cache,
+            )),
+            "a",
         )
-        .unwrap()
         .with_secret_key(&LargestSpecimen::largest_specimen(estimator, cache))
         .with_timestamp(LargestSpecimen::largest_specimen(estimator, cache))
         .with_ttl(LargestSpecimen::largest_specimen(estimator, cache))
