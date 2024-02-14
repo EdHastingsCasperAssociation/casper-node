@@ -802,18 +802,17 @@ where
     /// Handle bids migration.
     pub fn handle_bids_migration(&self) -> Result<(), ProtocolUpgradeError> {
         debug!("handle bids migration");
-        let mut borrow = self.tracking_copy.borrow_mut();
-        let existing_bid_keys = match borrow.get_keys(&KeyTag::Bid) {
+        let mut tc = self.tracking_copy.borrow_mut();
+        let existing_bid_keys = match tc.get_keys(&KeyTag::Bid) {
             Ok(keys) => keys,
             Err(err) => return Err(ProtocolUpgradeError::TrackingCopyError(err)),
         };
         for key in existing_bid_keys {
-            if let Some(StoredValue::Bid(existing_bid)) = borrow
-                .get(&key)
-                .map_err(Into::<ProtocolUpgradeError>::into)?
+            if let Some(StoredValue::Bid(existing_bid)) =
+                tc.get(&key).map_err(Into::<ProtocolUpgradeError>::into)?
             {
                 // prune away the original record, we don't need it anymore
-                borrow.prune(key);
+                tc.prune(key);
 
                 if existing_bid.staked_amount().is_zero() {
                     // the previous logic enforces unbonding all delegators of
@@ -830,7 +829,7 @@ where
                 let validator_public_key = existing_bid.validator_public_key();
                 let validator_bid_addr = BidAddr::from(validator_public_key.clone());
                 let validator_bid = ValidatorBid::from(*existing_bid.clone());
-                borrow.write(
+                tc.write(
                     validator_bid_addr.into(),
                     StoredValue::BidKind(BidKind::Validator(Box::new(validator_bid))),
                 );
@@ -846,7 +845,7 @@ where
                     // unstaked, so technically we don't need to check for 0 balance here.
                     // However, since it is low effort to check, doing it just to be sure.
                     if !delegator.staked_amount().is_zero() {
-                        borrow.write(
+                        tc.write(
                             delegator_bid_addr.into(),
                             StoredValue::BidKind(BidKind::Delegator(Box::new(delegator))),
                         );
