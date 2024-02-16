@@ -217,7 +217,8 @@ impl TransferRuntimeArgsBuilder {
     fn resolve_source_uref<R>(
         &self,
         account: &AddressableEntity,
-        named_keys: NamedKeys,
+        named_keys: NamedKeys, /* TODO: consider passing in URef values inside named keys
+                                * instead of entire named keys */
         tracking_copy: Rc<RefCell<TrackingCopy<R>>>,
     ) -> Result<URef, TransferError>
     where

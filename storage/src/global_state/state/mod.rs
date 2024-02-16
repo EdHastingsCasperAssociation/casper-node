@@ -274,15 +274,9 @@ pub trait CommitProvider: StateProvider {
             .extract_access_rights(AddressableEntityHash::new(entity_addr.value()), &named_keys);
 
         let transfer_args = {
-            let entity_named_keys = match tc.borrow_mut().get_named_keys(entity_addr) {
-                Ok(named_keys) => named_keys,
-                Err(tce) => {
-                    return TransferResult::Failure(tce.into());
-                }
-            };
             match runtime_args_builder.build(
                 &entity,
-                entity_named_keys,
+                named_keys.clone(),
                 protocol_version,
                 Rc::clone(&tc),
             ) {
