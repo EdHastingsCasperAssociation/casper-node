@@ -30,6 +30,7 @@ pub struct NativeMintRuntime<S> {
     protocol_version: ProtocolVersion,
 
     tracking_copy: Rc<RefCell<TrackingCopy<S>>>,
+    address: AccountHash,
     addressable_entity: AddressableEntity,
     named_keys: NamedKeys,
     access_rights: ContextAccessRights,
@@ -48,6 +49,7 @@ where
         transfer_config: transfer::TransferConfig,
         protocol_version: ProtocolVersion,
         tracking_copy: Rc<RefCell<TrackingCopy<S>>>,
+        address: AccountHash,
         addressable_entity: AddressableEntity,
         named_keys: NamedKeys,
         access_rights: ContextAccessRights,
@@ -63,6 +65,7 @@ where
             protocol_version,
 
             tracking_copy,
+            address,
             addressable_entity,
             named_keys,
             access_rights,
@@ -83,7 +86,7 @@ where
     S: StateReader<Key, StoredValue, Error = GlobalStateError>,
 {
     fn get_caller(&self) -> AccountHash {
-        PublicKey::System.to_account_hash()
+        self.address
     }
 
     fn get_immediate_caller(&self) -> Option<Caller> {

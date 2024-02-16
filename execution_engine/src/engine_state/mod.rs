@@ -401,6 +401,9 @@ where
             self.config.administrative_accounts.clone(),
             self.config.allow_unrestricted_transfers,
         );
+        let wasmless_transfer_gas = Gas::new(U512::from(
+            self.config().system_config().wasmless_transfer_cost(),
+        ));
         let transfer_req = TransferRequest::with_runtime_args(
             transfer_config,
             prestate_hash,
@@ -411,11 +414,9 @@ where
             deploy_item.address,
             deploy_item.authorization_keys,
             deploy_item.session.args().clone(),
+            wasmless_transfer_gas.value(),
         );
         let transfer_result = self.state.transfer(transfer_req);
-        let wasmless_transfer_gas = Gas::new(U512::from(
-            self.config().system_config().wasmless_transfer_cost(),
-        ));
         ExecutionResult::from_transfer_result(transfer_result, wasmless_transfer_gas)
             .map_err(|_| Error::RootNotFound(prestate_hash))
     }

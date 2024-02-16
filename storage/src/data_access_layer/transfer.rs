@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use casper_types::{
     account::AccountHash, execution::Effects, Digest, ProtocolVersion, PublicKey, RuntimeArgs,
-    TransferAddr,
+    TransferAddr, U512,
 };
 
 use crate::system::transfer::{TransferArgs, TransferError};
@@ -99,6 +99,8 @@ pub struct TransferRequest {
     authorization_keys: BTreeSet<AccountHash>,
     /// Args.
     args: TransferRequestArgs,
+    /// Cost.
+    cost: U512,
 }
 
 impl TransferRequest {
@@ -114,6 +116,7 @@ impl TransferRequest {
         address: AccountHash,
         authorization_keys: BTreeSet<AccountHash>,
         args: TransferArgs,
+        cost: U512,
     ) -> Self {
         let args = TransferRequestArgs::Explicit(args);
         Self {
@@ -126,6 +129,7 @@ impl TransferRequest {
             address,
             authorization_keys,
             args,
+            cost,
         }
     }
 
@@ -141,6 +145,7 @@ impl TransferRequest {
         address: AccountHash,
         authorization_keys: BTreeSet<AccountHash>,
         args: RuntimeArgs,
+        cost: U512,
     ) -> Self {
         let args = TransferRequestArgs::Raw(args);
         Self {
@@ -153,6 +158,7 @@ impl TransferRequest {
             address,
             authorization_keys,
             args,
+            cost,
         }
     }
 
@@ -193,6 +199,11 @@ impl TransferRequest {
     /// Returns proposer.
     pub fn proposer(&self) -> &PublicKey {
         &self.proposer
+    }
+
+    /// The cost.
+    pub fn cost(&self) -> U512 {
+        self.cost
     }
 
     /// Returns transfer args.

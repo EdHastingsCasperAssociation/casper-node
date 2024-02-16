@@ -19,8 +19,8 @@ use casper_types::{
         mint::{ARG_AMOUNT, ROUND_SEIGNIORAGE_RATE_KEY, TOTAL_SUPPLY_KEY},
         AUCTION, MINT,
     },
-    Account, AddressableEntity, AddressableEntityHash, Digest, EntityAddr, Key, KeyTag, Phase,
-    PublicKey, RuntimeArgs, StoredValue, U512,
+    Account, AddressableEntity, AddressableEntityHash, DeployHash, Digest, EntityAddr, Key, KeyTag,
+    Phase, PublicKey, RuntimeArgs, StoredValue, U512,
 };
 
 #[cfg(test)]
@@ -277,6 +277,7 @@ pub trait CommitProvider: StateProvider {
             config.clone(),
             protocol_version,
             Rc::clone(&tc),
+            account_hash,
             entity.clone(),
             named_keys.clone(),
             access_rights,
@@ -326,8 +327,26 @@ pub trait CommitProvider: StateProvider {
             return TransferResult::Failure(TransferError::Mint(mint_error));
         }
 
-        let effects = tc.borrow_mut().effects();
         let transfers = mint_provider.into_transfers();
+
+        {
+            // TODO: this block needs to be updated with version management for new style
+            // Transactions
+            let deploy_hash = DeployHash::new(request.transaction_hash());
+            let deploy_info = casper_types::DeployInfo::new(
+                deploy_hash,
+                &transfers,
+                account_hash,
+                entity.main_purse(),
+                request.cost(),
+            );
+            tc.borrow_mut().write(
+                Key::DeployInfo(deploy_hash),
+                StoredValue::DeployInfo(deploy_info),
+            );
+        }
+
+        let effects = tc.borrow_mut().effects();
 
         // commit
         match self.commit(state_hash, effects.clone()) {

@@ -813,6 +813,22 @@ fn should_allow_transfer_to_system_in_a_session_code() {
 fn should_allow_transfer_to_system_in_a_native_transfer() {
     let mut builder = super::private_chain_setup();
 
+    let payment_purse_uref = {
+        let handle_payment_contract = builder.get_named_keys(EntityAddr::System(
+            builder.get_handle_payment_contract_hash().value(),
+        ));
+        let payment_purse_key = handle_payment_contract
+            .get(handle_payment::PAYMENT_PURSE_KEY)
+            .unwrap();
+        payment_purse_key.into_uref().unwrap()
+    };
+
+    assert_eq!(
+        builder.get_purse_balance(payment_purse_uref),
+        U512::zero(),
+        "payment purse should be empty"
+    );
+
     let fund_transfer_1 = ExecuteRequestBuilder::transfer(
         *DEFAULT_ADMIN_ACCOUNT_ADDR,
         runtime_args! {
@@ -825,13 +841,6 @@ fn should_allow_transfer_to_system_in_a_native_transfer() {
 
     builder.exec(fund_transfer_1).expect_success().commit();
 
-    let handle_payment_contract = builder.get_named_keys(EntityAddr::System(
-        builder.get_handle_payment_contract_hash().value(),
-    ));
-    let payment_purse_key = handle_payment_contract
-        .get(handle_payment::PAYMENT_PURSE_KEY)
-        .unwrap();
-    let payment_purse_uref = payment_purse_key.into_uref().unwrap();
     assert_eq!(
         builder.get_purse_balance(payment_purse_uref),
         U512::zero(),
