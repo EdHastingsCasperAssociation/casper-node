@@ -5,15 +5,15 @@ use casper_engine_test_support::{
     DEFAULT_ACCOUNT_ADDR, DEFAULT_MAX_ASSOCIATED_KEYS, DEFAULT_PAYMENT, DEFAULT_PROTOCOL_VERSION,
     PRODUCTION_RUN_GENESIS_REQUEST,
 };
-use casper_execution_engine::{
-    engine_state::{EngineConfigBuilder, Error as CoreError, WASMLESS_TRANSFER_FIXED_GAS_PRICE},
-    execution::Error as ExecError,
+use casper_execution_engine::engine_state::{
+    EngineConfigBuilder, Error as CoreError, WASMLESS_TRANSFER_FIXED_GAS_PRICE,
 };
+use casper_storage::system::transfer::TransferError;
 use casper_types::{
     account::AccountHash,
     runtime_args,
     system::{handle_payment, mint},
-    AccessRights, ApiError, AuctionCosts, EraId, Gas, HandlePaymentCosts, Key, MintCosts, Motes,
+    AccessRights, AuctionCosts, EraId, Gas, HandlePaymentCosts, Key, MintCosts, Motes,
     ProtocolVersion, PublicKey, SecretKey, StandardPaymentCosts, SystemConfig, URef,
     DEFAULT_WASMLESS_TRANSFER_COST, U512,
 };
@@ -322,7 +322,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id,
                 },
-                CoreError::Exec(ExecError::Revert(ApiError::InvalidPurse)),
+                CoreError::Transfer(TransferError::InvalidPurse),
             )
         }
         InvalidWasmlessTransfer::TransferToSelfByKey => {
@@ -334,7 +334,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::Revert(ApiError::InvalidPurse)),
+                CoreError::Transfer(TransferError::InvalidPurse),
             )
         }
         InvalidWasmlessTransfer::TransferToSelfByURef => {
@@ -350,7 +350,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::Revert(ApiError::InvalidPurse)),
+                CoreError::Transfer(TransferError::InvalidPurse),
             )
         }
         InvalidWasmlessTransfer::OtherSourceAccountByAddr => {
@@ -363,7 +363,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::Revert(ApiError::InvalidArgument)),
+                CoreError::Transfer(TransferError::InvalidArgument),
             )
         }
         InvalidWasmlessTransfer::OtherSourceAccountByKey => {
@@ -376,7 +376,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::Revert(ApiError::InvalidArgument)),
+                CoreError::Transfer(TransferError::InvalidArgument),
             )
         }
         InvalidWasmlessTransfer::OtherSourceAccountByURef => {
@@ -393,7 +393,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::ForgedReference(account_2_purse)),
+                CoreError::Transfer(TransferError::ForgedReference(account_2_purse)),
             )
         }
         InvalidWasmlessTransfer::MissingTarget => {
@@ -404,7 +404,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::Revert(ApiError::MissingArgument)),
+                CoreError::Transfer(TransferError::MissingArgument),
             )
         }
         InvalidWasmlessTransfer::MissingAmount => {
@@ -415,7 +415,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_TARGET => *ACCOUNT_2_ADDR,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::Revert(ApiError::MissingArgument)),
+                CoreError::Transfer(TransferError::MissingArgument),
             )
         }
         InvalidWasmlessTransfer::SourceURefNotPurse => {
@@ -429,7 +429,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::Revert(ApiError::InvalidPurse)),
+                CoreError::Transfer(TransferError::InvalidPurse),
             )
         }
         InvalidWasmlessTransfer::TargetURefNotPurse => {
@@ -442,7 +442,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::Revert(ApiError::InvalidPurse)),
+                CoreError::Transfer(TransferError::InvalidPurse),
             )
         }
         InvalidWasmlessTransfer::SourceURefNonexistent => {
@@ -458,7 +458,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::ForgedReference(nonexistent_purse)),
+                CoreError::Transfer(TransferError::ForgedReference(nonexistent_purse)),
             )
         }
         InvalidWasmlessTransfer::TargetURefNonexistent => {
@@ -471,7 +471,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::Revert(ApiError::InvalidPurse)),
+                CoreError::Transfer(TransferError::InvalidPurse),
             )
         }
         InvalidWasmlessTransfer::OtherPurseToSelfPurse => {
@@ -493,7 +493,7 @@ fn invalid_transfer_wasmless(invalid_wasmless_transfer: InvalidWasmlessTransfer)
                     mint::ARG_AMOUNT => transfer_amount,
                     mint::ARG_ID => id
                 },
-                CoreError::Exec(ExecError::ForgedReference(account_2_purse)),
+                CoreError::Transfer(TransferError::ForgedReference(account_2_purse)),
             )
         }
     };

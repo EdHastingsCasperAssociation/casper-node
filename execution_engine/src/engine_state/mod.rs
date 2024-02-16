@@ -7,7 +7,6 @@ pub(crate) mod execution_kind;
 pub mod execution_result;
 mod prune;
 pub mod step;
-mod transfer;
 
 use itertools::Itertools;
 
@@ -28,32 +27,28 @@ use casper_storage::{
         get_bids::{BidsRequest, BidsResult},
         query::{QueryRequest, QueryResult},
         DataAccessLayer, EraValidatorsRequest, EraValidatorsResult, FlushRequest, FlushResult,
-        GenesisRequest, GenesisResult, ProtocolUpgradeRequest, ProtocolUpgradeResult,
-        PutTrieRequest, TrieRequest,
+        GenesisRequest, GenesisResult, ProtocolUpgradeRequest, ProtocolUpgradeResult, TrieRequest,
     },
     global_state::{
         self,
         state::{
             lmdb::LmdbGlobalState, scratch::ScratchGlobalState, CommitProvider, StateProvider,
-            StateReader,
         },
-        trie::{merkle_proof::TrieMerkleProof, TrieRaw},
+        trie::TrieRaw,
         trie_store::operations::PruneResult as GlobalStatePruneResult,
     },
-    system::auction,
-    tracking_copy::{TrackingCopy, TrackingCopyError, TrackingCopyExt},
-    AddressGenerator,
+    system::{
+        auction,
+        transfer::{NewTransferTargetMode, TransferArgs, TransferRuntimeArgsBuilder},
+    },
+    tracking_copy::{TrackingCopy, TrackingCopyEntityExt, TrackingCopyError, TrackingCopyExt},
 };
 
 use casper_types::{
     account::{Account, AccountHash},
-    addressable_entity::{
-        ActionThresholds, AssociatedKeys, EntityKind, EntityKindTag, MessageTopics, NamedKeyAddr,
-        NamedKeyValue, NamedKeys, Weight,
-    },
+    addressable_entity::{EntityKind, EntityKindTag, NamedKeys},
     bytesrepr::ToBytes,
     execution::Effects,
-    package::{EntityVersions, Groups, PackageStatus},
     system::{
         auction::{
             ARG_ERA_END_TIMESTAMP_MILLIS, ARG_EVICTED_VALIDATORS, ARG_REWARDS_MAP,
@@ -63,13 +58,11 @@ use casper_types::{
         mint::{self},
         AUCTION, HANDLE_PAYMENT, MINT,
     },
-    AccessRights, AddressableEntity, AddressableEntityHash, ApiError, BlockTime, ByteCodeHash,
-    CLValue, ChecksumRegistry, DeployHash, DeployInfo, Digest, EntityAddr, EntryPoints,
-    ExecutableDeployItem, FeeHandling, Gas, Key, KeyTag, Motes, Package, PackageHash, Phase,
-    ProtocolVersion, PublicKey, RuntimeArgs, StoredValue, SystemEntityRegistry, URef, U512,
+    AddressableEntity, AddressableEntityHash, ApiError, BlockTime, DeployHash, DeployInfo, Digest,
+    EntityAddr, ExecutableDeployItem, FeeHandling, Gas, Key, KeyTag, Motes, Phase, ProtocolVersion,
+    PublicKey, RuntimeArgs, StoredValue, SystemEntityRegistry, URef, U512,
 };
 
-use self::transfer::NewTransferTargetMode;
 pub use self::{
     deploy_item::DeployItem,
     engine_config::{
@@ -82,7 +75,6 @@ pub use self::{
     execution_result::{ExecutionResult, ForcedTransferResult},
     prune::{PruneConfig, PruneResult},
     step::{RewardItem, SlashItem, StepError, StepRequest, StepSuccess},
-    transfer::{TransferArgs, TransferRuntimeArgsBuilder, TransferTargetMode},
 };
 
 use crate::{
@@ -263,7 +255,7 @@ where
     ///
     /// This process applies changes to the global state.
     ///
-    /// Returns [`UpgradeSuccess`].
+    /// Returns [`ProtocolUpgradeResult`].
     pub fn commit_upgrade(&self, request: ProtocolUpgradeRequest) -> ProtocolUpgradeResult {
         self.state.protocol_upgrade(request)
     }
@@ -394,180 +386,6 @@ where
         Ok(results)
     }
 
-    fn get_authorized_addressable_entity(
-        &self,
-        protocol_version: ProtocolVersion,
-        account_hash: AccountHash,
-        authorization_keys: &BTreeSet<AccountHash>,
-        tracking_copy: Rc<RefCell<TrackingCopy<<S as StateProvider>::Reader>>>,
-    ) -> Result<(AddressableEntity, AddressableEntityHash), Error> {
-        let entity_record = match tracking_copy
-            .borrow_mut()
-            .get_addressable_entity_by_account_hash(protocol_version, account_hash)
-        {
-            Ok(entity) => entity,
-            Err(_) => return Err(Error::MissingContractByAccountHash(account_hash)),
-        };
-
-        let entity_hash: AddressableEntityHash = match tracking_copy
-            .borrow_mut()
-            .get_entity_hash_by_account_hash(account_hash)
-        {
-            Ok(contract_hash) => contract_hash,
-            Err(error) => {
-                return Err(error.into());
-            }
-        };
-
-        let admin_set = self.config().administrative_accounts();
-
-        if !admin_set.is_empty() && admin_set.intersection(authorization_keys).next().is_some() {
-            // Exit early if there's at least a single signature coming from an admin.
-            return Ok((entity_record, entity_hash));
-        }
-
-        // Authorize using provided authorization keys
-        if !entity_record.can_authorize(authorization_keys) {
-            return Err(Error::Authorization);
-        }
-
-        // Check total key weight against deploy threshold
-        if !entity_record.can_deploy_with(authorization_keys) {
-            return Err(execution::Error::DeploymentAuthorizationFailure.into());
-        }
-
-        Ok((entity_record, entity_hash))
-    }
-
-    fn create_addressable_entity_from_account(
-        &self,
-        account: Account,
-        protocol_version: ProtocolVersion,
-        tracking_copy: Rc<RefCell<TrackingCopy<<S as StateProvider>::Reader>>>,
-    ) -> Result<(), Error> {
-        let account_hash = account.account_hash();
-
-        let mut generator =
-            AddressGenerator::new(account.main_purse().addr().as_ref(), Phase::System);
-
-        let byte_code_hash = ByteCodeHash::default();
-        let entity_hash = AddressableEntityHash::new(generator.new_hash_address());
-        let package_hash = PackageHash::new(generator.new_hash_address());
-
-        let entry_points = EntryPoints::new();
-
-        let associated_keys = AssociatedKeys::from(account.associated_keys().clone());
-        let action_thresholds = {
-            let account_threshold = account.action_thresholds().clone();
-            ActionThresholds::new(
-                Weight::new(account_threshold.deployment.value()),
-                Weight::new(1u8),
-                Weight::new(account_threshold.key_management.value()),
-            )
-            .map_err(|_| Error::Authorization)?
-        };
-
-        let entity_addr = EntityAddr::new_account_entity_addr(entity_hash.value());
-
-        self.migrate_named_keys(
-            entity_addr,
-            account.named_keys().clone(),
-            Rc::clone(&tracking_copy),
-        )?;
-
-        let entity = AddressableEntity::new(
-            package_hash,
-            byte_code_hash,
-            entry_points,
-            protocol_version,
-            account.main_purse(),
-            associated_keys,
-            action_thresholds,
-            MessageTopics::default(),
-            EntityKind::Account(account_hash),
-        );
-
-        let access_key = generator.new_uref(AccessRights::READ_ADD_WRITE);
-
-        let package = {
-            let mut package = Package::new(
-                access_key,
-                EntityVersions::default(),
-                BTreeSet::default(),
-                Groups::default(),
-                PackageStatus::Locked,
-            );
-            package.insert_entity_version(protocol_version.value().major, entity_hash);
-            package
-        };
-
-        let entity_key: Key = entity.entity_key(entity_hash);
-
-        tracking_copy.borrow_mut().write(entity_key, entity.into());
-        tracking_copy
-            .borrow_mut()
-            .write(package_hash.into(), package.into());
-        let contract_by_account = match CLValue::from_t(entity_key) {
-            Ok(cl_value) => cl_value,
-            Err(_) => return Err(Error::Bytesrepr("Failed to convert to CLValue".to_string())),
-        };
-
-        tracking_copy.borrow_mut().write(
-            Key::Account(account_hash),
-            StoredValue::CLValue(contract_by_account),
-        );
-        Ok(())
-    }
-
-    fn migrate_account(
-        &self,
-        account_hash: AccountHash,
-        protocol_version: ProtocolVersion,
-        tracking_copy: Rc<RefCell<TrackingCopy<<S as StateProvider>::Reader>>>,
-    ) -> Result<(), Error> {
-        let maybe_stored_value = tracking_copy
-            .borrow_mut()
-            .read(&Key::Account(account_hash))
-            .map_err(Into::<Error>::into)?;
-
-        match maybe_stored_value {
-            Some(StoredValue::Account(account)) => self.create_addressable_entity_from_account(
-                account,
-                protocol_version,
-                Rc::clone(&tracking_copy),
-            ),
-            Some(StoredValue::CLValue(_)) => Ok(()),
-            // This means the Account does not exist, which we consider to be
-            // an authorization error. As used by the node, this type of deploy
-            // will have already been filtered out, but for other EE use cases
-            // and testing it is reachable.
-            Some(_) | None => Err(Error::Authorization),
-        }
-    }
-
-    fn migrate_named_keys(
-        &self,
-        entity_addr: EntityAddr,
-        named_keys: NamedKeys,
-        tracking_copy: Rc<RefCell<TrackingCopy<<S as StateProvider>::Reader>>>,
-    ) -> Result<(), Error> {
-        for (string, key) in named_keys.into_inner().into_iter() {
-            let entry_addr = NamedKeyAddr::new_from_string(entity_addr, string.clone())
-                .map_err(|error| Error::Bytesrepr(error.to_string()))?;
-
-            let named_key_value = StoredValue::NamedKey(
-                NamedKeyValue::from_concrete_values(key, string.clone())
-                    .map_err(|cl_error| Error::Bytesrepr(cl_error.to_string()))?,
-            );
-
-            let entry_key = Key::NamedKey(entry_addr);
-
-            tracking_copy.borrow_mut().write(entry_key, named_key_value)
-        }
-
-        Ok(())
-    }
-
     fn get_named_keys(
         &self,
         entity_addr: EntityAddr,
@@ -627,20 +445,23 @@ where
         let authorization_keys = deploy_item.authorization_keys;
 
         // Migrate the legacy account structure if necessary.
-        if let Err(e) =
-            self.migrate_account(account_hash, protocol_version, Rc::clone(&tracking_copy))
+        if let Err(e) = tracking_copy
+            .borrow_mut()
+            .migrate_account(account_hash, protocol_version)
         {
-            return Ok(ExecutionResult::precondition_failure(e));
+            return Ok(ExecutionResult::precondition_failure(e.into()));
         }
 
-        let (entity, entity_hash) = match self.get_authorized_addressable_entity(
-            protocol_version,
-            account_hash,
-            &authorization_keys,
-            Rc::clone(&tracking_copy),
-        ) {
+        let (entity, entity_hash) = match tracking_copy
+            .borrow_mut()
+            .get_authorized_addressable_entity(
+                protocol_version,
+                account_hash,
+                &authorization_keys,
+                &self.config().administrative_accounts,
+            ) {
             Ok(account) => account,
-            Err(e) => return Ok(ExecutionResult::precondition_failure(e)),
+            Err(e) => return Ok(ExecutionResult::precondition_failure(e.into())),
         };
 
         let package_kind = entity.entity_kind();
@@ -654,7 +475,7 @@ where
             }
         };
 
-        let system_contract_registry = tracking_copy.borrow_mut().get_system_contracts()?;
+        let system_contract_registry = tracking_copy.borrow_mut().get_system_entity_registry()?;
 
         let handle_payment_contract_hash = system_contract_registry
             .get(HANDLE_PAYMENT)
@@ -781,7 +602,7 @@ where
             .resolve_transfer_target_mode(protocol_version, Rc::clone(&tracking_copy))
         {
             Ok(transfer_target_mode) => transfer_target_mode,
-            Err(error) => return Ok(make_charged_execution_failure(error)),
+            Err(error) => return Ok(make_charged_execution_failure(error.into())),
         };
 
         // At this point we know target refers to either a purse on an existing account or an
@@ -848,12 +669,11 @@ where
                 match maybe_uref {
                     Some(main_purse) => {
                         let account = Account::create(account_hash, NamedKeys::new(), main_purse);
-                        if let Err(error) = self.create_addressable_entity_from_account(
-                            account,
-                            protocol_version,
-                            Rc::clone(&tracking_copy),
-                        ) {
-                            return Ok(make_charged_execution_failure(error));
+                        if let Err(error) = tracking_copy
+                            .borrow_mut()
+                            .create_addressable_entity_from_account(account, protocol_version)
+                        {
+                            return Ok(make_charged_execution_failure(error.into()));
                         }
                     }
                     None => {
@@ -875,7 +695,7 @@ where
             Rc::clone(&tracking_copy),
         ) {
             Ok(transfer_args) => transfer_args,
-            Err(error) => return Ok(make_charged_execution_failure(error)),
+            Err(error) => return Ok(make_charged_execution_failure(error.into())),
         };
 
         let payment_uref;
@@ -1222,23 +1042,26 @@ where
         let authorization_keys = deploy_item.authorization_keys;
         let account_hash = deploy_item.address;
 
-        if let Err(error) =
-            self.migrate_account(account_hash, protocol_version, Rc::clone(&tracking_copy))
+        if let Err(e) = tracking_copy
+            .borrow_mut()
+            .migrate_account(account_hash, protocol_version)
         {
-            return Ok(ExecutionResult::precondition_failure(error));
+            return Ok(ExecutionResult::precondition_failure(e.into()));
         }
 
         // Get account from tracking copy
         // validation_spec_3: account validity
         let (entity, entity_hash) = {
-            match self.get_authorized_addressable_entity(
-                protocol_version,
-                account_hash,
-                &authorization_keys,
-                Rc::clone(&tracking_copy),
-            ) {
+            match tracking_copy
+                .borrow_mut()
+                .get_authorized_addressable_entity(
+                    protocol_version,
+                    account_hash,
+                    &authorization_keys,
+                    &self.config().administrative_accounts,
+                ) {
                 Ok((addressable_entity, entity_hash)) => (addressable_entity, entity_hash),
-                Err(e) => return Ok(ExecutionResult::precondition_failure(e)),
+                Err(e) => return Ok(ExecutionResult::precondition_failure(e.into())),
             }
         };
 
@@ -1322,7 +1145,7 @@ where
 
         // Get handle payment system contract details
         // payment_code_spec_6: system contract validity
-        let system_contract_registry = tracking_copy.borrow_mut().get_system_contracts()?;
+        let system_contract_registry = tracking_copy.borrow_mut().get_system_entity_registry()?;
 
         let handle_payment_contract_hash = system_contract_registry
             .get(HANDLE_PAYMENT)
@@ -1488,7 +1311,7 @@ where
 
         // Get handle payment system contract details
         // payment_code_spec_6: system contract validity
-        let system_contract_registry = tracking_copy.borrow_mut().get_system_contracts()?;
+        let system_contract_registry = tracking_copy.borrow_mut().get_system_entity_registry()?;
 
         let handle_payment_contract_hash = system_contract_registry
             .get(HANDLE_PAYMENT)
@@ -1717,7 +1540,8 @@ where
 
             // The Handle Payment keys may have changed because of effects during payment and/or
             // session, so we need to look them up again from the tracking copy
-            let system_contract_registry = finalization_tc.borrow_mut().get_system_contracts()?;
+            let system_contract_registry =
+                finalization_tc.borrow_mut().get_system_entity_registry()?;
 
             let handle_payment_contract_hash = system_contract_registry
                 .get(HANDLE_PAYMENT)
@@ -1859,22 +1683,6 @@ where
     pub fn get_trie_full(&self, trie_key: Digest) -> Result<Option<TrieRaw>, Error> {
         let req = TrieRequest::new(trie_key, None);
         self.state.trie(req).into_legacy().map_err(Error::Storage)
-    }
-
-    /// Puts a trie if no children are missing from the global state; otherwise reports the missing
-    /// children hashes via the `Error` enum.
-    pub fn put_trie_if_all_children_present(&self, trie_bytes: &[u8]) -> Result<Digest, Error> {
-        let missing_children = match self.state.missing_children(trie_bytes) {
-            Ok(ret) => ret,
-            Err(err) => return Err(err.into()),
-        };
-        let raw = TrieRaw::new(trie_bytes.into());
-        let req = PutTrieRequest::new(raw);
-        if missing_children.is_empty() {
-            Ok(self.state.put_trie(req).as_legacy()?)
-        } else {
-            Err(Error::MissingTrieNodeChildren(missing_children))
-        }
     }
 
     /// Obtains validator weights for given era.
@@ -2280,7 +2088,7 @@ where
         };
         let result = tracking_copy
             .borrow_mut()
-            .get_system_contracts()
+            .get_system_entity_registry()
             .map_err(|error| {
                 warn!(%error, "Failed to retrieve system contract registry");
                 Error::MissingSystemContractRegistry
@@ -2327,37 +2135,6 @@ where
     fn get_new_system_call_stack(&self) -> RuntimeStack {
         let max_height = self.config.max_runtime_call_stack_height() as usize;
         RuntimeStack::new_system_call_stack(max_height)
-    }
-
-    /// Returns the checksum registry at the given state root hash.
-    pub fn get_checksum_registry(
-        &self,
-        state_root_hash: Digest,
-    ) -> Result<Option<ChecksumRegistry>, Error> {
-        let tracking_copy = match self.tracking_copy(state_root_hash)? {
-            None => return Err(Error::RootNotFound(state_root_hash)),
-            Some(tracking_copy) => Rc::new(RefCell::new(tracking_copy)),
-        };
-        let maybe_checksum_registry = tracking_copy
-            .borrow_mut()
-            .get_checksum_registry()
-            .map_err(Error::TrackingCopy);
-        maybe_checksum_registry
-    }
-
-    /// Returns the Merkle proof for the checksum registry at the given state root hash.
-    pub fn get_checksum_registry_proof(
-        &self,
-        state_root_hash: Digest,
-    ) -> Result<TrieMerkleProof<Key, StoredValue>, Error> {
-        let tracking_copy = match self.tracking_copy(state_root_hash)? {
-            None => return Err(Error::RootNotFound(state_root_hash)),
-            Some(tracking_copy) => Rc::new(RefCell::new(tracking_copy)),
-        };
-
-        let key = Key::ChecksumRegistry;
-        let maybe_proof = tracking_copy.borrow_mut().reader().read_with_proof(&key)?;
-        maybe_proof.ok_or(Error::MissingChecksumRegistry)
     }
 }
 
@@ -2498,6 +2275,7 @@ fn should_charge_for_errors_in_wasm(execution_result: &ExecutionResult) -> bool 
             | Error::MissingTrieNodeChildren(_)
             | Error::FailedToRetrieveAccumulationPurse
             | Error::FailedToPrune(_)
+            | Error::Transfer(_)
             | Error::TrackingCopy(_) => false,
         },
         ExecutionResult::Success { .. } => false,

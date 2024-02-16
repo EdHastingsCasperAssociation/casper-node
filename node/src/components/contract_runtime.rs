@@ -249,7 +249,7 @@ impl ContractRuntime {
         if result.is_success() {
             let flush_req = FlushRequest::new();
             if let FlushResult::Failure(err) = data_access_layer.flush(flush_req) {
-                return GenesisResult::Failure(GenesisError::TrackingCopyError(
+                return GenesisResult::Failure(GenesisError::TrackingCopy(
                     TrackingCopyError::Storage(err),
                 ));
             }
@@ -275,7 +275,7 @@ impl ContractRuntime {
         if result.is_success() {
             let flush_req = FlushRequest::new();
             if let FlushResult::Failure(err) = data_access_layer.flush(flush_req) {
-                return ProtocolUpgradeResult::Failure(ProtocolUpgradeError::TrackingCopyError(
+                return ProtocolUpgradeResult::Failure(ProtocolUpgradeError::TrackingCopy(
                     err.into(),
                 ));
             }
@@ -536,7 +536,6 @@ impl ContractRuntime {
                         let engine_state = Arc::clone(&self.engine_state);
                         let data_access_layer = Arc::clone(&self.data_access_layer);
                         let metrics = Arc::clone(&self.metrics);
-                        let current_pre_state = self.execution_pre_state.lock().unwrap();
                         let shared_pre_state = Arc::clone(&self.execution_pre_state);
                         effects.extend(
                             exec_or_requeue(
@@ -581,7 +580,8 @@ impl ContractRuntime {
                     }
                     .ignore()
                 } else {
-                    async move { responder.respond(Ok(None)).await }.ignore()
+                    unreachable!()
+                    //async move { responder.respond(Ok(None)).await }.ignore()
                 }
             }
         }

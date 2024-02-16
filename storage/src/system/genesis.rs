@@ -123,7 +123,7 @@ pub enum GenesisError {
     /// Genesis process requires initial accounts.
     MissingGenesisAccounts,
     /// A tracking copy error.
-    TrackingCopyError(TrackingCopyError),
+    TrackingCopy(TrackingCopyError),
 }
 
 impl fmt::Display for GenesisError {

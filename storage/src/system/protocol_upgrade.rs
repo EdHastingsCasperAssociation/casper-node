@@ -87,7 +87,7 @@ pub enum ProtocolUpgradeError {
     MissingSystemEntityHash(String),
     /// Tracking copy error.
     #[error("{0}")]
-    TrackingCopyError(crate::tracking_copy::TrackingCopyError),
+    TrackingCopy(crate::tracking_copy::TrackingCopyError),
 }
 
 impl From<CLValueError> for ProtocolUpgradeError {
@@ -98,7 +98,7 @@ impl From<CLValueError> for ProtocolUpgradeError {
 
 impl From<crate::tracking_copy::TrackingCopyError> for ProtocolUpgradeError {
     fn from(err: crate::tracking_copy::TrackingCopyError) -> Self {
-        ProtocolUpgradeError::TrackingCopyError(err)
+        ProtocolUpgradeError::TrackingCopy(err)
     }
 }
 
@@ -208,7 +208,8 @@ where
 
     fn system_contract_registry(&self) -> Result<SystemEntityRegistry, ProtocolUpgradeError> {
         debug!("system contract registry");
-        let registry = if let Ok(registry) = self.tracking_copy.borrow_mut().get_system_contracts()
+        let registry = if let Ok(registry) =
+            self.tracking_copy.borrow_mut().get_system_entity_registry()
         {
             registry
         } else {
@@ -805,7 +806,7 @@ where
         let mut tc = self.tracking_copy.borrow_mut();
         let existing_bid_keys = match tc.get_keys(&KeyTag::Bid) {
             Ok(keys) => keys,
-            Err(err) => return Err(ProtocolUpgradeError::TrackingCopyError(err)),
+            Err(err) => return Err(ProtocolUpgradeError::TrackingCopy(err)),
         };
         for key in existing_bid_keys {
             if let Some(StoredValue::Bid(existing_bid)) =
@@ -868,7 +869,7 @@ where
                 .tracking_copy
                 .borrow_mut()
                 .get(&highest_era_info_key)
-                .map_err(ProtocolUpgradeError::TrackingCopyError)?;
+                .map_err(ProtocolUpgradeError::TrackingCopy)?;
 
             match get_result {
                 Some(stored_value @ StoredValue::EraInfo(_)) => {

@@ -112,4 +112,14 @@ pub enum BlockExecutionError {
         #[serde(skip_serializing)]
         TrackingCopyError,
     ),
+    /// A root state hash was not found.
+    #[error("Root state hash not found in global state.")]
+    RootNotFound,
+    // /// A native transfer error.
+    // #[error(transparent)]
+    // Transfer(
+    //     #[from]
+    //     #[serde(skip_serializing)]
+    //     TransferError,
+    // ),
 }

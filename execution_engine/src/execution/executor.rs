@@ -2,7 +2,8 @@ use std::{cell::RefCell, collections::BTreeSet, convert::TryFrom, rc::Rc};
 
 use casper_storage::{
     global_state::{error::Error as GlobalStateError, state::StateReader},
-    tracking_copy::{TrackingCopy, TrackingCopyExt},
+    system::transfer::TransferArgs,
+    tracking_copy::{TrackingCopy, TrackingCopyEntityExt, TrackingCopyExt},
     AddressGenerator,
 };
 use casper_types::{
@@ -14,8 +15,6 @@ use casper_types::{
     DeployHash, EntityAddr, EntryPointType, Gas, Key, Phase, ProtocolVersion, RuntimeArgs,
     StoredValue, Tagged, URef, U512,
 };
-
-use crate::engine_state::TransferArgs;
 
 use crate::{
     engine_state::{
@@ -172,7 +171,7 @@ impl Executor {
         // should cause the EE to panic. Do not remove the panics.
         let system_contract_registry = tracking_copy
             .borrow_mut()
-            .get_system_contracts()
+            .get_system_entity_registry()
             .unwrap_or_else(|error| panic!("Could not retrieve system contracts: {:?}", error));
 
         // Snapshot of effects before execution, so in case of error only nonce update
