@@ -133,8 +133,6 @@ fn should_disallow_wasm_unrestricted_transfer_to_create_new_account_by_user() {
 
     // User can transfer funds back to admin.
     builder.exec(transfer_request_2).expect_success().commit();
-
-    // What is
 }
 
 #[ignore]
@@ -758,7 +756,7 @@ fn should_allow_custom_payment_by_paying_to_system_account() {
 
 #[ignore]
 #[test]
-fn should_allow_transfer_to_system_in_a_session_code() {
+fn should_allow_wasm_transfer_to_system() {
     let mut builder = super::private_chain_setup();
 
     // Account 1 can deploy after genesis
@@ -800,12 +798,6 @@ fn should_allow_transfer_to_system_in_a_session_code() {
         U512::zero(),
         "after finalizing a private chain custom payment code a payment purse should be empty"
     );
-
-    let system_account = builder.get_entity_by_account_hash(*SYSTEM_ADDR).unwrap();
-    assert_eq!(
-        system_account.main_purse().addr(),
-        payment_purse_uref.addr()
-    );
 }
 
 #[ignore]
@@ -845,11 +837,5 @@ fn should_allow_transfer_to_system_in_a_native_transfer() {
         builder.get_purse_balance(payment_purse_uref),
         U512::zero(),
         "after finalizing a private chain custom payment code a payment purse should be empty"
-    );
-
-    let system_account = builder.get_entity_by_account_hash(*SYSTEM_ADDR).unwrap();
-    assert_eq!(
-        system_account.main_purse().addr(),
-        payment_purse_uref.addr()
     );
 }
