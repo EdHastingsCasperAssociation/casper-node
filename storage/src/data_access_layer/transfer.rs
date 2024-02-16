@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use casper_types::{
     account::AccountHash, execution::Effects, Digest, ProtocolVersion, PublicKey, RuntimeArgs,
+    TransferAddr,
 };
 
 use crate::system::transfer::{TransferArgs, TransferError};
@@ -23,6 +24,21 @@ pub enum TransferConfig {
 }
 
 impl TransferConfig {
+    /// Returns a new instance.
+    pub fn new(
+        administrative_accounts: BTreeSet<AccountHash>,
+        allow_unrestricted_transfer: bool,
+    ) -> Self {
+        if administrative_accounts.is_empty() && allow_unrestricted_transfer {
+            TransferConfig::Unadministered
+        } else {
+            TransferConfig::Administered {
+                administrative_accounts,
+                allow_unrestricted_transfer,
+            }
+        }
+    }
+
     /// Does account hash belong to an administrative account?
     pub fn is_administrator(&self, account_hash: &AccountHash) -> bool {
         match self {
@@ -196,6 +212,8 @@ pub enum TransferResult {
     RootNotFound,
     /// Transfer succeeded
     Success {
+        /// List of transfers that happened during execution.
+        transfers: Vec<TransferAddr>,
         /// State hash after transfer is committed to the global state.
         post_state_hash: Digest,
         /// Effects of transfer.

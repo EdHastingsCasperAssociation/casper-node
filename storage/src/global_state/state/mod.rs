@@ -273,24 +273,12 @@ pub trait CommitProvider: StateProvider {
         let access_rights = entity
             .extract_access_rights(AddressableEntityHash::new(entity_addr.value()), &named_keys);
 
-        let transfer_args = {
-            match runtime_args_builder.build(
-                &entity,
-                named_keys.clone(),
-                protocol_version,
-                Rc::clone(&tc),
-            ) {
-                Ok(transfer_args) => transfer_args,
-                Err(error) => return TransferResult::Failure(error),
-            }
-        };
-
         let mut mint_provider = NativeMintRuntime::new(
             config.clone(),
             protocol_version,
             Rc::clone(&tc),
-            entity,
-            named_keys,
+            entity.clone(),
+            named_keys.clone(),
             access_rights,
             remaining_spending_limit,
             request.transaction_hash(),
@@ -321,6 +309,13 @@ pub trait CommitProvider: StateProvider {
             }
         }
 
+        let transfer_args = {
+            match runtime_args_builder.build(&entity, named_keys, protocol_version, Rc::clone(&tc))
+            {
+                Ok(transfer_args) => transfer_args,
+                Err(error) => return TransferResult::Failure(error),
+            }
+        };
         if let Err(mint_error) = mint_provider.transfer(
             transfer_args.to(),
             transfer_args.source(),
@@ -332,10 +327,12 @@ pub trait CommitProvider: StateProvider {
         }
 
         let effects = tc.borrow_mut().effects();
+        let transfers = mint_provider.into_transfers();
 
         // commit
         match self.commit(state_hash, effects.clone()) {
             Ok(post_state_hash) => TransferResult::Success {
+                transfers,
                 post_state_hash,
                 effects,
             },

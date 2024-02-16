@@ -13,7 +13,7 @@ use casper_execution_engine::engine_state::{
 use casper_storage::{
     data_access_layer::{
         transfer::TransferConfig, DataAccessLayer, EraValidatorsRequest, EraValidatorsResult,
-        TransferRequest, TransferResult,
+        TransferRequest,
     },
     global_state::state::{lmdb::LmdbGlobalState, CommitProvider, StateProvider, StateReader},
 };
@@ -22,8 +22,8 @@ use casper_types::{
     bytesrepr::{self, ToBytes, U32_SERIALIZED_LENGTH},
     contract_messages::Messages,
     execution::{Effects, ExecutionResult, ExecutionResultV2, Transform, TransformKind},
-    BlockV2, CLValue, ChecksumRegistry, DeployHash, Digest, EraEndV2, EraId, Key, ProtocolVersion,
-    PublicKey, Transaction, U512,
+    BlockV2, CLValue, ChecksumRegistry, DeployHash, Digest, EraEndV2, EraId, Gas, Key,
+    ProtocolVersion, PublicKey, Transaction, U512,
 };
 
 use crate::{
@@ -95,10 +95,6 @@ pub fn execute_finalized_block(
         )?;
     }
 
-    // TODO: wire this up with BlockAndExecutionResults so that this data gets written to
-    // meta data & put to event stream
-    let mut transfer_results = vec![];
-
     for transaction in executable_block.transactions {
         let (deploy_hash, deploy) = match transaction {
             Transaction::Deploy(deploy) => {
@@ -122,23 +118,27 @@ pub fn execute_finalized_block(
                         authorization_keys,
                         deploy.session().args().clone(),
                     );
-                    // this auto-commits
+                    // native transfer auto-commits
                     let transfer_result = data_access_layer.transfer(transfer_req);
                     trace!(?deploy_hash, ?transfer_result, "native transfer result");
-                    transfer_results.push(transfer_result.clone());
-                    match transfer_result {
-                        TransferResult::RootNotFound => {
-                            return Err(BlockExecutionError::RootNotFound);
-                        }
-                        TransferResult::Failure(error) => {
-                            // currently noop -- will wire up penalty payment
-                            // with new payment code.
-                            debug!(?deploy_hash, ?error, "native transfer error");
-                        }
-                        TransferResult::Success {
-                            post_state_hash, ..
-                        } => {
-                            state_root_hash = post_state_hash;
+                    match EngineExecutionResult::from_transfer_result(
+                        transfer_result,
+                        Gas::new(U512::zero()),
+                    ) {
+                        Err(_) => return Err(BlockExecutionError::RootNotFound(state_root_hash)),
+                        Ok(exec_result) => {
+                            let ExecutionResultAndMessages {
+                                execution_result,
+                                messages,
+                            } = ExecutionResultAndMessages::from(exec_result);
+                            let versioned_execution_result =
+                                ExecutionResult::from(execution_result);
+                            execution_results.push(ExecutionArtifact::new(
+                                deploy_hash,
+                                deploy.header().clone(),
+                                versioned_execution_result,
+                                messages,
+                            ));
                         }
                     }
                     continue;

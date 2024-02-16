@@ -6,7 +6,7 @@ use casper_execution_engine::{
     engine_state::{self, Error},
     execution,
 };
-use casper_storage::tracking_copy::TrackingCopyError;
+use casper_storage::{system::transfer::TransferError, tracking_copy::TrackingCopyError};
 use casper_types::{
     account::AccountHash, addressable_entity::Weight, runtime_args, system::mint, U512,
 };
@@ -556,7 +556,9 @@ fn should_not_authorize_transfer_without_deploy_key_threshold() {
     let error = response.as_error().expect("should have error");
     assert!(matches!(
         error,
-        Error::TrackingCopy(TrackingCopyError::DeploymentAuthorizationFailure)
+        Error::Transfer(TransferError::TrackingCopy(
+            TrackingCopyError::DeploymentAuthorizationFailure
+        ))
     ));
 
     // KEY_1 (w: 2) KEY_2 (w: 2) DEFAULT_ACCOUNT_ADDR (w: 1) each passes threshold of 5

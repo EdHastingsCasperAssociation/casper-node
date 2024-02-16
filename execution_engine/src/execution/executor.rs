@@ -190,7 +190,7 @@ impl Executor {
                     .expect("should have auction hash");
                 *auction_hash
             }
-            DirectSystemContractCall::CreatePurse | DirectSystemContractCall::Transfer => {
+            DirectSystemContractCall::Transfer => {
                 let mint_hash = system_contract_registry
                     .get(MINT)
                     .expect("should have mint hash");
@@ -524,8 +524,6 @@ pub(crate) enum DirectSystemContractCall {
     DistributeRewards,
     /// Calls handle payment's `finalize` entry point.
     FinalizePayment,
-    /// Calls mint's `create` entry point.
-    CreatePurse,
     /// Calls mint's `transfer` entry point.
     Transfer,
     /// Calls handle payment's `get_payment_purse` entry point.
@@ -541,7 +539,6 @@ impl DirectSystemContractCall {
             DirectSystemContractCall::RunAuction => auction::METHOD_RUN_AUCTION,
             DirectSystemContractCall::DistributeRewards => auction::METHOD_DISTRIBUTE,
             DirectSystemContractCall::FinalizePayment => handle_payment::METHOD_FINALIZE_PAYMENT,
-            DirectSystemContractCall::CreatePurse => mint::METHOD_CREATE,
             DirectSystemContractCall::Transfer => mint::METHOD_TRANSFER,
             DirectSystemContractCall::GetPaymentPurse => handle_payment::METHOD_GET_PAYMENT_PURSE,
             DirectSystemContractCall::DistributeAccumulatedFees => {

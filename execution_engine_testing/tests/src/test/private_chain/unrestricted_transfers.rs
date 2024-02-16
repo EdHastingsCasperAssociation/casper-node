@@ -3,6 +3,7 @@ use casper_engine_test_support::{
     SYSTEM_ADDR,
 };
 use casper_execution_engine::{engine_state::Error, execution};
+use casper_storage::system::transfer::TransferError;
 use casper_types::{
     account::AccountHash,
     runtime_args,
@@ -59,7 +60,7 @@ fn should_disallow_native_unrestricted_transfer_to_create_new_account_by_user() 
     assert!(
         matches!(
             error,
-            Error::Exec(execution::Error::DisabledUnrestrictedTransfers)
+            Error::Transfer(TransferError::DisabledUnrestrictedTransfers)
         ),
         "expected DisabledUnrestrictedTransfers error, found {:?}",
         error
@@ -354,7 +355,7 @@ fn should_disallow_transfer_to_own_purse_via_native_transfer() {
     assert!(
         matches!(
             error,
-            Error::Exec(execution::Error::DisabledUnrestrictedTransfers)
+            Error::Transfer(TransferError::DisabledUnrestrictedTransfers)
         ),
         "expected DisabledUnrestrictedTransfers error, found {:?}",
         error
@@ -543,7 +544,7 @@ fn should_disallow_native_unrestricted_transfer_to_existing_account_by_user() {
     assert!(
         matches!(
             error,
-            Error::Exec(execution::Error::DisabledUnrestrictedTransfers)
+            Error::Transfer(TransferError::DisabledUnrestrictedTransfers)
         ),
         "expected DisabledUnrestrictedTransfers error, found {:?}",
         error

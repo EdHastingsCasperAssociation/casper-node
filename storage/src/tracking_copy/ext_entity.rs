@@ -260,24 +260,6 @@ where
         Ok((entity_record, entity_hash))
     }
 
-    // fn migrate_named_keys(
-    //     &mut self,
-    //     entity_addr: EntityAddr,
-    //     named_keys: NamedKeys,
-    // ) -> Result<(), Self::Error> {
-    //     for (name, key) in named_keys.iter() {
-    //         let entry_key = {
-    //             let entry_addr = NamedKeyAddr::new_from_string(entity_addr, name.clone())?;
-    //             Key::NamedKey(entry_addr)
-    //         };
-    //
-    //         let cl_value = CLValue::from_t(*key).map_err(TrackingCopyError::CLValue)?;
-    //         self.write(entry_key, StoredValue::CLValue(cl_value))
-    //     }
-    //
-    //     Ok(())
-    // }
-
     fn migrate_named_keys(
         &mut self,
         entity_addr: EntityAddr,

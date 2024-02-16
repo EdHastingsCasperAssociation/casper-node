@@ -72,6 +72,10 @@ where
             phase,
         }
     }
+
+    pub fn into_transfers(self) -> Vec<TransferAddr> {
+        self.transfers
+    }
 }
 
 impl<S> RuntimeProvider for NativeMintRuntime<S>
