@@ -8,10 +8,10 @@ use std::{
 
 use casper_binary_port::{
     BalanceResponse, BinaryRequest, BinaryRequestHeader, BinaryResponse, BinaryResponseAndRequest,
-    ConsensusStatus, ConsensusValidatorChanges, DictionaryItemIdentifier, ErrorCode, GetRequest,
-    GetTrieFullResult, GlobalStateQueryResult, GlobalStateRequest, InformationRequest,
-    InformationRequestTag, LastProgress, NetworkName, NodeStatus, PayloadType, PurseIdentifier,
-    ReactorStateName, RecordId, Uptime,
+    ConsensusStatus, ConsensusValidatorChanges, DictionaryItemIdentifier, DictionaryQueryResult,
+    ErrorCode, GetRequest, GetTrieFullResult, GlobalStateQueryResult, GlobalStateRequest,
+    InformationRequest, InformationRequestTag, LastProgress, NetworkName, NodeStatus, PayloadType,
+    PurseIdentifier, ReactorStateName, RecordId, Uptime,
 };
 use casper_storage::global_state::state::CommitProvider;
 use casper_types::{
@@ -751,11 +751,16 @@ fn get_dictionary_item_by_addr(state_root_hash: Digest, addr: DictionaryAddr) ->
                 identifier: DictionaryItemIdentifier::DictionaryItem(addr),
             },
         ))),
-        asserter: Box::new(|response| {
-            assert_response::<GlobalStateQueryResult, _>(
+        asserter: Box::new(move |response| {
+            assert_response::<DictionaryQueryResult, _>(
                 response,
-                Some(PayloadType::GlobalStateQueryResult),
-                |res| matches!(res.into_inner(), (StoredValue::CLValue(_), _)),
+                Some(PayloadType::DictionaryQueryResult),
+                |res| {
+                    matches!(
+                        res.into_inner(),
+                        (key, res) if key == Key::Dictionary(addr) && res.value().as_cl_value().is_some()
+                    )
+                },
             )
         }),
     }
@@ -773,15 +778,21 @@ fn get_dictionary_item_by_seed_uref(
                 state_identifier: Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
                 identifier: DictionaryItemIdentifier::URef {
                     seed_uref,
-                    dictionary_item_key,
+                    dictionary_item_key: dictionary_item_key.clone(),
                 },
             },
         ))),
-        asserter: Box::new(|response| {
-            assert_response::<GlobalStateQueryResult, _>(
+        asserter: Box::new(move |response| {
+            assert_response::<DictionaryQueryResult, _>(
                 response,
-                Some(PayloadType::GlobalStateQueryResult),
-                |res| matches!(res.into_inner(), (StoredValue::CLValue(_), _)),
+                Some(PayloadType::DictionaryQueryResult),
+                |res| {
+                    let expected_key = Key::dictionary(seed_uref, dictionary_item_key.as_bytes());
+                    matches!(
+                        res.into_inner(),
+                        (key, res) if key == expected_key && res.value().as_cl_value().is_some()
+                    )
+                },
             )
         }),
     }
@@ -806,10 +817,10 @@ fn get_dictionary_item_by_legacy_named_key(
             },
         ))),
         asserter: Box::new(|response| {
-            assert_response::<GlobalStateQueryResult, _>(
+            assert_response::<DictionaryQueryResult, _>(
                 response,
-                Some(PayloadType::GlobalStateQueryResult),
-                |res| matches!(res.into_inner(), (StoredValue::CLValue(_), _)),
+                Some(PayloadType::DictionaryQueryResult),
+                |res| matches!(res.into_inner(),(_, res) if res.value().as_cl_value().is_some()),
             )
         }),
     }
@@ -834,10 +845,10 @@ fn get_dictionary_item_by_named_key(
             },
         ))),
         asserter: Box::new(|response| {
-            assert_response::<GlobalStateQueryResult, _>(
+            assert_response::<DictionaryQueryResult, _>(
                 response,
-                Some(PayloadType::GlobalStateQueryResult),
-                |res| matches!(res.into_inner(), (StoredValue::CLValue(_), _)),
+                Some(PayloadType::DictionaryQueryResult),
+                |res| matches!(res.into_inner(),(_, res) if res.value().as_cl_value().is_some()),
             )
         }),
     }
