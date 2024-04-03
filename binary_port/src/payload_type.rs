@@ -25,7 +25,7 @@ use crate::{
         ConsensusStatus, ConsensusValidatorChanges, GetTrieFullResult, LastProgress, NetworkName,
         ReactorStateName, TransactionWithExecutionInfo, Uptime,
     },
-    RecordId,
+    BalanceResponse, RecordId,
 };
 
 /// A type of the payload being returned in a binary response.
@@ -103,6 +103,8 @@ pub enum PayloadType {
     GetTrieFullResult,
     /// Node status.
     NodeStatus,
+    /// Balance query response.
+    BalanceResponse,
 }
 
 impl PayloadType {
@@ -129,7 +131,7 @@ impl PayloadType {
 
     #[cfg(test)]
     pub(crate) fn random(rng: &mut TestRng) -> Self {
-        Self::try_from(rng.gen_range(0..33)).unwrap()
+        Self::try_from(rng.gen_range(0..36)).unwrap()
     }
 }
 
@@ -188,6 +190,8 @@ impl TryFrom<u8> for PayloadType {
             x if x == PayloadType::StoredValues as u8 => Ok(PayloadType::StoredValues),
             x if x == PayloadType::GetTrieFullResult as u8 => Ok(PayloadType::GetTrieFullResult),
             x if x == PayloadType::NodeStatus as u8 => Ok(PayloadType::NodeStatus),
+            x if x == PayloadType::WasmV1Result as u8 => Ok(PayloadType::WasmV1Result),
+            x if x == PayloadType::BalanceResponse as u8 => Ok(PayloadType::BalanceResponse),
             _ => Err(()),
         }
     }
@@ -239,6 +243,7 @@ impl fmt::Display for PayloadType {
             PayloadType::GetTrieFullResult => write!(f, "GetTrieFullResult"),
             PayloadType::NodeStatus => write!(f, "NodeStatus"),
             PayloadType::WasmV1Result => write!(f, "WasmV1Result"),
+            PayloadType::BalanceResponse => write!(f, "BalanceResponse"),
         }
     }
 }
@@ -278,6 +283,7 @@ const GET_TRIE_FULL_RESULT_TAG: u8 = 31;
 const NODE_STATUS_TAG: u8 = 32;
 const SPECULATIVE_EXECUTION_RESULT_TAG: u8 = 33;
 const WASM_V1_RESULT_TAG: u8 = 34;
+const BALANCE_RESPONSE_TAG: u8 = 35;
 
 impl ToBytes for PayloadType {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
@@ -327,6 +333,7 @@ impl ToBytes for PayloadType {
             PayloadType::GetTrieFullResult => GET_TRIE_FULL_RESULT_TAG,
             PayloadType::NodeStatus => NODE_STATUS_TAG,
             PayloadType::WasmV1Result => WASM_V1_RESULT_TAG,
+            PayloadType::BalanceResponse => BALANCE_RESPONSE_TAG,
         }
         .write_bytes(writer)
     }
@@ -370,6 +377,8 @@ impl FromBytes for PayloadType {
             STORED_VALUES_TAG => PayloadType::StoredValues,
             GET_TRIE_FULL_RESULT_TAG => PayloadType::GetTrieFullResult,
             NODE_STATUS_TAG => PayloadType::NodeStatus,
+            WASM_V1_RESULT_TAG => PayloadType::WasmV1Result,
+            BALANCE_RESPONSE_TAG => PayloadType::BalanceResponse,
             _ => return Err(bytesrepr::Error::Formatting),
         };
         Ok((record_id, remainder))
@@ -496,6 +505,10 @@ impl PayloadEntity for BlockSynchronizerStatus {
 
 impl PayloadEntity for ConsensusStatus {
     const PAYLOAD_TYPE: PayloadType = PayloadType::ConsensusStatus;
+}
+
+impl PayloadEntity for BalanceResponse {
+    const PAYLOAD_TYPE: PayloadType = PayloadType::BalanceResponse;
 }
 
 #[cfg(test)]
