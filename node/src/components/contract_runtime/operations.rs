@@ -4,7 +4,6 @@ use itertools::Itertools;
 use tracing::{debug, error, info, trace, warn};
 
 use casper_execution_engine::engine_state::{ExecutionEngineV1, WasmV1Request, WasmV1Result};
-use casper_storage::data_access_layer::QueryRequest;
 use casper_storage::{
     block_store::types::ApprovalsHashes,
     data_access_layer::{
@@ -12,8 +11,8 @@ use casper_storage::{
         BalanceIdentifier, BalanceRequest, BiddingRequest, BlockRewardsRequest, BlockRewardsResult,
         DataAccessLayer, EraValidatorsRequest, EraValidatorsResult, EvictItem, FeeRequest,
         FeeResult, FlushRequest, HandleFeeMode, HandleFeeRequest, HandleRefundMode,
-        HandleRefundRequest, InsufficientBalanceHandling, PruneRequest, PruneResult, StepRequest,
-        StepResult, TransferRequest,
+        HandleRefundRequest, InsufficientBalanceHandling, ProofHandling, PruneRequest, PruneResult,
+        StepRequest, StepResult, TransferRequest,
     },
     global_state::state::{
         lmdb::LmdbGlobalState, scratch::ScratchGlobalState, CommitProvider, ScratchProvider,
@@ -22,7 +21,6 @@ use casper_storage::{
     system::runtime_native::Config as NativeRuntimeConfig,
 };
 
-use casper_types::system::mint::BalanceHoldAddr;
 use casper_types::{
     bytesrepr::{self, ToBytes, U32_SERIALIZED_LENGTH},
     execution::{Effects, ExecutionResult, TransformKindV2, TransformV2},
@@ -275,6 +273,7 @@ pub fn execute_finalized_block(
             protocol_version,
             balance_identifier.clone(),
             balance_handling,
+            ProofHandling::NoProofs,
         ));
 
         let allow_execution = {
@@ -300,15 +299,6 @@ pub fn execute_finalized_block(
                 let hold_result = scratch_state.balance_hold(hold_request);
                 state_root_hash =
                     scratch_state.commit(state_root_hash, hold_result.effects().clone())?;
-                let foo = scratch_state.query(QueryRequest::new(
-                    state_root_hash,
-                    hold_result
-                        .hold_addr()
-                        .expect("should have hold key")
-                        .into(),
-                    vec![],
-                ));
-                println!("foo {:?}", foo);
                 artifact_builder
                     .with_balance_hold_result(&hold_result)
                     .map_err(|_| BlockExecutionError::RootNotFound(state_root_hash))?;
@@ -419,7 +409,6 @@ pub fn execute_finalized_block(
                 holds_epoch,
             );
             let hold_result = scratch_state.balance_hold(hold_request);
-            println!("ops clear hold_result {:?}", hold_result);
             state_root_hash =
                 scratch_state.commit(state_root_hash, hold_result.effects().clone())?;
             artifact_builder

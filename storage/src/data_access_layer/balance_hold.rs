@@ -1,8 +1,9 @@
 use crate::{data_access_layer::BalanceIdentifier, tracking_copy::TrackingCopyError};
-use casper_types::system::mint::BalanceHoldAddr;
 use casper_types::{
-    account::AccountHash, execution::Effects, system::mint::BalanceHoldAddrTag, BlockTime, Digest,
-    HoldsEpoch, ProtocolVersion, U512,
+    account::AccountHash,
+    execution::Effects,
+    system::mint::{BalanceHoldAddr, BalanceHoldAddrTag},
+    BlockTime, Digest, HoldsEpoch, ProtocolVersion, U512,
 };
 use std::fmt::{Display, Formatter};
 use thiserror::Error;
@@ -206,8 +207,8 @@ pub enum BalanceHoldResult {
     RootNotFound,
     /// Balance hold successfully placed.
     Success {
-        /// Hold address.
-        hold_addr: BalanceHoldAddr,
+        /// Hold addresses, if any.
+        holds: Option<Vec<BalanceHoldAddr>>,
         /// Purse total balance.
         total_balance: Box<U512>,
         /// Purse available balance after hold placed.
@@ -225,7 +226,7 @@ pub enum BalanceHoldResult {
 
 impl BalanceHoldResult {
     pub fn success(
-        hold_addr: BalanceHoldAddr,
+        holds: Option<Vec<BalanceHoldAddr>>,
         total_balance: U512,
         available_balance: U512,
         hold: U512,
@@ -233,7 +234,7 @@ impl BalanceHoldResult {
         effects: Effects,
     ) -> Self {
         BalanceHoldResult::Success {
-            hold_addr,
+            holds,
             total_balance: Box::new(total_balance),
             available_balance: Box::new(available_balance),
             hold: Box::new(hold),
@@ -242,11 +243,45 @@ impl BalanceHoldResult {
         }
     }
 
+    /// Returns the total balance for a [`BalanceHoldResult::Success`] variant.
+    pub fn total_balance(&self) -> Option<&U512> {
+        match self {
+            BalanceHoldResult::Success { total_balance, .. } => Some(total_balance),
+            _ => None,
+        }
+    }
+
+    /// Returns the available balance for a [`BalanceHoldResult::Success`] variant.
+    pub fn available_balance(&self) -> Option<&U512> {
+        match self {
+            BalanceHoldResult::Success {
+                available_balance, ..
+            } => Some(available_balance),
+            _ => None,
+        }
+    }
+
+    /// Returns the held amount for a [`BalanceHoldResult::Success`] variant.
+    pub fn held(&self) -> Option<&U512> {
+        match self {
+            BalanceHoldResult::Success { held, .. } => Some(held),
+            _ => None,
+        }
+    }
+
     /// Hold address, if any.
-    pub fn hold_addr(&self) -> Option<BalanceHoldAddr> {
+    pub fn holds(&self) -> Option<Vec<BalanceHoldAddr>> {
         match self {
             BalanceHoldResult::RootNotFound | BalanceHoldResult::Failure(_) => None,
-            BalanceHoldResult::Success { hold_addr, .. } => Some(*hold_addr),
+            BalanceHoldResult::Success { holds, .. } => holds.clone(),
+        }
+    }
+
+    /// Does this result contain any hold addresses?
+    pub fn has_holds(&self) -> bool {
+        match self.holds() {
+            None => false,
+            Some(holds) => !holds.is_empty(),
         }
     }
 

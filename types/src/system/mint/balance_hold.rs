@@ -24,7 +24,6 @@ use crate::{
     bytesrepr::{FromBytes, ToBytes},
     checksummed_hex,
     key::FromStrError,
-    system::auction::Error,
     BlockTime, Key, KeyTag, Timestamp, URefAddr, BLOCKTIME_SERIALIZED_LENGTH, UREF_ADDR_LENGTH,
 };
 
