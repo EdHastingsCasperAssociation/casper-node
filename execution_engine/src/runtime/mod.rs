@@ -1745,6 +1745,9 @@ where
         output_ptr: u32,
     ) -> Result<Result<(), ApiError>, ExecError> {
         if !self.context.allow_casper_add_contract_version() {
+            // NOTE: This is not a permission check on the caller,
+            // it is enforcing the rule that only legacy standard deploys (which are grandfathered)
+            // and install / upgrade transactions are allowed to call this method
             return Ok(Err(ApiError::NotAllowedToAddContractVersion));
         }
 
@@ -1758,6 +1761,19 @@ where
         if package.is_locked() {
             return Err(ExecError::LockedEntity(package_hash));
         }
+
+        // WHAT HAPPENED TO THE PERMISSION CHECK TO MAKE SURE THE CALLER CAN UPGRADE THIS CONTRACT?
+        //
+        // STEP 1: LOAD THE CONTRACT AND CHECK IF CALLER IS IN ASSOCIATED KEYS WITH ENOUGH WEIGHT
+        //     TO UPGRADE (COMPARE TO THE ACTION THRESHOLD FOR UPGRADE ACTION).
+        // STEP 2: IF CALLER IS NOT IN CONTRACTS ASSOCIATED KEYS
+        //    CHECK FOR LEGACY UREFADDR UNDER KEY:HASH(PACKAGEADDR)
+        //    IF FOUND,
+        //      call validate_uref(that uref)
+        //    IF VALID,
+        //      create the new contract version carrying forward previous state including associated keys
+        //      BUT add the caller to the associated keys with weight == to the action threshold for upgrade
+        // ELSE, error
 
         let (
             main_purse,
@@ -1794,9 +1810,6 @@ where
             }
         }
 
-        // TODO: EE-1032 - Implement different ways of carrying on existing named keys.
-        named_keys.append(previous_named_keys);
-
         let byte_code_hash = self.context.new_hash_address()?;
 
         let entity_hash = self.context.new_hash_address()?;
@@ -1820,8 +1833,7 @@ where
 
         let entity_key = Key::AddressableEntity(entity_addr);
 
-        // Is this still valid??
-        // TODO: EE-1032 - Implement different ways of carrying on existing named keys.
+        named_keys.append(previous_named_keys);
         self.context.write_named_keys(entity_addr, named_keys)?;
 
         let entity = AddressableEntity::new(
@@ -3337,6 +3349,10 @@ where
         &mut self,
         contract_hash: AddressableEntityHash,
     ) -> Result<AddressableEntity, ExecError> {
+        // TODO: this should just do sth like self.context.migrate_contract(..)
+        //       and in that function it just uses tracking_copy.migrate_contract(..)
+        // TODO: we can't charge for this migration
+
         let maybe_legacy_contract = self.context.read_gs(&Key::Hash(contract_hash.value()))?;
         match maybe_legacy_contract {
             Some(StoredValue::Contract(contract)) => {
@@ -3356,6 +3372,20 @@ where
 
                 let entity_main_purse = self.create_purse()?;
 
+                // TODO: when the logic of this function is pulled into the tracking copy,
+                // remove the attempt to associate an account / access_uref.
+                // This is faulty logic, as it assumes the first caller who happens to execute
+                // a contract would necessarily be someone with upgrade permissions.
+                // However, most contracts are installed / managed by one account to be used
+                // by other accounts and / or contracts. Imagine an NFT contract that allows
+                // public minting or proxy usage (say, a market place). If any of its entry points
+                // happens to be called after protocol upgrade by any entity other than the
+                // maintainer, it would be migrated, that entity does not have the access uref
+                // and thus does not get associated to the migrated entity (correct) BUT
+                // neither does the original maintainer...if the original maintainer does
+                // eventually send a transaction to upgrade that contract it will fail because
+                // the contract was already migrated, this code will not be called. The NFT contract
+                // is effectively locked / can no longer be upgraded. WOMP WOMP.
                 let associated_keys = if self.context.validate_uref(access_uref).is_ok() {
                     AssociatedKeys::new(self.context.get_caller(), Weight::new(1))
                 } else {

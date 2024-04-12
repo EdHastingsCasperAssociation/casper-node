@@ -501,12 +501,9 @@ where
             Some(value) => value,
         };
 
-        value.try_into().map_err(|error| {
-            ExecError::FunctionNotFound(format!(
-                "Type mismatch for value under {:?}: {:?}",
-                key, error
-            ))
-        })
+        value
+            .try_into()
+            .map_err(|error| ExecError::TrackingCopy(TrackingCopyError::TypeMismatch(error)))
     }
 
     /// Returns all keys based on the tag prefix.
