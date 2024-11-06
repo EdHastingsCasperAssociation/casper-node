@@ -8,7 +8,7 @@ use casper_types::{
     addressable_entity::{ActionThresholds, AssociatedKeys, Weight},
     system::auction::{
         BidKind, BidsExt, Delegator, SeigniorageRecipientV2, SeigniorageRecipientsSnapshotV2,
-        SeigniorageRecipientsV2, UnbondingPurse, UnbondingPurses, ValidatorBid, WithdrawPurse,
+        SeigniorageRecipientsV2, UnbondingPurse, Unbonds, ValidatorBid, WithdrawPurse,
         WithdrawPurses,
     },
     testing::TestRng,
@@ -35,7 +35,7 @@ struct MockStateReader {
     seigniorage_recipients: SeigniorageRecipientsSnapshotV2,
     bids: Vec<BidKind>,
     withdraws: WithdrawPurses,
-    unbonds: UnbondingPurses,
+    unbonds: Unbonds,
     protocol_version: ProtocolVersion,
 }
 
@@ -48,7 +48,7 @@ impl MockStateReader {
             seigniorage_recipients: SeigniorageRecipientsSnapshotV2::new(),
             bids: vec![],
             withdraws: WithdrawPurses::new(),
-            unbonds: UnbondingPurses::new(),
+            unbonds: Unbonds::new(),
             protocol_version: ProtocolVersion::V1_0_0,
         }
     }
@@ -315,7 +315,7 @@ impl StateReader for MockStateReader {
         self.withdraws.clone()
     }
 
-    fn get_unbonds(&mut self) -> UnbondingPurses {
+    fn get_unbonds(&mut self) -> Unbonds {
         self.unbonds.clone()
     }
 }

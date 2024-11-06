@@ -14,11 +14,11 @@ use casper_types::{
     contracts::ContractHash,
     system::{
         auction::{
-            BidAddr, BidKind, SeigniorageRecipientsSnapshotV1, SeigniorageRecipientsSnapshotV2,
-            SeigniorageRecipientsV2, ValidatorBid, AUCTION_DELAY_KEY,
-            DEFAULT_SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION, LOCKED_FUNDS_PERIOD_KEY,
-            SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION_KEY,
-            UNBONDING_DELAY_KEY, VALIDATOR_SLOTS_KEY,
+            BidAddr, BidKind, DelegationKind, SeigniorageRecipientsSnapshotV1,
+            SeigniorageRecipientsSnapshotV2, SeigniorageRecipientsV2, Unbond, ValidatorBid,
+            AUCTION_DELAY_KEY, DEFAULT_SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION,
+            LOCKED_FUNDS_PERIOD_KEY, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY,
+            SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION_KEY, UNBONDING_DELAY_KEY, VALIDATOR_SLOTS_KEY,
         },
         handle_payment::ACCUMULATION_PURSE_KEY,
         mint::{
@@ -200,6 +200,7 @@ where
         self.handle_new_round_seigniorage_rate(system_entity_addresses.mint())?;
         // self.handle_legacy_accounts_migration()?;
         // self.handle_legacy_contracts_migration()?;
+        self.handle_unbonds_migration()?;
         self.handle_bids_migration(
             self.config.minimum_delegation_amount(),
             self.config.maximum_delegation_amount(),
@@ -552,7 +553,7 @@ where
             .check_next_version(&self.config.new_protocol_version())
             .is_major_version();
 
-        let contract_entry_points: EntryPoints = (contract.entry_points().clone()).into();
+        let contract_entry_points: EntryPoints = contract.entry_points().clone().into();
         let entry_points_unchanged = contract_entry_points == entry_points;
         if entry_points_unchanged && !is_major_bump {
             // We don't need to do anything if entry points are unchanged, or there's no major
@@ -1125,6 +1126,39 @@ where
         Ok(())
     }
 
+    /// Handle unbonds migration.
+    pub fn handle_unbonds_migration(&mut self) -> Result<(), ProtocolUpgradeError> {
+        debug!("handle unbonds migration");
+        let tc = &mut self.tracking_copy;
+        let existing_keys = match tc.get_keys(&KeyTag::Unbond) {
+            Ok(keys) => keys,
+            Err(err) => return Err(ProtocolUpgradeError::TrackingCopy(err)),
+        };
+        for key in existing_keys {
+            if let Some(StoredValue::Unbonding(unbonding_purses)) =
+                tc.get(&key).map_err(Into::<ProtocolUpgradeError>::into)?
+            {
+                // prune away the original record, we don't need it anymore
+                tc.prune(key);
+
+                // re-write records under Key::BidAddr , StoredValue::BidKind
+                for unbonding_purse in unbonding_purses {
+                    let validator = unbonding_purse.validator_public_key();
+                    let unbonder = unbonding_purse.unbonder_public_key();
+                    let new_key = if unbonding_purse.is_validator() {
+                        Key::BidAddr(BidAddr::unbond(validator, None))
+                    } else {
+                        Key::BidAddr(BidAddr::unbond_delegator_public_key(validator, unbonder))
+                    };
+                    let unbond = BidKind::Unbond(Box::new(Unbond::from(unbonding_purse)));
+                    tc.write(new_key, StoredValue::BidKind(unbond));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Handle bids migration.
     pub fn handle_bids_migration(
         &mut self,
@@ -1184,7 +1218,9 @@ where
                     if !delegator.staked_amount().is_zero() {
                         tc.write(
                             delegator_bid_addr.into(),
-                            StoredValue::BidKind(BidKind::Delegator(Box::new(delegator))),
+                            StoredValue::BidKind(BidKind::Delegator(DelegationKind::PublicKey(
+                                Box::new(delegator),
+                            ))),
                         );
                     }
                 }

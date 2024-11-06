@@ -8,10 +8,13 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "json-schema")]
 use serde_map_to_array::KeyValueJsonSchema;
+#[allow(unused)]
 use serde_map_to_array::{BTreeMapToArray, KeyValueLabels};
 
+use crate::account::AccountHash;
+use crate::system::auction::BidAddrDelegator;
 use crate::{
-    system::auction::{Bid, BidKind, EraValidators, Staking, ValidatorBid},
+    system::auction::{BidKind, DelegationKind, EraValidators, Staking, ValidatorBid},
     Digest, EraId, PublicKey, U512,
 };
 
@@ -64,7 +67,9 @@ static AUCTION_INFO: Lazy<AuctionState> = Lazy::new(|| {
         URef::new([251; 32], AccessRights::READ_ADD_WRITE),
         validator_public_key,
     );
-    bids.push(BidKind::Delegator(Box::new(delegator_bid)));
+    bids.push(BidKind::Delegator(DelegationKind::PublicKey(Box::new(
+        delegator_bid,
+    ))));
 
     let height: u64 = 10;
     let era_validators = ERA_VALIDATORS.clone();
@@ -101,8 +106,10 @@ pub struct AuctionState {
     /// Era validators.
     pub era_validators: Vec<JsonEraValidators>,
     /// All bids.
-    #[serde(with = "BTreeMapToArray::<PublicKey, Bid, BidLabels>")]
-    bids: BTreeMap<PublicKey, Bid>,
+    #[serde(
+        with = "BTreeMapToArray::<PublicKey, (ValidatorBid, BTreeMap<BidAddrDelegator, DelegationKind>)>"
+    )]
+    staking: Staking,
 }
 
 impl AuctionState {
@@ -130,6 +137,7 @@ impl AuctionState {
 
         let staking = {
             let mut staking: Staking = BTreeMap::new();
+            // get all unified bids, if any
             for bid_kind in bids.iter().filter(|x| x.is_unified()) {
                 if let BidKind::Unified(bid) = bid_kind {
                     let public_key = bid.validator_public_key().clone();
@@ -142,10 +150,17 @@ impl AuctionState {
                         u64::MAX,
                         0,
                     );
-                    staking.insert(public_key, (validator_bid, bid.delegators().clone()));
+                    let mut delegators: BTreeMap<BidAddrDelegator, DelegationKind> =
+                        BTreeMap::new();
+                    for (k, v) in bid.delegators().clone() {
+                        let addr = BidAddrDelegator::Account(AccountHash::from(&k));
+                        delegators.insert(addr, DelegationKind::PublicKey(Box::new(v)));
+                    }
+                    staking.insert(public_key, (validator_bid, delegators));
                 }
             }
 
+            // get all validator bids, if any
             for bid_kind in bids.iter().filter(|x| x.is_validator()) {
                 if let BidKind::Validator(validator_bid) = bid_kind {
                     let public_key = validator_bid.validator_public_key().clone();
@@ -153,34 +168,41 @@ impl AuctionState {
                 }
             }
 
+            // get all delegator bids, if any
             for bid_kind in bids.iter().filter(|x| x.is_delegator()) {
-                if let BidKind::Delegator(delegator_bid) = bid_kind {
-                    let validator_public_key = delegator_bid.validator_public_key().clone();
+                if let BidKind::Delegator(delegator_kind) = bid_kind {
+                    let validator_public_key = delegator_kind.validator_public_key().clone();
+
                     if let Entry::Occupied(mut occupant) =
                         staking.entry(validator_public_key.clone())
                     {
+                        let bid_addr = match delegator_kind {
+                            DelegationKind::PublicKey(delegator_bid) => BidAddrDelegator::Account(
+                                AccountHash::from(delegator_bid.delegator_public_key()),
+                            ),
+                            DelegationKind::Purse(purse_bid) => {
+                                BidAddrDelegator::Purse(purse_bid.delegator_source_purse().addr())
+                            }
+                        };
                         let (_, delegators) = occupant.get_mut();
-                        delegators.insert(
-                            delegator_bid.delegator_public_key().clone(),
-                            *delegator_bid.clone(),
-                        );
+                        delegators.insert(bid_addr, delegator_kind.clone());
                     }
                 }
             }
             staking
         };
 
-        let mut bids: BTreeMap<PublicKey, Bid> = BTreeMap::new();
-        for (public_key, (validator_bid, delegators)) in staking {
-            let bid = Bid::from_non_unified(validator_bid, delegators);
-            bids.insert(public_key, bid);
-        }
+        // let mut bids = BTreeMap::new();
+        // for (public_key, (validator_bid, delegators)) in staking {
+        //     let bid = Bid::from_non_unified(validator_bid, delegators);
+        //     bids.insert(public_key, bid);
+        // }
 
         AuctionState {
             state_root_hash,
             block_height,
             era_validators: json_era_validators,
-            bids,
+            staking, // bids,
         }
     }
 

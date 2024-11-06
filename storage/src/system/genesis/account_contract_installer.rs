@@ -270,7 +270,7 @@ where
         {
             if *delegated_amount == &Motes::zero() {
                 return Err(GenesisError::InvalidDelegatedAmount {
-                    public_key: (*delegator_public_key).clone(),
+                    delegator: (*delegator_public_key).clone(),
                 }
                 .into());
             }
@@ -282,7 +282,7 @@ where
             if orphan_condition.is_none() {
                 return Err(GenesisError::OrphanedDelegator {
                     validator_public_key: (*validator_public_key).clone(),
-                    delegator_public_key: (*delegator_public_key).clone(),
+                    delegator: (*delegator_public_key).clone(),
                 }
                 .into());
             }
@@ -453,7 +453,7 @@ where
                 ));
                 self.tracking_copy.borrow_mut().write(
                     delegator_bid_key,
-                    StoredValue::BidKind(BidKind::Delegator(Box::new(delegator_bid))),
+                    StoredValue::BidKind(BidKind::Delegator(delegator_bid)),
                 );
             }
             let validator_bid_key = Key::BidAddr(BidAddr::from(validator_public_key.clone()));

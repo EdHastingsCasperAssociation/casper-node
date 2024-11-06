@@ -35,9 +35,9 @@ use crate::{
     package::{EntityVersionKey, EntityVersions, Groups, PackageStatus},
     system::{
         auction::{
-            gens::era_info_arb, Bid, BidAddr, BidKind, DelegationRate, Delegator, Reservation,
-            UnbondingPurse, ValidatorBid, ValidatorCredit, WithdrawPurse,
-            DELEGATION_RATE_DENOMINATOR,
+            gens::era_info_arb, Bid, BidAddr, BidKind, DelegationKind, DelegationRate, Delegator,
+            DelegatorPurseBid, Reservation, UnbondingPurse, ValidatorBid, ValidatorCredit,
+            WithdrawPurse, DELEGATION_RATE_DENOMINATOR,
         },
         mint::BalanceHoldAddr,
         SystemEntityType,
@@ -164,9 +164,10 @@ pub fn bid_addr_validator_arb() -> impl Strategy<Value = BidAddr> {
 }
 
 pub fn bid_addr_delegator_arb() -> impl Strategy<Value = BidAddr> {
-    let x = u8_slice_32();
-    let y = u8_slice_32();
-    (x, y).prop_map(BidAddr::new_delegator_addr)
+    prop_oneof![
+        (u8_slice_32(), u8_slice_32()).prop_map(BidAddr::new_delegator_account_addr),
+        (u8_slice_32(), u8_slice_32()).prop_map(BidAddr::new_delegator_purse_addr)
+    ]
 }
 
 pub fn balance_hold_addr_arb() -> impl Strategy<Value = BalanceHoldAddr> {
@@ -177,8 +178,8 @@ pub fn balance_hold_addr_arb() -> impl Strategy<Value = BalanceHoldAddr> {
 
 pub fn block_global_addr_arb() -> impl Strategy<Value = BlockGlobalAddr> {
     prop_oneof![
-        0 => Just(BlockGlobalAddr::BlockTime),
-        1 => Just(BlockGlobalAddr::MessageCount)
+        Just(BlockGlobalAddr::BlockTime),
+        Just(BlockGlobalAddr::MessageCount)
     ]
 }
 
@@ -638,6 +639,25 @@ pub(crate) fn delegator_arb() -> impl Strategy<Value = Delegator> {
         )
 }
 
+pub(crate) fn delegator_purse_arb() -> impl Strategy<Value = DelegatorPurseBid> {
+    (
+        uref_arb(),
+        u512_arb(),
+        uref_arb(),
+        public_key_arb_no_system(),
+    )
+        .prop_map(
+            |(source_purse, staked_amount, bonding_purse, validator_pk)| {
+                DelegatorPurseBid::unlocked(
+                    source_purse,
+                    staked_amount,
+                    bonding_purse,
+                    validator_pk,
+                )
+            },
+        )
+}
+
 fn delegation_rate_arb() -> impl Strategy<Value = DelegationRate> {
     0..=DELEGATION_RATE_DENOMINATOR // Maximum, allowed value for delegation rate.
 }
@@ -653,7 +673,7 @@ pub(crate) fn reservation_arb() -> impl Strategy<Value = Reservation> {
         delegation_rate_arb(),
     )
         .prop_map(|(validator_pk, delegator_pk, delegation_rate)| {
-            Reservation::new(validator_pk, delegator_pk, delegation_rate)
+            Reservation::new_delegator_public_key(validator_pk, delegator_pk, delegation_rate)
         })
 }
 
@@ -705,7 +725,13 @@ pub(crate) fn unified_bid_arb(
 }
 
 pub(crate) fn delegator_bid_arb() -> impl Strategy<Value = BidKind> {
-    delegator_arb().prop_map(|delegator| BidKind::Delegator(Box::new(delegator)))
+    delegator_arb()
+        .prop_map(|delegator| BidKind::Delegator(DelegationKind::PublicKey(Box::new(delegator))))
+}
+
+pub(crate) fn delegator_purse_bid_arb() -> impl Strategy<Value = BidKind> {
+    delegator_purse_arb()
+        .prop_map(|delegator| BidKind::Delegator(DelegationKind::Purse(Box::new(delegator))))
 }
 
 pub(crate) fn validator_bid_arb() -> impl Strategy<Value = BidKind> {
@@ -845,6 +871,7 @@ pub fn stored_value_arb() -> impl Strategy<Value = StoredValue> {
         unified_bid_arb(0..3).prop_map(StoredValue::BidKind),
         validator_bid_arb().prop_map(StoredValue::BidKind),
         delegator_bid_arb().prop_map(StoredValue::BidKind),
+        delegator_purse_bid_arb().prop_map(StoredValue::BidKind),
         reservation_bid_arb().prop_map(StoredValue::BidKind),
         credit_bid_arb().prop_map(StoredValue::BidKind),
         withdraws_arb(1..50).prop_map(StoredValue::Withdraw),
@@ -1187,11 +1214,11 @@ pub fn v1_transaction_arb() -> impl Strategy<Value = TransactionV1> {
 }
 
 pub fn transaction_arb() -> impl Strategy<Value = Transaction> {
-    (v1_transaction_arb()).prop_map(Transaction::V1)
+    v1_transaction_arb().prop_map(Transaction::V1)
 }
 
 pub fn legal_transaction_arb() -> impl Strategy<Value = Transaction> {
-    (legal_v1_transaction_arb()).prop_map(Transaction::V1)
+    legal_v1_transaction_arb().prop_map(Transaction::V1)
 }
 pub fn example_u32_arb() -> impl Strategy<Value = u32> {
     prop_oneof![Just(0), Just(1), Just(u32::MAX / 2), Just(u32::MAX)]

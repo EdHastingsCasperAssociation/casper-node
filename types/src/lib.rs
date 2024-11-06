@@ -21,7 +21,6 @@
 extern crate alloc;
 
 extern crate core;
-
 mod access_rights;
 pub mod account;
 pub mod addressable_entity;

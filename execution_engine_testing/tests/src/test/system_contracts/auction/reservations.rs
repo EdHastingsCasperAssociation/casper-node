@@ -23,10 +23,10 @@ use casper_types::{
     api_error::ApiError,
     runtime_args,
     system::auction::{
-        BidsExt, DelegationRate, Error as AuctionError, Reservation, SeigniorageAllocation,
-        ARG_AMOUNT, ARG_DELEGATION_RATE, ARG_DELEGATOR, ARG_DELEGATORS, ARG_ENTRY_POINT,
-        ARG_PUBLIC_KEY, ARG_RESERVATIONS, ARG_RESERVED_SLOTS, ARG_REWARDS_MAP, ARG_VALIDATOR,
-        DELEGATION_RATE_DENOMINATOR, METHOD_DISTRIBUTE,
+        BidsExt, DelegationRate, Error as AuctionError, Reservation, ReservationIdentity,
+        SeigniorageAllocation, ARG_AMOUNT, ARG_DELEGATION_RATE, ARG_DELEGATOR, ARG_DELEGATORS,
+        ARG_ENTRY_POINT, ARG_PUBLIC_KEY, ARG_RESERVATIONS, ARG_RESERVED_SLOTS, ARG_REWARDS_MAP,
+        ARG_VALIDATOR, DELEGATION_RATE_DENOMINATOR, METHOD_DISTRIBUTE,
     },
     ProtocolVersion, PublicKey, SecretKey, U512,
 };
@@ -240,7 +240,8 @@ fn should_enforce_max_delegators_per_validator_with_reserved_slots() {
         if auction_error == AuctionError::ExceededDelegatorSizeLimit as u8));
 
     // Once we put Delegator 3 on reserved list the delegation request should succeed
-    let reservation = Reservation::new(VALIDATOR_1.clone(), DELEGATOR_3.clone(), 0);
+    let reservation =
+        Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_3.clone(), 0);
     let reservation_request = ExecuteRequestBuilder::standard(
         *VALIDATOR_1_ADDR,
         CONTRACT_ADD_RESERVATIONS,
@@ -303,7 +304,8 @@ fn should_enforce_max_delegators_per_validator_with_reserved_slots() {
     .build();
     builder.exec(cancellation_request).expect_success().commit();
 
-    let reservation = Reservation::new(VALIDATOR_1.clone(), DELEGATOR_4.clone(), 0);
+    let reservation =
+        Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_4.clone(), 0);
     let reservation_request = ExecuteRequestBuilder::standard(
         *VALIDATOR_1_ADDR,
         CONTRACT_ADD_RESERVATIONS,
@@ -431,8 +433,8 @@ fn should_not_allow_validator_to_reduce_number_of_reserved_spots_if_they_are_occ
         CONTRACT_ADD_RESERVATIONS,
         runtime_args! {
             ARG_RESERVATIONS => vec![
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_1.clone(), 0),
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_1.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
             ],
         },
     )
@@ -508,7 +510,7 @@ fn should_not_allow_validator_to_reduce_number_of_reserved_spots_if_they_are_occ
         CONTRACT_ADD_RESERVATIONS,
         runtime_args! {
             ARG_RESERVATIONS => vec![
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
             ],
         },
     )
@@ -569,7 +571,7 @@ fn should_not_allow_validator_to_remove_active_reservation_if_there_are_no_free_
         CONTRACT_ADD_RESERVATIONS,
         runtime_args! {
             ARG_RESERVATIONS => vec![
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
             ],
         },
     )
@@ -628,8 +630,8 @@ fn should_handle_reserved_slots() {
         CONTRACT_ADD_RESERVATIONS,
         runtime_args! {
             ARG_RESERVATIONS => vec![
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_1.clone(), 0),
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_1.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
             ],
         },
     )
@@ -666,8 +668,8 @@ fn should_handle_reserved_slots() {
         CONTRACT_ADD_RESERVATIONS,
         runtime_args! {
             ARG_RESERVATIONS => vec![
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_3.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_3.clone(), 0),
             ],
         },
     )
@@ -686,7 +688,7 @@ fn should_handle_reserved_slots() {
         CONTRACT_ADD_RESERVATIONS,
         runtime_args! {
             ARG_RESERVATIONS => vec![
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_4.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_4.clone(), 0),
             ],
         },
     )
@@ -734,8 +736,8 @@ fn should_update_reservation_delegation_rate() {
         CONTRACT_ADD_RESERVATIONS,
         runtime_args! {
             ARG_RESERVATIONS => vec![
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_1.clone(), 0),
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_1.clone(), 0),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_2.clone(), 0),
             ],
         },
     )
@@ -754,7 +756,7 @@ fn should_update_reservation_delegation_rate() {
         CONTRACT_ADD_RESERVATIONS,
         runtime_args! {
             ARG_RESERVATIONS => vec![
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_1.clone(), DELEGATION_RATE_DENOMINATOR + 1),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_1.clone(), DELEGATION_RATE_DENOMINATOR + 1),
             ],
         },
     )
@@ -772,7 +774,7 @@ fn should_update_reservation_delegation_rate() {
         CONTRACT_ADD_RESERVATIONS,
         runtime_args! {
             ARG_RESERVATIONS => vec![
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_1.clone(), 10),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_1.clone(), 10),
             ],
         },
     )
@@ -783,10 +785,10 @@ fn should_update_reservation_delegation_rate() {
         .reservations_by_validator_public_key(&VALIDATOR_1)
         .expect("should have reservations");
     assert_eq!(reservations.len(), 2);
-
+    let expected = ReservationIdentity::PublicKey(*DELEGATOR_1.clone());
     let delegator_1_reservation = reservations
         .iter()
-        .find(|r| *r.delegator_public_key() == *DELEGATOR_1)
+        .find(|r| *r.reservation_identity() == expected)
         .unwrap();
     assert_eq!(*delegator_1_reservation.delegation_rate(), 10);
 }
@@ -810,7 +812,7 @@ fn should_distribute_rewards_with_reserved_slots() {
         CONTRACT_ADD_RESERVATIONS,
         runtime_args! {
             ARG_RESERVATIONS => vec![
-                Reservation::new(VALIDATOR_1.clone(), DELEGATOR_1.clone(), VALIDATOR_1_RESERVATION_DELEGATION_RATE),
+                Reservation::new_delegator_public_key(VALIDATOR_1.clone(), DELEGATOR_1.clone(), VALIDATOR_1_RESERVATION_DELEGATION_RATE),
             ],
         },
     )

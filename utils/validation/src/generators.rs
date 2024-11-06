@@ -3,6 +3,7 @@ use std::{
     iter::FromIterator,
 };
 
+use casper_types::system::auction::BidAddrDelegator;
 use casper_types::{
     account::{
         Account, AccountHash, ActionThresholds as AccountActionThresholds,
@@ -13,8 +14,8 @@ use casper_types::{
     },
     system::{
         auction::{
-            Bid, BidAddr, BidKind, Delegator, EraInfo, SeigniorageAllocation, UnbondingPurse,
-            ValidatorBid, WithdrawPurse,
+            Bid, BidAddr, BidKind, DelegationKind, Delegator, EraInfo, SeigniorageAllocation,
+            UnbondingPurse, ValidatorBid, WithdrawPurse,
         },
         mint::BalanceHoldAddr,
     },
@@ -105,8 +106,10 @@ pub fn make_abi_test_fixtures() -> Result<TestFixtures, Error> {
         era_info
             .seigniorage_allocations_mut()
             .push(SeigniorageAllocation::Delegator {
+                delegator: BidAddrDelegator::Account(
+                    PublicKey::from(&delegator_secret_key).to_account_hash(),
+                ),
                 validator_public_key: PublicKey::from(&validator_secret_key),
-                delegator_public_key: PublicKey::from(&delegator_secret_key),
                 amount: U512::from(1_000_000_000),
             });
         era_info
@@ -138,7 +141,8 @@ pub fn make_abi_test_fixtures() -> Result<TestFixtures, Error> {
         validator_public_key.clone(),
         u64::MAX,
     );
-    let delegator_bid_kind = BidKind::Delegator(Box::new(delegator_bid.clone()));
+    let delegator_bid_kind =
+        BidKind::Delegator(DelegationKind::PublicKey(Box::new(delegator_bid.clone())));
 
     let unified_bid_key = Key::BidAddr(BidAddr::legacy(
         validator_public_key.to_account_hash().value(),

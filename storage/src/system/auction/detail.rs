@@ -1,17 +1,20 @@
+use std::collections::btree_map::Entry;
 use std::{collections::BTreeMap, convert::TryInto, ops::Mul};
 
 use num_rational::Ratio;
 
+use casper_types::system::auction::{BidAddrTag, DelegatorPurseBid};
 use casper_types::{
     account::AccountHash,
     bytesrepr::{FromBytes, ToBytes},
     system::auction::{
-        BidAddr, BidKind, Delegator, DelegatorBids, Error, Reservation, Reservations,
-        SeigniorageAllocation, SeigniorageRecipientV2, SeigniorageRecipientsSnapshotV1,
-        SeigniorageRecipientsSnapshotV2, SeigniorageRecipientsV2, UnbondingPurse, UnbondingPurses,
-        ValidatorBid, ValidatorBids, ValidatorCredit, ValidatorCredits, AUCTION_DELAY_KEY,
-        DELEGATION_RATE_DENOMINATOR, ERA_END_TIMESTAMP_MILLIS_KEY, ERA_ID_KEY,
-        SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY, UNBONDING_DELAY_KEY, VALIDATOR_SLOTS_KEY,
+        BidAddr, BidAddrDelegator, BidKind, DelegationKind, Delegator, DelegatorBids, Error,
+        Reservation, Reservations, SeigniorageAllocation, SeigniorageRecipientV2,
+        SeigniorageRecipientsSnapshotV1, SeigniorageRecipientsSnapshotV2, SeigniorageRecipientsV2,
+        Unbond, UnbonderIdentity, Unbonds, ValidatorBid, ValidatorBids, ValidatorCredit,
+        ValidatorCredits, AUCTION_DELAY_KEY, DELEGATION_RATE_DENOMINATOR,
+        ERA_END_TIMESTAMP_MILLIS_KEY, ERA_ID_KEY, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY,
+        UNBONDING_DELAY_KEY, VALIDATOR_SLOTS_KEY,
     },
     ApiError, CLTyped, EraId, Key, KeyTag, PublicKey, URef, U512,
 };
@@ -77,7 +80,7 @@ impl ValidatorBidsDetail {
         &mut self,
         validator: PublicKey,
         validator_bid: Box<ValidatorBid>,
-        delegators: Vec<Box<Delegator>>,
+        delegators: Vec<DelegationKind>,
         reservations: Vec<Box<Reservation>>,
     ) -> Option<Box<ValidatorBid>> {
         self.delegator_bids.insert(validator.clone(), delegators);
@@ -266,36 +269,47 @@ where
 }
 
 /// Returns the unbonding purses.
-pub fn get_unbonding_purses<P>(provider: &mut P) -> Result<UnbondingPurses, Error>
+pub fn get_unbonds<P>(provider: &mut P) -> Result<Unbonds, Error>
 where
     P: StorageProvider + RuntimeProvider + ?Sized,
 {
-    let unbond_keys = provider.get_keys(&KeyTag::Unbond)?;
+    let prefix = {
+        let mut ret = Vec::with_capacity(2);
+        ret.push(KeyTag::BidAddr as u8);
+        ret.push(BidAddrTag::Unbond as u8);
+        ret
+    };
+
+    // this will get EVERY unbond currently active
+    let unbond_keys = provider.get_keys_by_prefix(&prefix)?;
 
     let mut ret = BTreeMap::new();
 
     for key in unbond_keys {
-        let account_hash = match key {
-            Key::Unbond(account_hash) => account_hash,
-            _ => return Err(Error::InvalidKeyVariant),
-        };
-        let unbonding_purses = provider.read_unbonds(&account_hash)?;
-        ret.insert(account_hash, unbonding_purses);
+        let bid_addr = *key.as_bid_addr().ok_or_else(|| Error::InvalidKeyVariant)?;
+        match provider.read_bid(&key) {
+            Ok(Some(BidKind::Unbond(unbond))) => match ret.entry(bid_addr) {
+                Entry::Vacant(_) => {
+                    ret.insert(bid_addr, vec![*unbond]);
+                }
+                Entry::Occupied(mut entry) => entry.get_mut().push(*unbond),
+            },
+            Ok(Some(_)) => return Err(Error::UnexpectedBidVariant),
+            Ok(None) => return Err(Error::MissingValue),
+            Err(err) => return Err(err),
+        }
     }
 
     Ok(ret)
 }
 
 /// Sets the unbonding purses.
-pub fn set_unbonding_purses<P>(
-    provider: &mut P,
-    unbonding_purses: UnbondingPurses,
-) -> Result<(), Error>
+pub fn set_unbonding_purses<P>(provider: &mut P, unbonds: Unbonds) -> Result<(), Error>
 where
     P: StorageProvider + RuntimeProvider + ?Sized,
 {
-    for (account_hash, unbonding_purses) in unbonding_purses.into_iter() {
-        provider.write_unbonds(account_hash, unbonding_purses)?;
+    for (_, inner) in unbonds {
+        provider.write_unbonds(inner)?;
     }
     Ok(())
 }
@@ -423,7 +437,7 @@ pub fn process_unbond_requests<P: Auction + ?Sized>(
     }
 
     // Update `unbonding_purses` data
-    let mut unbonding_purses: UnbondingPurses = get_unbonding_purses(provider)?;
+    let mut unbonding_purses: Unbonds = get_unbonds(provider)?;
 
     let current_era_id = provider.read_era_id()?;
 
@@ -432,17 +446,18 @@ pub fn process_unbond_requests<P: Auction + ?Sized>(
     for unbonding_list in unbonding_purses.values_mut() {
         let mut new_unbonding_list = Vec::new();
 
-        for unbonding_purse in unbonding_list.iter() {
+        for unbond in unbonding_list.iter() {
             // Since `process_unbond_requests` is run before `run_auction`, we should check if
             // current era id + unbonding delay is equal or greater than the `era_of_creation` that
             // was calculated on `unbond` attempt.
-            if current_era_id >= unbonding_purse.era_of_creation() + unbonding_delay {
+            if current_era_id >= unbond.era_of_creation() + unbonding_delay {
                 let redelegation_result =
-                    handle_redelegation(provider, unbonding_purse, max_delegators_per_validator)
-                        .map_err(|err| {
-                            error!(?err, ?unbonding_purse, "error processing unbond");
+                    handle_redelegation(provider, unbond, max_delegators_per_validator).map_err(
+                        |err| {
+                            error!(?err, ?unbond, "error processing unbond");
                             err
-                        })?;
+                        },
+                    )?;
                 match redelegation_result {
                     UnbondRedelegationOutcome::SuccessfullyRedelegated => {
                         // noop; on successful redelegation, no actual unbond occurs
@@ -454,14 +469,14 @@ pub fn process_unbond_requests<P: Auction + ?Sized>(
                     | uro @ UnbondRedelegationOutcome::RedelegationTargetIsUnstaked
                     | uro @ UnbondRedelegationOutcome::Withdrawal => {
                         // Move funds from bid purse to unbonding purse
-                        provider.unbond(unbonding_purse).map_err(|err| {
+                        provider.unbond(unbond).map_err(|err| {
                             error!(?err, ?uro, "error unbonding purse");
                             ApiError::from(Error::TransferToUnbondingPurse)
                         })?
                     }
                 }
             } else {
-                new_unbonding_list.push(unbonding_purse.clone());
+                new_unbonding_list.push(unbond.clone());
             }
         }
         *unbonding_list = new_unbonding_list;
@@ -476,7 +491,7 @@ pub fn process_unbond_requests<P: Auction + ?Sized>(
 pub fn create_unbonding_purse<P: Auction + ?Sized>(
     provider: &mut P,
     validator_public_key: PublicKey,
-    unbonder_public_key: PublicKey,
+    unbonder_identity: UnbonderIdentity,
     bonding_purse: URef,
     amount: U512,
     new_validator: Option<PublicKey>,
@@ -489,19 +504,17 @@ pub fn create_unbonding_purse<P: Auction + ?Sized>(
         return Err(Error::UnbondTooLarge);
     }
 
-    let account_hash = AccountHash::from(&unbonder_public_key);
-    let mut unbonding_purses = provider.read_unbonds(&account_hash)?;
     let era_of_creation = provider.read_era_id()?;
-    let new_unbonding_purse = UnbondingPurse::new(
+    let unbond = Unbond::new(
         bonding_purse,
         validator_public_key,
-        unbonder_public_key,
+        unbonder_identity,
         era_of_creation,
         amount,
         new_validator,
     );
-    unbonding_purses.push(new_unbonding_purse);
-    provider.write_unbonds(account_hash, unbonding_purses)?;
+
+    provider.write_bid(unbond.bid_addr().into(), BidKind::Unbond(Box::new(unbond)))?;
 
     Ok(())
 }
@@ -550,16 +563,18 @@ pub fn distribute_delegator_rewards<P>(
     provider: &mut P,
     seigniorage_allocations: &mut Vec<SeigniorageAllocation>,
     validator_public_key: PublicKey,
-    rewards: impl IntoIterator<Item = (PublicKey, U512)>,
-) -> Result<Vec<(AccountHash, U512, URef)>, Error>
+    rewards: impl IntoIterator<Item = (BidAddrDelegator, U512)>,
+) -> Result<Vec<(BidAddr, U512, URef)>, Error>
 where
     P: RuntimeProvider + StorageProvider,
 {
     let mut delegator_payouts = Vec::new();
-    for (delegator_public_key, delegator_reward_trunc) in rewards {
-        let bid_key =
-            BidAddr::new_from_public_keys(&validator_public_key, Some(&delegator_public_key))
-                .into();
+    for (bid_addr_delegator, delegator_reward_trunc) in rewards {
+        let bid_addr = BidAddr::Delegator {
+            validator: AccountHash::from(&validator_public_key),
+            delegator: bid_addr_delegator,
+        };
+        let bid_key = bid_addr.into();
 
         let delegator_bonding_purse = match read_delegator_bid(provider, &bid_key) {
             Ok(mut delegator_bid) if !delegator_bid.staked_amount().is_zero() => {
@@ -572,8 +587,11 @@ where
                 // check to see if there are unbond entries for this recipient
                 // (validator + delegator match), and if there are apply the amount
                 // to the unbond entry with the highest era.
-                let account_hash = delegator_public_key.to_account_hash();
-                match provider.read_unbonds(&account_hash) {
+                let unbond_addr = BidAddr::Unbond {
+                    validator: bid_addr.validator_account_hash(),
+                    maybe_delegator: Some(bid_addr_delegator),
+                };
+                match provider.read_unbonds(unbond_addr) {
                     Ok(mut unbonds) => {
                         match unbonds
                             .iter_mut()
@@ -585,7 +603,7 @@ where
                                 let new_amount =
                                     unbond.amount().saturating_add(delegator_reward_trunc);
                                 unbond.with_amount(new_amount);
-                                provider.write_unbonds(account_hash, unbonds)?;
+                                provider.write_unbonds(unbonds)?;
                                 purse
                             }
                             None => {
@@ -601,14 +619,10 @@ where
             }
         };
 
-        delegator_payouts.push((
-            delegator_public_key.to_account_hash(),
-            delegator_reward_trunc,
-            delegator_bonding_purse,
-        ));
+        delegator_payouts.push((bid_addr, delegator_reward_trunc, delegator_bonding_purse));
 
         let allocation = SeigniorageAllocation::delegator(
-            delegator_public_key,
+            bid_addr_delegator,
             validator_public_key.clone(),
             delegator_reward_trunc,
         );
@@ -631,7 +645,8 @@ pub fn distribute_validator_rewards<P>(
 where
     P: StorageProvider,
 {
-    let bid_key: Key = BidAddr::from(validator_public_key.clone()).into();
+    let bid_addr = BidAddr::from(validator_public_key.clone());
+    let bid_key: Key = bid_addr.into();
     let bonding_purse = match read_current_validator_bid(provider, bid_key) {
         Ok(mut validator_bid) => {
             let purse = *validator_bid.bonding_purse();
@@ -642,8 +657,7 @@ where
         Err(Error::ValidatorNotFound) => {
             // check to see if there are unbond entries for this recipient, and if there are
             // apply the amount to the unbond entry with the highest era.
-            let account_hash = validator_public_key.to_account_hash();
-            match provider.read_unbonds(&account_hash) {
+            match provider.read_unbonds(bid_addr) {
                 Ok(mut unbonds) => {
                     match unbonds
                         .iter_mut()
@@ -653,7 +667,7 @@ where
                             let purse = *unbond.bonding_purse();
                             let new_amount = unbond.amount().saturating_add(amount);
                             unbond.with_amount(new_amount);
-                            provider.write_unbonds(account_hash, unbonds)?;
+                            provider.write_unbonds(unbonds)?;
                             purse
                         }
                         None => {
@@ -685,20 +699,20 @@ enum UnbondRedelegationOutcome {
 
 fn handle_redelegation<P>(
     provider: &mut P,
-    unbonding_purse: &UnbondingPurse,
+    unbond: &Unbond,
     max_delegators_per_validator: u32,
 ) -> Result<UnbondRedelegationOutcome, ApiError>
 where
     P: StorageProvider + MintProvider + RuntimeProvider,
 {
-    let redelegation_target_public_key = match unbonding_purse.new_validator() {
+    let redelegation_target_public_key = match unbond.new_validator() {
         Some(public_key) => {
             // get updated key if `ValidatorBid` public key was changed
             let validator_bid_addr = BidAddr::from(public_key.clone());
             match read_current_validator_bid(provider, validator_bid_addr.into()) {
                 Ok(validator_bid) => validator_bid.validator_public_key().clone(),
                 Err(err) => {
-                    error!(?err, ?unbonding_purse, redelegate_to=?public_key, "error redelegating");
+                    error!(?err, ?unbond, redelegate_to=?public_key, "error redelegating");
                     return Ok(UnbondRedelegationOutcome::NonexistantRedelegationTarget);
                 }
             }
@@ -708,10 +722,10 @@ where
 
     let redelegation = handle_delegation(
         provider,
-        unbonding_purse.unbonder_public_key().clone(),
+        *unbond.unbonder_identity().maybe_public_key(),
         redelegation_target_public_key,
-        *unbonding_purse.bonding_purse(),
-        *unbonding_purse.amount(),
+        *unbond.bonding_purse(),
+        *unbond.amount(),
         max_delegators_per_validator,
     );
     match redelegation {
@@ -738,7 +752,7 @@ where
 /// Checks if a reservation for a given delegator exists.
 fn has_reservation<P>(
     provider: &mut P,
-    delegator: &PublicKey,
+    bid_addr_delegator: BidAddrDelegator,
     validator: &PublicKey,
 ) -> Result<bool, Error>
 where
@@ -746,7 +760,7 @@ where
 {
     let reservation_bid_key = BidAddr::Reservation {
         validator: AccountHash::from(validator),
-        delegator: AccountHash::from(delegator),
+        delegator: bid_addr_delegator,
     }
     .into();
     if let Some(BidKind::Reservation(_)) = provider.read_bid(&reservation_bid_key)? {
@@ -762,7 +776,7 @@ where
 #[allow(clippy::too_many_arguments)]
 pub fn handle_delegation<P>(
     provider: &mut P,
-    delegator_public_key: PublicKey,
+    maybe_delegator_public_key: Option<PublicKey>,
     validator_public_key: PublicKey,
     source: URef,
     amount: U512,
@@ -786,22 +800,31 @@ where
     }
 
     // is there already a record for this delegator?
-    let delegator_bid_key =
-        BidAddr::new_from_public_keys(&validator_public_key, Some(&delegator_public_key)).into();
 
-    let (target, delegator_bid) = if let Some(BidKind::Delegator(mut delegator_bid)) =
-        provider.read_bid(&delegator_bid_key)?
+    let delegator_bid_addr = match maybe_delegator_public_key {
+        Some(delegator_public_key) => {
+            BidAddrDelegator::Account(delegator_public_key.clone().to_account_hash())
+        }
+        None => BidAddrDelegator::Purse(source.addr()),
+    };
+
+    let bid_addr = BidAddr::Delegator {
+        validator: validator_public_key.to_account_hash(),
+        delegator: delegator_bid_addr,
+    };
+
+    let (target, delegator_bid) = if let Some(BidKind::Delegator(mut delegation_kind)) =
+        provider.read_bid(&bid_addr.into())?
     {
-        delegator_bid.increase_stake(amount)?;
-        (*delegator_bid.bonding_purse(), delegator_bid)
+        delegation_kind.increase_stake(amount)?;
+        (*delegation_kind.bonding_purse(), delegation_kind)
     } else {
         // is this validator over the delegator limit
         // or is there a reservation for given delegator public key?
         let delegator_count = provider.delegator_count(&validator_bid_addr)?;
         let reserved_slots_count = validator_bid.reserved_slots();
         let reservation_count = provider.reservation_count(&validator_bid_addr)?;
-        let has_reservation =
-            has_reservation(provider, &delegator_public_key, &validator_public_key)?;
+        let has_reservation = has_reservation(provider, delegator_bid_addr, &validator_public_key)?;
         if delegator_count >= (max_delegators_per_validator - reserved_slots_count) as usize
             && !has_reservation
         {
@@ -814,13 +837,27 @@ where
         }
 
         let bonding_purse = provider.create_purse()?;
-        let delegator_bid = Delegator::unlocked(
-            delegator_public_key,
-            amount,
-            bonding_purse,
-            validator_public_key,
-        );
-        (bonding_purse, Box::new(delegator_bid))
+        let delegation_kind = match maybe_delegator_public_key {
+            Some(delegator_public_key) => {
+                let delegator = Delegator::unlocked(
+                    delegator_public_key.clone(),
+                    amount,
+                    bonding_purse,
+                    validator_public_key,
+                );
+                DelegationKind::PublicKey(Box::new(delegator))
+            }
+            None => {
+                let delegation_purse = DelegatorPurseBid::unlocked(
+                    source,
+                    amount,
+                    bonding_purse,
+                    validator_public_key,
+                );
+                DelegationKind::Purse(Box::new(delegation_purse))
+            }
+        };
+        (bonding_purse, delegation_kind)
     };
 
     // transfer token to bonding purse
@@ -841,7 +878,7 @@ where
         })?;
 
     let updated_amount = delegator_bid.staked_amount();
-    provider.write_bid(delegator_bid_key, BidKind::Delegator(delegator_bid))?;
+    provider.write_bid(bid_addr.into(), BidKind::Delegator(delegator_bid))?;
 
     Ok(updated_amount)
 }
@@ -854,17 +891,19 @@ pub fn handle_add_reservation<P>(provider: &mut P, reservation: Reservation) -> 
 where
     P: StorageProvider + MintProvider + RuntimeProvider,
 {
+    // validate specified delegation rate
+    if reservation.delegation_rate() > &DELEGATION_RATE_DENOMINATOR {
+        return Err(Error::DelegationRateTooLarge);
+    }
+
     // is there such a validator?
     let validator_bid_addr = BidAddr::from(reservation.validator_public_key().clone());
     let bid = read_validator_bid(provider, &validator_bid_addr.into())?;
 
     // is there already a record for this delegator?
-    let reservation_bid_key = BidAddr::Reservation {
-        validator: AccountHash::from(reservation.validator_public_key()),
-        delegator: AccountHash::from(reservation.delegator_public_key()),
-    }
-    .into();
-    if provider.read_bid(&reservation_bid_key)?.is_none() {
+    let maybe_key = reservation.bid_addr().into();
+
+    if provider.read_bid(&maybe_key)?.is_none() {
         // ensure reservation list has capacity to create a new reservation
         let reservation_count = provider.reservation_count(&validator_bid_addr)?;
         let reserved_slots = bid.reserved_slots() as usize;
@@ -878,10 +917,7 @@ where
         }
     };
 
-    // validate specified delegation rate
-    if reservation.delegation_rate() > &DELEGATION_RATE_DENOMINATOR {
-        return Err(Error::DelegationRateTooLarge);
-    }
+    let reservation_bid_key = maybe_key;
 
     provider.write_bid(
         reservation_bid_key,
@@ -912,7 +948,7 @@ where
     // is there a reservation for this delegator?
     let reservation_bid_addr = BidAddr::Reservation {
         validator: AccountHash::from(&validator),
-        delegator: AccountHash::from(&delegator),
+        delegator: BidAddrDelegator::Account(AccountHash::from(&delegator)),
     };
     if provider.read_bid(&reservation_bid_addr.into())?.is_none() {
         return Err(Error::ReservationNotFound);
@@ -987,7 +1023,7 @@ where
 pub fn read_delegator_bids<P>(
     provider: &mut P,
     validator_public_key: &PublicKey,
-) -> Result<Vec<Delegator>, Error>
+) -> Result<Vec<DelegationKind>, Error>
 where
     P: RuntimeProvider + StorageProvider + ?Sized,
 {
@@ -1000,14 +1036,14 @@ where
     )?;
     for delegator_bid_key in delegator_bid_keys {
         let delegator_bid = read_delegator_bid(provider, &delegator_bid_key)?;
-        ret.push(*delegator_bid);
+        ret.push(delegator_bid);
     }
 
     Ok(ret)
 }
 
 /// Returns delegator bid by key.
-pub fn read_delegator_bid<P>(provider: &mut P, bid_key: &Key) -> Result<Box<Delegator>, Error>
+pub fn read_delegator_bid<P>(provider: &mut P, bid_key: &Key) -> Result<DelegationKind, Error>
 where
     P: RuntimeProvider + ?Sized + StorageProvider,
 {
@@ -1075,15 +1111,15 @@ pub fn seigniorage_recipients(
         // calculate delegator portion(s), if any
         let mut delegators_weight = U512::zero();
         let mut delegators_stake = BTreeMap::new();
-        if let Some(delegators) = delegator_bids.get(validator_public_key) {
-            for delegator_bid in delegators {
-                if delegator_bid.staked_amount().is_zero() {
+        if let Some(delegations) = delegator_bids.get(validator_public_key) {
+            for delegation_kind in delegations {
+                if delegation_kind.staked_amount().is_zero() {
                     continue;
                 }
-                let delegator_staked_amount = delegator_bid.staked_amount();
+                let delegator_staked_amount = delegation_kind.staked_amount();
                 delegators_weight = delegators_weight.saturating_add(delegator_staked_amount);
                 delegators_stake.insert(
-                    delegator_bid.delegator_public_key().clone(),
+                    delegation_kind.bid_addr_delegator(),
                     delegator_staked_amount,
                 );
             }
@@ -1093,7 +1129,9 @@ pub fn seigniorage_recipients(
         if let Some(reservations) = reservations.get(validator_public_key) {
             for reservation in reservations {
                 reservation_delegation_rates.insert(
-                    reservation.delegator_public_key().clone(),
+                    BidAddrDelegator::Account(AccountHash::from(
+                        &reservation.delegator_public_key().clone(),
+                    )),
                     *reservation.delegation_rate(),
                 );
             }
@@ -1174,14 +1212,8 @@ where
         if delegator_vesting_schedule
             .initialize_with_schedule(delegator_staked_amount, vesting_schedule_period_millis)
         {
-            let delegator_bid_addr = BidAddr::new_from_public_keys(
-                &validator_public_key,
-                Some(delegator_bid.delegator_public_key()),
-            );
-            provider.write_bid(
-                delegator_bid_addr.into(),
-                BidKind::Delegator(Box::new(delegator_bid)),
-            )?;
+            let delegator_bid_addr = delegator_bid.bid_addr();
+            provider.write_bid(delegator_bid_addr.into(), BidKind::Delegator(delegator_bid))?;
         }
     }
 
@@ -1202,7 +1234,7 @@ where
 pub fn delegators<P>(
     provider: &mut P,
     validator_public_key: &PublicKey,
-) -> Result<Vec<Box<Delegator>>, Error>
+) -> Result<Vec<DelegationKind>, Error>
 where
     P: RuntimeProvider + ?Sized + StorageProvider,
 {

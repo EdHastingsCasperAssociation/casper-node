@@ -10,14 +10,16 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "json-schema")]
 use serde_map_to_array::KeyValueJsonSchema;
+#[allow(unused)]
 use serde_map_to_array::{BTreeMapToArray, KeyValueLabels};
 
 use crate::{
     bytesrepr::{self, FromBytes, ToBytes},
-    system::auction::{DelegationRate, Delegator, Error, ValidatorBid},
+    system::auction::{DelegationRate, Error, ValidatorBid},
     CLType, CLTyped, PublicKey, URef, U512,
 };
 
+use crate::system::auction::Delegator;
 pub use vesting::{VestingSchedule, VESTING_SCHEDULE_LENGTH_MILLIS};
 
 /// An entry in the validator map.
@@ -447,7 +449,7 @@ mod tests {
             ),
             bonding_purse: URef::new([42; 32], AccessRights::READ_ADD_WRITE),
             staked_amount: U512::one(),
-            delegation_rate: DelegationRate::max_value(),
+            delegation_rate: DelegationRate::MAX,
             vesting_schedule: Some(VestingSchedule::default()),
             delegators: BTreeMap::default(),
             inactive: true,

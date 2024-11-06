@@ -14,7 +14,7 @@ use casper_types::{
     account::AccountHash,
     bytesrepr::{FromBytes, ToBytes},
     system::{
-        auction::{BidAddr, BidKind, EraInfo, Error, UnbondingPurse},
+        auction::{BidAddr, BidAddrDelegator, BidKind, EraInfo, Error, Unbond},
         mint,
     },
     CLTyped, CLValue, Key, KeyTag, PublicKey, StoredValue, URef, U512,
@@ -89,7 +89,7 @@ where
             error!("RuntimeProvider::used_reservation_count {:?}", err);
             Error::Storage
         })?;
-        let delegator_account_hashes: Vec<AccountHash> = delegator_keys
+        let delegator_addrs: Vec<BidAddrDelegator> = delegator_keys
             .into_iter()
             .filter_map(|key| {
                 if let Key::BidAddr(BidAddr::Delegator { delegator, .. }) = key {
@@ -112,7 +112,7 @@ where
             .iter()
             .filter(|reservation| {
                 if let Key::BidAddr(BidAddr::Reservation { delegator, .. }) = reservation {
-                    delegator_account_hashes.contains(delegator)
+                    delegator_addrs.contains(delegator)
                 } else {
                     false
                 }
@@ -194,50 +194,53 @@ where
 
     fn write_bid(&mut self, key: Key, bid_kind: BidKind) -> Result<(), Error> {
         let stored_value = StoredValue::BidKind(bid_kind);
-
-        // Charge for amount as measured by serialized length
-        // let bytes_count = stored_value.serialized_length();
-        // self.charge_gas_storage(bytes_count)?;
-
         self.tracking_copy().borrow_mut().write(key, stored_value);
         Ok(())
     }
 
-    fn read_unbonds(&mut self, account_hash: &AccountHash) -> Result<Vec<UnbondingPurse>, Error> {
-        match self
+    fn read_unbonds(&mut self, bid_addr: BidAddr) -> Result<Vec<Unbond>, Error> {
+        let keys = match self
             .tracking_copy()
             .borrow_mut()
-            .read(&Key::Unbond(*account_hash))
+            .get_keys_by_byte_prefix(&bid_addr.unbond_prefix()?)
         {
-            Ok(Some(StoredValue::Unbonding(unbonding_purses))) => Ok(unbonding_purses),
-            Ok(Some(_)) => {
-                error!("StorageProvider::read_unbonds: unexpected StoredValue variant");
-                Err(Error::Storage)
-            }
-            Ok(None) => Ok(Vec::new()),
-            Err(TrackingCopyError::BytesRepr(_)) => Err(Error::Serialization),
+            Ok(keys) => keys,
             Err(err) => {
                 error!("StorageProvider::read_unbonds: {:?}", err);
-                Err(Error::Storage)
+                return Err(Error::Storage);
+            }
+        };
+
+        let mut ret = vec![];
+
+        for key in keys {
+            match self.tracking_copy().borrow_mut().read(&key) {
+                Ok(Some(StoredValue::BidKind(BidKind::Unbond(unbond)))) => ret.push(*unbond),
+                Ok(Some(_)) => {
+                    error!("StorageProvider::read_unbonds: unexpected StoredValue variant");
+                    return Err(Error::Storage);
+                }
+                Ok(None) => return Ok(Vec::new()),
+                Err(TrackingCopyError::BytesRepr(_)) => return Err(Error::Serialization),
+                Err(err) => {
+                    error!("StorageProvider::read_unbonds: {:?}", err);
+                    return Err(Error::Storage);
+                }
             }
         }
+
+        Ok(ret)
     }
 
-    fn write_unbonds(
-        &mut self,
-        account_hash: AccountHash,
-        unbonding_purses: Vec<UnbondingPurse>,
-    ) -> Result<(), Error> {
-        let unbond_key = Key::Unbond(account_hash);
-        if unbonding_purses.is_empty() {
-            self.tracking_copy().borrow_mut().prune(unbond_key);
-            Ok(())
-        } else {
+    fn write_unbonds(&mut self, unbonds: Vec<Unbond>) -> Result<(), Error> {
+        for unbond in unbonds {
+            let unbond_key = unbond.bid_addr().into();
+            let bid_kind = BidKind::Unbond(Box::new(unbond));
             self.tracking_copy()
                 .borrow_mut()
-                .write(unbond_key, StoredValue::Unbonding(unbonding_purses));
-            Ok(())
+                .write(unbond_key, StoredValue::BidKind(bid_kind));
         }
+        Ok(())
     }
 
     fn record_era_info(&mut self, era_info: EraInfo) -> Result<(), Error> {
@@ -259,78 +262,135 @@ impl<S> MintProvider for RuntimeNative<S>
 where
     S: StateReader<Key, StoredValue, Error = GlobalStateError>,
 {
-    fn unbond(&mut self, unbonding_purse: &UnbondingPurse) -> Result<(), Error> {
-        let unbonder_key = unbonding_purse.unbonder_public_key();
-        let account_hash = AccountHash::from(unbonder_key);
+    fn unbond(&mut self, unbond: &Unbond) -> Result<(), Error> {
+        let tc = self.tracking_copy();
+        if let Some(account_hash) = unbond.account_hash() {
+            tc.borrow_mut()
+                .migrate_account(account_hash, self.protocol_version())
+                .map_err(|error| {
+                    error!(
+                        "MintProvider::unbond: couldn't migrate account: {:?}",
+                        error
+                    );
+                    Error::Storage
+                })?;
 
-        // Do a migration if the account hasn't been migrated yet. This is just a read if it has
-        // been migrated already.
-        self.tracking_copy()
-            .borrow_mut()
-            .migrate_account(account_hash, self.protocol_version())
-            .map_err(|error| {
-                error!(
-                    "MintProvider::unbond: couldn't migrate account: {:?}",
-                    error
-                );
-                Error::Storage
-            })?;
+            let maybe_value = self
+                .tracking_copy()
+                .borrow_mut()
+                .read(&Key::Account(account_hash))
+                .map_err(|error| {
+                    error!("MintProvider::unbond: {:?}", error);
+                    Error::Storage
+                })?;
 
-        let maybe_value = self
-            .tracking_copy()
-            .borrow_mut()
-            .read(&Key::Account(account_hash))
-            .map_err(|error| {
-                error!("MintProvider::unbond: {:?}", error);
-                Error::Storage
-            })?;
+            return match maybe_value {
+                Some(StoredValue::Account(account)) => {
+                    self.mint_transfer_direct(
+                        Some(account_hash),
+                        *unbond.bonding_purse(),
+                        account.main_purse(),
+                        *unbond.amount(),
+                        None,
+                    )
+                    .map_err(|_| Error::Transfer)?
+                    .map_err(|_| Error::Transfer)?;
+                    Ok(())
+                }
+                Some(StoredValue::CLValue(cl_value)) => {
+                    let entity_key: Key = cl_value.into_t().map_err(|_| Error::CLValue)?;
 
-        let contract_key: Key = match maybe_value {
-            Some(StoredValue::Account(account)) => {
-                self.mint_transfer_direct(
-                    Some(account_hash),
-                    *unbonding_purse.bonding_purse(),
-                    account.main_purse(),
-                    *unbonding_purse.amount(),
-                    None,
-                )
-                .map_err(|_| Error::Transfer)?
-                .map_err(|_| Error::Transfer)?;
-                return Ok(());
-            }
-            Some(StoredValue::CLValue(cl_value)) => {
-                let contract_key: Key = cl_value.into_t().map_err(|_| Error::CLValue)?;
-                contract_key
-            }
-            Some(_cl_value) => return Err(Error::CLValue),
-            None => return Err(Error::InvalidPublicKey),
-        };
-
-        let maybe_value = self
-            .tracking_copy()
-            .borrow_mut()
-            .read(&contract_key)
-            .map_err(|error| {
-                error!("MintProvider::unbond: {:?}", error);
-                Error::Storage
-            })?;
-
-        match maybe_value {
-            Some(StoredValue::AddressableEntity(contract)) => {
-                self.mint_transfer_direct(
-                    Some(account_hash),
-                    *unbonding_purse.bonding_purse(),
-                    contract.main_purse(),
-                    *unbonding_purse.amount(),
-                    None,
-                )
-                .map_err(|_| Error::Transfer)?
-                .map_err(|_| Error::Transfer)?;
-                Ok(())
-            }
-            Some(_cl_value) => Err(Error::CLValue),
-            None => Err(Error::InvalidPublicKey),
+                    let maybe_value = self
+                        .tracking_copy()
+                        .borrow_mut()
+                        .read(&entity_key)
+                        .map_err(|error| {
+                            error!("MintProvider::unbond: {:?}", error);
+                            Error::Storage
+                        })?;
+                    match maybe_value {
+                        Some(StoredValue::AddressableEntity(contract)) => {
+                            self.mint_transfer_direct(
+                                Some(account_hash),
+                                *unbond.bonding_purse(),
+                                contract.main_purse(),
+                                *unbond.amount(),
+                                None,
+                            )
+                            .map_err(|_| Error::Transfer)?
+                            .map_err(|_| Error::Transfer)?;
+                            Ok(())
+                        }
+                        Some(_cl_value) => Err(Error::CLValue),
+                        None => Err(Error::InvalidPublicKey),
+                    }
+                }
+                Some(_cl_value) => Err(Error::CLValue),
+                None => Err(Error::InvalidPublicKey),
+            };
         }
+        if let Some(source_purse) = unbond.source_purse() {
+            self.mint_transfer_direct(
+                None,
+                *unbond.bonding_purse(),
+                source_purse,
+                *unbond.amount(),
+                None,
+            )
+            .map_err(|_| Error::Transfer)?
+            .map_err(|_| Error::Transfer)?;
+            return Ok(());
+        }
+        Err(Error::WithdrawValidatorReward)
+        // let unbonder_key = unbind_kind.unbonder_public_key();
+        // let account_hash = AccountHash::from(unbonder_key);
+
+        // let contract_key: Key = match maybe_value {
+        //     Some(StoredValue::Account(account)) => {
+        //         self.mint_transfer_direct(
+        //             Some(account_hash),
+        //             *unbind_kind.bonding_purse(),
+        //             account.main_purse(),
+        //             *unbind_kind.amount(),
+        //             None,
+        //         )
+        //         .map_err(|_| Error::Transfer)?
+        //         .map_err(|_| Error::Transfer)?;
+        //         return Ok(());
+        //     }
+        //     Some(StoredValue::CLValue(cl_value)) => {
+        //         let contract_key: Key = cl_value.into_t().map_err(|_| Error::CLValue)?;
+        //         contract_key
+        //     }
+        //     Some(_cl_value) => return Err(Error::CLValue),
+        //     None => return Err(Error::InvalidPublicKey),
+        // };
+
+        // let maybe_value = self
+        //     .tracking_copy()
+        //     .borrow_mut()
+        //     .read(&contract_key)
+        //     .map_err(|error| {
+        //         error!("MintProvider::unbond: {:?}", error);
+        //         Error::Storage
+        //     })?;
+        //
+        // match maybe_value {
+        //     Some(StoredValue::AddressableEntity(contract)) => {
+        //         self.mint_transfer_direct(
+        //             Some(account_hash),
+        //             *unbind_kind.bonding_purse(),
+        //             contract.main_purse(),
+        //             *unbind_kind.amount(),
+        //             None,
+        //         )
+        //         .map_err(|_| Error::Transfer)?
+        //         .map_err(|_| Error::Transfer)?;
+        //         Ok(())
+        //     }
+        //     Some(_cl_value) => Err(Error::CLValue),
+        //     None => Err(Error::InvalidPublicKey),
+        // }
     }
 
     fn mint_transfer_direct(

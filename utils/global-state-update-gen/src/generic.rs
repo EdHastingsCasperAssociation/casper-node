@@ -353,7 +353,7 @@ pub fn add_and_remove_bids<T: StateReader>(
                     credit.era_id(),
                 ))),
                 BidKind::Reservation(reservation_bid) => {
-                    BidKind::Reservation(Box::new(Reservation::new(
+                    BidKind::Reservation(Box::new(Reservation::new_delegator_public_key(
                         public_key.clone(),
                         reservation_bid.delegator_public_key().clone(),
                         *reservation_bid.delegation_rate(),

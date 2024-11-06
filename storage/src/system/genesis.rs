@@ -26,13 +26,14 @@ use casper_types::{
     execution::Effects,
     system::{
         auction::{
-            self, BidAddr, BidKind, DelegationRate, Delegator, SeigniorageRecipientV2,
-            SeigniorageRecipients, SeigniorageRecipientsSnapshot, SeigniorageRecipientsSnapshotV2,
-            SeigniorageRecipientsV2, Staking, ValidatorBid, AUCTION_DELAY_KEY,
-            DEFAULT_SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION, DELEGATION_RATE_DENOMINATOR,
-            ERA_END_TIMESTAMP_MILLIS_KEY, ERA_ID_KEY, INITIAL_ERA_END_TIMESTAMP_MILLIS,
-            INITIAL_ERA_ID, LOCKED_FUNDS_PERIOD_KEY, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY,
-            SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION_KEY, UNBONDING_DELAY_KEY, VALIDATOR_SLOTS_KEY,
+            self, BidAddr, BidAddrDelegator, BidKind, DelegationRate, Delegator,
+            SeigniorageRecipientV2, SeigniorageRecipients, SeigniorageRecipientsSnapshot,
+            SeigniorageRecipientsSnapshotV2, SeigniorageRecipientsV2, Staking, ValidatorBid,
+            AUCTION_DELAY_KEY, DEFAULT_SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION,
+            DELEGATION_RATE_DENOMINATOR, ERA_END_TIMESTAMP_MILLIS_KEY, ERA_ID_KEY,
+            INITIAL_ERA_END_TIMESTAMP_MILLIS, INITIAL_ERA_ID, LOCKED_FUNDS_PERIOD_KEY,
+            SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION_KEY,
+            UNBONDING_DELAY_KEY, VALIDATOR_SLOTS_KEY,
         },
         handle_payment::{self, ACCUMULATION_PURSE_KEY},
         mint::{
@@ -86,19 +87,19 @@ pub enum GenesisError {
     OrphanedDelegator {
         /// Validator's public key.
         validator_public_key: PublicKey,
-        /// Delegator's public key.
-        delegator_public_key: PublicKey,
+        /// Delegator's identity.
+        delegator: BidAddrDelegator,
     },
     /// Duplicated delegator entry found for a given validator.
     DuplicatedDelegatorEntry {
         /// Validator's public key.
         validator_public_key: PublicKey,
-        /// Delegator's public key.
-        delegator_public_key: PublicKey,
+        /// Delegator's identity.
+        delegator: BidAddrDelegator,
     },
     /// Delegation rate outside the allowed range.
     InvalidDelegationRate {
-        /// Delegator's public key.
+        /// Validator's public key.
         public_key: PublicKey,
         /// Invalid delegation rate specified in the genesis account entry.
         delegation_rate: DelegationRate,
@@ -110,8 +111,8 @@ pub enum GenesisError {
     },
     /// Invalid delegated amount in a genesis account.
     InvalidDelegatedAmount {
-        /// Delegator's public key.
-        public_key: PublicKey,
+        /// Delegator's identity.
+        delegator: BidAddrDelegator,
     },
     /// Failed to create system registry.
     FailedToCreateSystemRegistry,

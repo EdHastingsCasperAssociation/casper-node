@@ -12,8 +12,8 @@ use casper_types::{
     account::AccountHash,
     runtime_args,
     system::auction::{
-        BidsExt, DelegationRate, UnbondingPurses, ARG_DELEGATOR, ARG_VALIDATOR,
-        ARG_VALIDATOR_PUBLIC_KEYS, METHOD_SLASH,
+        BidsExt, DelegationRate, Unbonds, ARG_DELEGATOR, ARG_VALIDATOR, ARG_VALIDATOR_PUBLIC_KEYS,
+        METHOD_SLASH,
     },
     GenesisAccount, GenesisValidator, Motes, PublicKey, SecretKey, U512,
 };
@@ -169,7 +169,7 @@ fn should_run_ee_1120_slash_delegators() {
         BTreeSet::from_iter(vec![VALIDATOR_2.clone(), VALIDATOR_1.clone()])
     );
 
-    let initial_unbond_purses: UnbondingPurses = builder.get_unbonds();
+    let initial_unbond_purses: Unbonds = builder.get_unbonds();
     assert_eq!(initial_unbond_purses.len(), 0);
 
     // DELEGATOR_1 partially unbonds from VALIDATOR_1
@@ -214,7 +214,7 @@ fn should_run_ee_1120_slash_delegators() {
     builder.exec(undelegate_request_3).expect_success().commit();
 
     // Check unbonding purses before slashing
-    let unbond_purses_before: UnbondingPurses = builder.get_unbonds();
+    let unbond_purses_before: Unbonds = builder.get_unbonds();
     // should be an unbonding purse for each distinct undelegator
     unbond_purses_before.contains_key(&expected_unbond_account_hashes.1);
     let delegator_unbond = unbond_purses_before
@@ -309,7 +309,7 @@ fn should_run_ee_1120_slash_delegators() {
         .delegator_by_public_keys(&VALIDATOR_1, &DELEGATOR_1)
         .expect("the delegation record from DELEGATOR_1 should exist on VALIDATOR1");
 
-    let unbond_purses_after: UnbondingPurses = builder.get_unbonds();
+    let unbond_purses_after: Unbonds = builder.get_unbonds();
     assert_ne!(unbond_purses_before, unbond_purses_after);
     assert!(!unbond_purses_after.contains_key(&VALIDATOR_1_ADDR));
     assert!(unbond_purses_after.contains_key(&DELEGATOR_1_ADDR));
@@ -335,7 +335,7 @@ fn should_run_ee_1120_slash_delegators() {
         "we slashed everybody so there should be no bids remaining"
     );
 
-    let unbond_purses_after: UnbondingPurses = builder.get_unbonds();
+    let unbond_purses_after: Unbonds = builder.get_unbonds();
     assert_eq!(
         unbond_purses_after.len(),
         0,

@@ -445,6 +445,14 @@ where
         self.get_by_byte_prefix(&byte_prefix)
     }
 
+    /// Get keys by prefix.
+    pub fn get_keys_by_byte_prefix(
+        &self,
+        byte_prefix: &[u8],
+    ) -> Result<BTreeSet<Key>, TrackingCopyError> {
+        self.get_by_byte_prefix(&byte_prefix)
+    }
+
     /// Gets the set of keys in the state by a byte prefix.
     fn get_by_byte_prefix(&self, byte_prefix: &[u8]) -> Result<BTreeSet<Key>, TrackingCopyError> {
         let keys = match self.reader.keys_with_prefix(byte_prefix) {
@@ -1033,10 +1041,7 @@ pub fn new_temporary_tracking_copy(
         .expect("Checkout should not throw errors.")
         .expect("Root hash should exist.");
 
-    let query_depth = match max_query_depth {
-        None => DEFAULT_MAX_QUERY_DEPTH,
-        Some(depth) => depth,
-    };
+    let query_depth = max_query_depth.unwrap_or_else(|| DEFAULT_MAX_QUERY_DEPTH);
 
     (
         TrackingCopy::new(reader, query_depth, DEFAULT_ENABLE_ENTITY),

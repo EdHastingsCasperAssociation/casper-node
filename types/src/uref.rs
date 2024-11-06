@@ -102,7 +102,7 @@ impl URef {
     }
 
     /// Returns the address of this [`URef`].
-    pub fn addr(&self) -> URefAddr {
+    pub const fn addr(&self) -> URefAddr {
         self.0
     }
 

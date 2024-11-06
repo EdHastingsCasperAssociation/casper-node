@@ -337,6 +337,9 @@ where
         KeyPrefix::DelegatorBidAddrsByValidator(hash) => {
             StorageKeyPrefix::DelegatorBidAddrsByValidator(hash)
         }
+        KeyPrefix::UnbondBidAddrsByValidator(hash) => {
+            StorageKeyPrefix::UnbondBidAddrsByValidator(hash)
+        }
         KeyPrefix::MessagesByEntity(addr) => StorageKeyPrefix::MessageEntriesByEntity(addr),
         KeyPrefix::MessagesByEntityAndTopic(addr, topic) => {
             StorageKeyPrefix::MessagesByEntityAndTopic(addr, topic)
@@ -1259,8 +1262,7 @@ where
                 return BinaryResponse::new_empty(protocol_version);
             };
 
-            let seigniorage_recipient =
-                snapshot.get_seignorage_recipient(&header.era_id(), &validator);
+            let seigniorage_recipient = snapshot.get_recipient(&header.era_id(), &validator);
 
             let reward = auction::reward(
                 &validator,

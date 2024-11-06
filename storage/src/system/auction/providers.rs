@@ -4,7 +4,7 @@ use casper_types::{
     account::AccountHash,
     bytesrepr::{FromBytes, ToBytes},
     system::{
-        auction::{BidAddr, BidKind, EraInfo, Error, UnbondingPurse},
+        auction::{BidAddr, BidKind, EraInfo, Error, Unbond},
         mint,
     },
     CLTyped, Key, KeyTag, URef, U512,
@@ -60,15 +60,11 @@ pub trait StorageProvider {
     /// Writes given [`BidKind`] at given key.
     fn write_bid(&mut self, key: Key, bid_kind: BidKind) -> Result<(), Error>;
 
-    /// Reads collection of [`UnbondingPurse`]s at account hash derived from given public key
-    fn read_unbonds(&mut self, account_hash: &AccountHash) -> Result<Vec<UnbondingPurse>, Error>;
+    /// Reads collection of [`UnbondKind`]s at account hash derived from given public key
+    fn read_unbonds(&mut self, bid_addr: BidAddr) -> Result<Vec<Unbond>, Error>;
 
-    /// Writes given [`UnbondingPurse`]s at account hash derived from given public key
-    fn write_unbonds(
-        &mut self,
-        account_hash: AccountHash,
-        unbonding_purses: Vec<UnbondingPurse>,
-    ) -> Result<(), Error>;
+    /// Writes given [`UnbondKind`]s at account hash derived from given public key
+    fn write_unbonds(&mut self, unbonds: Vec<Unbond>) -> Result<(), Error>;
 
     /// Records era info.
     fn record_era_info(&mut self, era_info: EraInfo) -> Result<(), Error>;
@@ -80,7 +76,7 @@ pub trait StorageProvider {
 /// Provides an access to mint.
 pub trait MintProvider {
     /// Returns successfully unbonded stake to origin account.
-    fn unbond(&mut self, unbonding_purse: &UnbondingPurse) -> Result<(), Error>;
+    fn unbond(&mut self, unbond: &Unbond) -> Result<(), Error>;
 
     /// Allows optimized auction and mint interaction.
     /// Intended to be used only by system contracts to manage staked purses.

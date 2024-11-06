@@ -1,44 +1,43 @@
-use alloc::vec::Vec;
-use core::fmt::{self, Display, Formatter};
-
-#[cfg(feature = "datasize")]
-use datasize::DataSize;
-#[cfg(feature = "json-schema")]
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-
 use crate::{
-    bytesrepr::{self, FromBytes, ToBytes},
+    bytesrepr,
+    bytesrepr::{FromBytes, ToBytes},
     system::auction::{
         bid::VestingSchedule, BidAddr, BidAddrDelegator, Error, VESTING_SCHEDULE_LENGTH_MILLIS,
     },
     CLType, CLTyped, PublicKey, URef, U512,
 };
+use core::{
+    fmt,
+    fmt::{Display, Formatter},
+};
+use datasize::DataSize;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
-/// Represents a party delegating their stake to a validator (or "delegatee")
+/// A delegation bid associated with a purse.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 #[serde(deny_unknown_fields)]
-pub struct Delegator {
-    delegator_public_key: PublicKey,
+pub struct DelegatorPurseBid {
+    source_purse: URef,
     staked_amount: U512,
     bonding_purse: URef,
     validator_public_key: PublicKey,
     vesting_schedule: Option<VestingSchedule>,
 }
 
-impl Delegator {
+impl DelegatorPurseBid {
     /// Creates a new [`Delegator`]
     pub fn unlocked(
-        delegator_public_key: PublicKey,
+        source_purse: URef,
         staked_amount: U512,
         bonding_purse: URef,
         validator_public_key: PublicKey,
     ) -> Self {
         let vesting_schedule = None;
-        Delegator {
-            delegator_public_key,
+        DelegatorPurseBid {
+            source_purse,
             staked_amount,
             bonding_purse,
             validator_public_key,
@@ -48,15 +47,15 @@ impl Delegator {
 
     /// Creates new instance of a [`Delegator`] with locked funds.
     pub fn locked(
-        delegator_public_key: PublicKey,
+        source_purse: URef,
         staked_amount: U512,
         bonding_purse: URef,
         validator_public_key: PublicKey,
         release_timestamp_millis: u64,
     ) -> Self {
         let vesting_schedule = Some(VestingSchedule::new(release_timestamp_millis));
-        Delegator {
-            delegator_public_key,
+        DelegatorPurseBid {
+            source_purse,
             staked_amount,
             bonding_purse,
             validator_public_key,
@@ -66,7 +65,7 @@ impl Delegator {
 
     /// The correct BidAddrDelegator for this instance.
     pub fn bid_addr_delegator(&self) -> BidAddrDelegator {
-        BidAddrDelegator::Account(self.delegator_public_key().to_account_hash())
+        BidAddrDelegator::Purse(self.delegator_source_purse().addr())
     }
 
     /// The correct BidAddr for this instance.
@@ -79,9 +78,9 @@ impl Delegator {
         }
     }
 
-    /// Returns public key of the delegator.
-    pub fn delegator_public_key(&self) -> &PublicKey {
-        &self.delegator_public_key
+    /// Returns source purse of the delegator.
+    pub fn delegator_source_purse(&self) -> &URef {
+        &self.source_purse
     }
 
     /// Checks if a bid is still locked under a vesting schedule.
@@ -189,16 +188,12 @@ impl Delegator {
     }
 
     /// Creates a new inactive instance of a bid with 0 staked amount.
-    pub fn empty(
-        validator_public_key: PublicKey,
-        delegator_public_key: PublicKey,
-        bonding_purse: URef,
-    ) -> Self {
+    pub fn empty(validator_public_key: PublicKey, source_purse: URef, bonding_purse: URef) -> Self {
         let vesting_schedule = None;
         let staked_amount = 0.into();
         Self {
             validator_public_key,
-            delegator_public_key,
+            source_purse,
             bonding_purse,
             staked_amount,
             vesting_schedule,
@@ -212,16 +207,16 @@ impl Delegator {
     }
 }
 
-impl CLTyped for Delegator {
+impl CLTyped for DelegatorPurseBid {
     fn cl_type() -> CLType {
         CLType::Any
     }
 }
 
-impl ToBytes for Delegator {
+impl ToBytes for DelegatorPurseBid {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         let mut buffer = bytesrepr::allocate_buffer(self)?;
-        buffer.extend(self.delegator_public_key.to_bytes()?);
+        buffer.extend(self.source_purse.to_bytes()?);
         buffer.extend(self.staked_amount.to_bytes()?);
         buffer.extend(self.bonding_purse.to_bytes()?);
         buffer.extend(self.validator_public_key.to_bytes()?);
@@ -230,7 +225,7 @@ impl ToBytes for Delegator {
     }
 
     fn serialized_length(&self) -> usize {
-        self.delegator_public_key.serialized_length()
+        self.source_purse.serialized_length()
             + self.staked_amount.serialized_length()
             + self.bonding_purse.serialized_length()
             + self.validator_public_key.serialized_length()
@@ -238,7 +233,7 @@ impl ToBytes for Delegator {
     }
 
     fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
-        self.delegator_public_key.write_bytes(writer)?;
+        self.source_purse.write_bytes(writer)?;
         self.staked_amount.write_bytes(writer)?;
         self.bonding_purse.write_bytes(writer)?;
         self.validator_public_key.write_bytes(writer)?;
@@ -247,16 +242,16 @@ impl ToBytes for Delegator {
     }
 }
 
-impl FromBytes for Delegator {
+impl FromBytes for DelegatorPurseBid {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        let (delegator_public_key, bytes) = PublicKey::from_bytes(bytes)?;
+        let (source_purse, bytes) = URef::from_bytes(bytes)?;
         let (staked_amount, bytes) = U512::from_bytes(bytes)?;
         let (bonding_purse, bytes) = URef::from_bytes(bytes)?;
         let (validator_public_key, bytes) = PublicKey::from_bytes(bytes)?;
         let (vesting_schedule, bytes) = FromBytes::from_bytes(bytes)?;
         Ok((
-            Delegator {
-                delegator_public_key,
+            DelegatorPurseBid {
+                source_purse,
                 staked_amount,
                 bonding_purse,
                 validator_public_key,
@@ -267,28 +262,25 @@ impl FromBytes for Delegator {
     }
 }
 
-impl Display for Delegator {
+impl Display for DelegatorPurseBid {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         write!(
             formatter,
             "delegator {{ {} {} motes, bonding purse {}, validator {} }}",
-            self.delegator_public_key,
-            self.staked_amount,
-            self.bonding_purse,
-            self.validator_public_key
+            self.source_purse, self.staked_amount, self.bonding_purse, self.validator_public_key
         )
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        bytesrepr, system::auction::Delegator, AccessRights, PublicKey, SecretKey, URef, U512,
-    };
+    use super::DelegatorPurseBid;
+    use crate::{bytesrepr, AccessRights, PublicKey, SecretKey, URef, U512};
 
     #[test]
     fn serialization_roundtrip() {
         let staked_amount = U512::one();
+        let source_purse = URef::new([42; 32], AccessRights::READ_ADD_WRITE);
         let bonding_purse = URef::new([42; 32], AccessRights::READ_ADD_WRITE);
         let delegator_public_key: PublicKey = PublicKey::from(
             &SecretKey::ed25519_from_bytes([42; SecretKey::ED25519_LENGTH]).unwrap(),
@@ -297,8 +289,8 @@ mod tests {
         let validator_public_key: PublicKey = PublicKey::from(
             &SecretKey::ed25519_from_bytes([43; SecretKey::ED25519_LENGTH]).unwrap(),
         );
-        let unlocked_delegator = Delegator::unlocked(
-            delegator_public_key.clone(),
+        let unlocked_delegator = DelegatorPurseBid::unlocked(
+            source_purse,
             staked_amount,
             bonding_purse,
             validator_public_key.clone(),
@@ -306,8 +298,8 @@ mod tests {
         bytesrepr::test_serialization_roundtrip(&unlocked_delegator);
 
         let release_timestamp_millis = 42;
-        let locked_delegator = Delegator::locked(
-            delegator_public_key,
+        let locked_delegator = DelegatorPurseBid::locked(
+            source_purse,
             staked_amount,
             bonding_purse,
             validator_public_key,

@@ -4,6 +4,8 @@ mod bid_addr;
 mod bid_kind;
 mod bridge;
 mod constants;
+mod delegation_kind;
+mod delegation_purse_bid;
 mod delegator;
 mod entry_points;
 mod era_info;
@@ -23,19 +25,23 @@ use itertools::Itertools;
 use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
 
 pub use bid::{Bid, VESTING_SCHEDULE_LENGTH_MILLIS};
-pub use bid_addr::{BidAddr, BidAddrTag};
+pub use bid_addr::{BidAddr, BidAddrDelegator, BidAddrDelegatorTag, BidAddrTag};
 pub use bid_kind::{BidKind, BidKindTag};
 pub use bridge::Bridge;
 pub use constants::*;
+pub use delegation_kind::{DelegationKind, DelegationKindTag};
+pub use delegation_purse_bid::DelegatorPurseBid;
 pub use delegator::Delegator;
 pub use entry_points::auction_entry_points;
 pub use era_info::{EraInfo, SeigniorageAllocation};
 pub use error::Error;
-pub use reservation::Reservation;
+pub use reservation::{Reservation, ReservationIdentity, ReservationIdentityTag};
 pub use seigniorage_recipient::{
     SeigniorageRecipient, SeigniorageRecipientV1, SeigniorageRecipientV2,
 };
-pub use unbonding_purse::UnbondingPurse;
+pub use unbonding_purse::{
+    Unbond, UnbondKind, UnbonderIdentity, UnbonderIdentityTag, UnbondingPurse,
+};
 pub use validator_bid::ValidatorBid;
 pub use validator_credit::ValidatorCredit;
 pub use withdraw_purse::WithdrawPurse;
@@ -54,7 +60,7 @@ pub type DelegationRate = u8;
 pub type ValidatorBids = BTreeMap<PublicKey, Box<ValidatorBid>>;
 
 /// Delegator bids mapped to their validator.
-pub type DelegatorBids = BTreeMap<PublicKey, Vec<Box<Delegator>>>;
+pub type DelegatorBids = BTreeMap<PublicKey, Vec<DelegationKind>>;
 
 /// Reservations mapped to their validator.
 pub type Reservations = BTreeMap<PublicKey, Vec<Box<Reservation>>>;
@@ -93,7 +99,7 @@ pub enum SeigniorageRecipientsSnapshot {
 
 impl SeigniorageRecipientsSnapshot {
     /// Returns rewards for given validator in a specified era
-    pub fn get_seignorage_recipient(
+    pub fn get_recipient(
         &self,
         era_id: &EraId,
         validator_public_key: &PublicKey,
@@ -112,13 +118,13 @@ impl SeigniorageRecipientsSnapshot {
 }
 
 /// Validators and delegators mapped to their unbonding purses.
-pub type UnbondingPurses = BTreeMap<AccountHash, Vec<UnbondingPurse>>;
+pub type Unbonds = BTreeMap<BidAddr, Vec<Unbond>>;
 
 /// Validators and delegators mapped to their withdraw purses.
 pub type WithdrawPurses = BTreeMap<AccountHash, Vec<WithdrawPurse>>;
 
 /// Aggregated representation of validator and associated delegator bids.
-pub type Staking = BTreeMap<PublicKey, (ValidatorBid, BTreeMap<PublicKey, Delegator>)>;
+pub type Staking = BTreeMap<PublicKey, (ValidatorBid, BTreeMap<BidAddrDelegator, DelegationKind>)>;
 
 /// Utils for working with a vector of BidKind.
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
@@ -203,17 +209,6 @@ impl BidsExt for Vec<BidKind> {
         }
     }
 
-    fn credit(&self, public_key: &PublicKey) -> Option<ValidatorCredit> {
-        if let BidKind::Credit(credit) = self
-            .iter()
-            .find(|x| x.is_credit() && &x.validator_public_key() == public_key)?
-        {
-            Some(*credit.clone())
-        } else {
-            None
-        }
-    }
-
     fn bridge(
         &self,
         public_key: &PublicKey,
@@ -230,6 +225,17 @@ impl BidsExt for Vec<BidKind> {
             }
             _ => None,
         })
+    }
+
+    fn credit(&self, public_key: &PublicKey) -> Option<ValidatorCredit> {
+        if let BidKind::Credit(credit) = self
+            .iter()
+            .find(|x| x.is_credit() && &x.validator_public_key() == public_key)?
+        {
+            Some(*credit.clone())
+        } else {
+            None
+        }
     }
 
     fn validator_total_stake(&self, public_key: &PublicKey) -> Option<U512> {
@@ -260,7 +266,7 @@ impl BidsExt for Vec<BidKind> {
             .iter()
             .filter(|x| x.is_delegator() && &x.validator_public_key() == public_key)
         {
-            if let BidKind::Delegator(delegator) = delegator {
+            if let BidKind::Delegator(DelegationKind::PublicKey(delegator)) = delegator {
                 ret.push(*delegator.clone());
             }
         }
@@ -277,12 +283,15 @@ impl BidsExt for Vec<BidKind> {
         validator_public_key: &PublicKey,
         delegator_public_key: &PublicKey,
     ) -> Option<Delegator> {
-        if let BidKind::Delegator(delegator) = self.iter().find(|x| {
+        if let BidKind::Delegator(delegator_kind) = self.iter().find(|x| {
             x.is_delegator()
                 && &x.validator_public_key() == validator_public_key
                 && x.delegator_public_key() == Some(delegator_public_key.clone())
         })? {
-            Some(*delegator.clone())
+            match delegator_kind {
+                DelegationKind::PublicKey(delegator) => Some(*delegator.clone()),
+                DelegationKind::Purse(_) => None,
+            }
         } else {
             None
         }
@@ -350,13 +359,17 @@ impl BidsExt for Vec<BidKind> {
             .collect_vec();
         for bid_kind in delegators {
             if let BidKind::Delegator(delegator) = bid_kind {
+                let delegator_public_key = match delegator.delegator_public_key() {
+                    Some(delegator_public_key) => delegator_public_key.clone(),
+                    None => PublicKey::System,
+                };
                 match ret.entry(delegator.validator_public_key().clone()) {
                     Entry::Vacant(ve) => {
-                        ve.insert(vec![delegator.delegator_public_key().clone()]);
+                        ve.insert(vec![delegator_public_key]);
                     }
                     Entry::Occupied(mut oe) => {
                         let delegators = oe.get_mut();
-                        delegators.push(delegator.delegator_public_key().clone())
+                        delegators.push(delegator_public_key)
                     }
                 }
             }
@@ -419,6 +432,15 @@ impl BidsExt for Vec<BidKind> {
                     x.is_reservation()
                         && x.validator_public_key() == bid_kind.validator_public_key()
                         && x.delegator_public_key() == bid_kind.delegator_public_key()
+                })
+                .map(|(idx, _)| idx),
+            BidKind::Unbond(_) => self
+                .iter()
+                .find_position(|x| {
+                    x.is_unbond()
+                        && x.validator_public_key() == bid_kind.validator_public_key()
+                        && x.new_validator_public_key() == bid_kind.new_validator_public_key()
+                        && x.era_id() == bid_kind.era_id()
                 })
                 .map(|(idx, _)| idx),
         };

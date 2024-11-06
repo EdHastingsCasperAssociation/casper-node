@@ -389,6 +389,12 @@ pub enum Error {
     /// assert_eq!(59, Error::ReservationSlotsCountTooSmall as u8);
     /// ```
     ReservationSlotsCountTooSmall = 59,
+    /// Unable to determine purse to transfer unbonded stake to.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(60, Error::UnbondRecevingPurseNotFound as u8);
+    /// ```
+    UnbondRecevingPurseNotFound = 60,
 }
 
 impl Display for Error {
@@ -453,7 +459,9 @@ impl Display for Error {
             Error::ReservationNotFound => formatter.write_str("Reservation not found"),
             Error::ExceededReservationSlotsLimit => formatter.write_str("Validator exceeded allowed number of reserved delegator slots"),
             Error::ExceededReservationsLimit => formatter.write_str("All reserved slots for validator are already occupied"),
-            Error::ReservationSlotsCountTooSmall => formatter.write_str("Reserved slots count is less than number of existing reservations")
+            Error::ReservationSlotsCountTooSmall => formatter.write_str("Reserved slots count is less than number of existing reservations"),
+            Error::UnbondRecevingPurseNotFound => formatter.write_str("Unable to determine purse to transfer unbonded stake to.")
+
         }
     }
 }
@@ -552,6 +560,9 @@ impl TryFrom<u8> for Error {
             }
             d if d == Error::ReservationSlotsCountTooSmall as u8 => {
                 Ok(Error::ReservationSlotsCountTooSmall)
+            }
+            d if d == Error::UnbondRecevingPurseNotFound as u8 => {
+                Ok(Error::UnbondRecevingPurseNotFound)
             }
             _ => Err(TryFromU8ForError(())),
         }

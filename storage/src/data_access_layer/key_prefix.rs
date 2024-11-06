@@ -11,6 +11,8 @@ use casper_types::{
 pub enum KeyPrefix {
     /// Retrieves all delegator bid addresses for a given validator.
     DelegatorBidAddrsByValidator(AccountHash),
+    /// Retrieves all unbond bid addresses for a given validator.
+    UnbondBidAddrsByValidator(AccountHash),
     /// Retrieves all entries for a given hash addr.
     MessageEntriesByEntity(HashAddr),
     /// Retrieves all messages for a given hash addr and topic.
@@ -37,7 +39,8 @@ impl ToBytes for KeyPrefix {
     fn serialized_length(&self) -> usize {
         U8_SERIALIZED_LENGTH
             + match self {
-                KeyPrefix::DelegatorBidAddrsByValidator(validator) => {
+                KeyPrefix::DelegatorBidAddrsByValidator(validator)
+                | KeyPrefix::UnbondBidAddrsByValidator(validator) => {
                     U8_SERIALIZED_LENGTH + validator.serialized_length()
                 }
                 KeyPrefix::MessageEntriesByEntity(hash_addr) => hash_addr.serialized_length(),
@@ -65,6 +68,11 @@ impl ToBytes for KeyPrefix {
             KeyPrefix::DelegatorBidAddrsByValidator(validator) => {
                 writer.push(KeyTag::BidAddr as u8);
                 writer.push(BidAddrTag::Delegator as u8);
+                validator.write_bytes(writer)?;
+            }
+            KeyPrefix::UnbondBidAddrsByValidator(validator) => {
+                writer.push(KeyTag::BidAddr as u8);
+                writer.push(BidAddrTag::Unbond as u8);
                 validator.write_bytes(writer)?;
             }
             KeyPrefix::MessageEntriesByEntity(hash_addr) => {
@@ -118,6 +126,10 @@ impl FromBytes for KeyPrefix {
                             KeyPrefix::DelegatorBidAddrsByValidator(validator),
                             remainder,
                         )
+                    }
+                    tag if tag == BidAddrTag::Unbond as u8 => {
+                        let (validator, remainder) = AccountHash::from_bytes(remainder)?;
+                        (KeyPrefix::UnbondBidAddrsByValidator(validator), remainder)
                     }
                     _ => return Err(bytesrepr::Error::Formatting),
                 }
@@ -217,7 +229,7 @@ mod tests {
 
         for (key, prefix) in [
             (
-                Key::BidAddr(BidAddr::new_delegator_addr((hash1, hash2))),
+                Key::BidAddr(BidAddr::new_delegator_account_addr((hash1, hash2))),
                 KeyPrefix::DelegatorBidAddrsByValidator(AccountHash::new(hash1)),
             ),
             (

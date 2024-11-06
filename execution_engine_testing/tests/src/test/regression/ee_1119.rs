@@ -12,7 +12,7 @@ use casper_types::{
     runtime_args,
     system::{
         auction::{
-            BidsExt, DelegationRate, UnbondingPurses, ARG_DELEGATOR, ARG_VALIDATOR,
+            BidsExt, DelegationRate, Unbonds, ARG_DELEGATOR, ARG_VALIDATOR,
             ARG_VALIDATOR_PUBLIC_KEYS, METHOD_SLASH,
         },
         mint::TOTAL_SUPPLY_KEY,
@@ -109,7 +109,7 @@ fn should_slash_validator_and_their_delegators() {
         U512::from(VALIDATOR_1_STAKE),
     );
 
-    let unbond_purses: UnbondingPurses = builder.get_unbonds();
+    let unbond_purses: Unbonds = builder.get_unbonds();
     assert_eq!(unbond_purses.len(), 0);
 
     //
@@ -157,7 +157,7 @@ fn should_slash_validator_and_their_delegators() {
 
     builder.exec(withdraw_bid_request).expect_success().commit();
 
-    let unbond_purses: UnbondingPurses = builder.get_unbonds();
+    let unbond_purses: Unbonds = builder.get_unbonds();
     assert_eq!(unbond_purses.len(), 2);
 
     let unbond_list = unbond_purses
@@ -187,7 +187,7 @@ fn should_slash_validator_and_their_delegators() {
 
     builder.exec(slash_request_1).expect_success().commit();
 
-    let unbond_purses_noop: UnbondingPurses = builder.get_unbonds();
+    let unbond_purses_noop: Unbonds = builder.get_unbonds();
     assert_eq!(
         unbond_purses, unbond_purses_noop,
         "slashing default validator should be noop because no unbonding was done"
@@ -217,7 +217,7 @@ fn should_slash_validator_and_their_delegators() {
 
     builder.exec(slash_request_2).expect_success().commit();
 
-    let unbond_purses: UnbondingPurses = builder.get_unbonds();
+    let unbond_purses: Unbonds = builder.get_unbonds();
     assert_eq!(unbond_purses.len(), 0);
 
     let bids = builder.get_bids();

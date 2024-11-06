@@ -15,6 +15,8 @@ use rand::Rng;
 pub enum KeyPrefix {
     /// Retrieves all delegator bid addresses for a given validator.
     DelegatorBidAddrsByValidator(AccountHash),
+    /// Retrieves all unbond bid addresses for a given validator.
+    UnbondBidAddrsByValidator(AccountHash),
     /// Retrieves all messages for a given entity.
     MessagesByEntity(HashAddr),
     /// Retrieves all messages for a given entity and topic.
@@ -56,11 +58,45 @@ impl ToBytes for KeyPrefix {
         Ok(result)
     }
 
+    fn serialized_length(&self) -> usize {
+        U8_SERIALIZED_LENGTH
+            + match self {
+                KeyPrefix::DelegatorBidAddrsByValidator(validator) => {
+                    U8_SERIALIZED_LENGTH + validator.serialized_length()
+                }
+                KeyPrefix::UnbondBidAddrsByValidator(validator) => {
+                    U8_SERIALIZED_LENGTH + validator.serialized_length()
+                }
+                KeyPrefix::MessagesByEntity(entity) => entity.serialized_length(),
+                KeyPrefix::MessagesByEntityAndTopic(entity, topic) => {
+                    entity.serialized_length() + topic.serialized_length()
+                }
+                KeyPrefix::NamedKeysByEntity(entity) => entity.serialized_length(),
+                KeyPrefix::GasBalanceHoldsByPurse(uref) => {
+                    U8_SERIALIZED_LENGTH + uref.serialized_length()
+                }
+                KeyPrefix::ProcessingBalanceHoldsByPurse(uref) => {
+                    U8_SERIALIZED_LENGTH + uref.serialized_length()
+                }
+                KeyPrefix::EntryPointsV1ByEntity(entity) => {
+                    U8_SERIALIZED_LENGTH + entity.serialized_length()
+                }
+                KeyPrefix::EntryPointsV2ByEntity(entity) => {
+                    U8_SERIALIZED_LENGTH + entity.serialized_length()
+                }
+            }
+    }
+
     fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
         match self {
             KeyPrefix::DelegatorBidAddrsByValidator(validator) => {
                 writer.push(KeyTag::BidAddr as u8);
                 writer.push(BidAddrTag::Delegator as u8);
+                validator.write_bytes(writer)?;
+            }
+            KeyPrefix::UnbondBidAddrsByValidator(validator) => {
+                writer.push(KeyTag::BidAddr as u8);
+                writer.push(BidAddrTag::Unbond as u8);
                 validator.write_bytes(writer)?;
             }
             KeyPrefix::MessagesByEntity(entity) => {
@@ -98,32 +134,6 @@ impl ToBytes for KeyPrefix {
             }
         }
         Ok(())
-    }
-
-    fn serialized_length(&self) -> usize {
-        U8_SERIALIZED_LENGTH
-            + match self {
-                KeyPrefix::DelegatorBidAddrsByValidator(validator) => {
-                    U8_SERIALIZED_LENGTH + validator.serialized_length()
-                }
-                KeyPrefix::MessagesByEntity(entity) => entity.serialized_length(),
-                KeyPrefix::MessagesByEntityAndTopic(entity, topic) => {
-                    entity.serialized_length() + topic.serialized_length()
-                }
-                KeyPrefix::NamedKeysByEntity(entity) => entity.serialized_length(),
-                KeyPrefix::GasBalanceHoldsByPurse(uref) => {
-                    U8_SERIALIZED_LENGTH + uref.serialized_length()
-                }
-                KeyPrefix::ProcessingBalanceHoldsByPurse(uref) => {
-                    U8_SERIALIZED_LENGTH + uref.serialized_length()
-                }
-                KeyPrefix::EntryPointsV1ByEntity(entity) => {
-                    U8_SERIALIZED_LENGTH + entity.serialized_length()
-                }
-                KeyPrefix::EntryPointsV2ByEntity(entity) => {
-                    U8_SERIALIZED_LENGTH + entity.serialized_length()
-                }
-            }
     }
 }
 

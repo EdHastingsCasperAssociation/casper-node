@@ -10,8 +10,8 @@ use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionThresholds, AssociatedKeys, Weight},
     system::auction::{
-        BidAddr, BidKind, BidsExt, SeigniorageRecipientsSnapshotV2, UnbondingPurse,
-        UnbondingPurses, WithdrawPurse, WithdrawPurses,
+        BidAddr, BidKind, BidsExt, SeigniorageRecipientsSnapshotV2, UnbondingPurse, Unbonds,
+        WithdrawPurse, WithdrawPurses,
     },
     AccessRights, AddressableEntity, AddressableEntityHash, ByteCodeHash, CLValue, EntityKind,
     EntityVersions, Groups, Key, Package, PackageHash, PackageStatus, ProtocolVersion, PublicKey,
@@ -84,7 +84,7 @@ impl<T: StateReader> StateTracker<T> {
             BidKind::Credit(credit) => {
                 BidAddr::new_credit(credit.validator_public_key(), credit.era_id())
             }
-            BidKind::Reservation(reservation) => BidAddr::new_reservation(
+            BidKind::Reservation(reservation) => BidAddr::new_reservation_public_key(
                 reservation.validator_public_key(),
                 reservation.delegator_public_key(),
             ),
@@ -417,7 +417,7 @@ impl<T: StateReader> StateTracker<T> {
         result
     }
 
-    fn get_unbonds(&mut self) -> UnbondingPurses {
+    fn get_unbonds(&mut self) -> Unbonds {
         let mut result = self.reader.get_unbonds();
         for (acc, purses) in &self.unbonds_cache {
             result.insert(*acc, purses.clone());

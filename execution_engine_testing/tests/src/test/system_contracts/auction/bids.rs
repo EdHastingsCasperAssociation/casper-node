@@ -32,7 +32,7 @@ use casper_types::{
     system::{
         self,
         auction::{
-            self, BidsExt, DelegationRate, EraValidators, Error as AuctionError, UnbondingPurses,
+            self, BidsExt, DelegationRate, EraValidators, Error as AuctionError, Unbonds,
             ValidatorWeights, ARG_AMOUNT, ARG_DELEGATION_RATE, ARG_DELEGATOR, ARG_ENTRY_POINT,
             ARG_MAXIMUM_DELEGATION_AMOUNT, ARG_MINIMUM_DELEGATION_AMOUNT, ARG_NEW_PUBLIC_KEY,
             ARG_NEW_VALIDATOR, ARG_PUBLIC_KEY, ARG_REWARDS_MAP, ARG_VALIDATOR, ERA_ID_KEY,
@@ -390,7 +390,7 @@ fn should_decrease_existing_bid() {
         // Since we don't pay out immediately `WITHDRAW_BID_AMOUNT_2` is locked in unbonding queue
         U512::from(ADD_BID_AMOUNT_1)
     );
-    let unbonding_purses: UnbondingPurses = builder.get_unbonds();
+    let unbonding_purses: Unbonds = builder.get_unbonds();
     let unbond_list = unbonding_purses
         .get(&BID_ACCOUNT_1_ADDR)
         .expect("should have unbonded");
@@ -562,7 +562,7 @@ fn should_run_delegate_and_undelegate() {
         U512::from(DELEGATE_AMOUNT_1 + DELEGATE_AMOUNT_2 - UNDELEGATE_AMOUNT_1)
     );
 
-    let unbonding_purses: UnbondingPurses = builder.get_unbonds();
+    let unbonding_purses: Unbonds = builder.get_unbonds();
     assert_eq!(unbonding_purses.len(), 1);
 
     let unbond_list = unbonding_purses
@@ -844,7 +844,7 @@ fn should_forcibly_undelegate_after_setting_validator_limits() {
         U512::from(ADD_BID_AMOUNT_1 + 1_000 + DELEGATE_AMOUNT_1 - 1_000)
     );
 
-    let unbonding_purses: UnbondingPurses = builder.get_unbonds();
+    let unbonding_purses: Unbonds = builder.get_unbonds();
 
     let delegator_1 = unbonding_purses
         .get(&DELEGATOR_1_ADDR)
@@ -2029,7 +2029,7 @@ fn should_undelegate_delegators_when_validator_unbonds() {
     );
 
     // Validator partially unbonds and only one entry is present
-    let unbonding_purses_before: UnbondingPurses = builder.get_unbonds();
+    let unbonding_purses_before: Unbonds = builder.get_unbonds();
     assert_eq!(unbonding_purses_before[&*VALIDATOR_1_ADDR].len(), 1);
     assert_eq!(
         unbonding_purses_before[&*VALIDATOR_1_ADDR][0].unbonder_public_key(),
@@ -2054,7 +2054,7 @@ fn should_undelegate_delegators_when_validator_unbonds() {
     let bids_after = builder.get_bids();
     assert!(bids_after.validator_bid(&VALIDATOR_1).is_none());
 
-    let unbonding_purses_after: UnbondingPurses = builder.get_unbonds();
+    let unbonding_purses_after: Unbonds = builder.get_unbonds();
     assert_ne!(unbonding_purses_after, unbonding_purses_before);
 
     let validator1 = unbonding_purses_after
@@ -2257,7 +2257,7 @@ fn should_undelegate_delegators_when_validator_fully_unbonds() {
     let bids_after = builder.get_bids();
     assert!(bids_after.validator_bid(&VALIDATOR_1).is_none());
 
-    let unbonding_purses_before: UnbondingPurses = builder.get_unbonds();
+    let unbonding_purses_before: Unbonds = builder.get_unbonds();
 
     let validator_1_unbonding_purse = unbonding_purses_before
         .get(&VALIDATOR_1_ADDR)

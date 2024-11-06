@@ -3,7 +3,7 @@ use casper_types::{
     account::AccountHash,
     contracts::ContractHash,
     system::{
-        auction::{BidKind, UnbondingPurses, WithdrawPurses, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY},
+        auction::{BidKind, Unbonds, WithdrawPurses, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY},
         mint::TOTAL_SUPPLY_KEY,
     },
     AddressableEntity, Key, StoredValue,
@@ -22,7 +22,7 @@ pub trait StateReader {
 
     fn get_withdraws(&mut self) -> WithdrawPurses;
 
-    fn get_unbonds(&mut self) -> UnbondingPurses;
+    fn get_unbonds(&mut self) -> Unbonds;
 }
 
 impl<'a, T> StateReader for &'a mut T
@@ -53,7 +53,7 @@ where
         T::get_withdraws(self)
     }
 
-    fn get_unbonds(&mut self) -> UnbondingPurses {
+    fn get_unbonds(&mut self) -> Unbonds {
         T::get_unbonds(self)
     }
 }
@@ -121,7 +121,7 @@ impl StateReader for LmdbWasmTestBuilder {
         LmdbWasmTestBuilder::get_withdraw_purses(self)
     }
 
-    fn get_unbonds(&mut self) -> UnbondingPurses {
+    fn get_unbonds(&mut self) -> Unbonds {
         LmdbWasmTestBuilder::get_unbonds(self)
     }
 }

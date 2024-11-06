@@ -12,13 +12,13 @@ use casper_types::{
     account::AccountHash,
     bytesrepr::{FromBytes, ToBytes},
     system::{
-        auction::{BidAddr, BidKind, EraInfo, Error, UnbondingPurse},
+        auction::{BidAddr, BidAddrDelegator, BidKind, EraInfo, Error, Unbond},
         mint,
     },
-    CLTyped, CLValue, Key, KeyTag, PublicKey, RuntimeArgs, StoredValue, URef, U512,
+    AccessRights, CLTyped, CLValue, Key, KeyTag, PublicKey, RuntimeArgs, StoredValue, URef, U512,
 };
 
-use super::{cryptography, Runtime};
+use super::Runtime;
 use crate::execution::ExecError;
 
 impl From<ExecError> for Option<Error> {
@@ -96,42 +96,53 @@ where
             })
     }
 
-    fn read_unbonds(&mut self, account_hash: &AccountHash) -> Result<Vec<UnbondingPurse>, Error> {
-        match self.context.read_gs(&Key::Unbond(*account_hash)) {
-            Ok(Some(StoredValue::Unbonding(unbonding_purses))) => Ok(unbonding_purses),
-            Ok(Some(_)) => {
-                error!("StorageProvider::read_unbonds: unexpected StoredValue variant");
-                Err(Error::Storage)
-            }
-            Ok(None) => Ok(Vec::new()),
-            Err(ExecError::BytesRepr(_)) => Err(Error::Serialization),
-            // NOTE: This extra condition is needed to correctly propagate GasLimit to the user. See
-            // also [`Runtime::reverter`] and [`to_auction_error`]
-            Err(ExecError::GasLimit) => Err(Error::GasLimit),
+    fn read_unbonds(&mut self, bid_addr: BidAddr) -> Result<Vec<Unbond>, Error> {
+        let keys = match self
+            .context
+            .get_keys_with_prefix(&bid_addr.unbond_prefix()?)
+        {
+            Ok(keys) => keys,
             Err(err) => {
                 error!("StorageProvider::read_unbonds: {:?}", err);
                 Err(Error::Storage)
             }
+        };
+
+        let mut ret = vec![];
+
+        for key in keys {
+            match self.context.read_gs(&key) {
+                Ok(Some(StoredValue::BidKind(BidKind::Unbond(unbond)))) => ret.push(*unbond),
+                Ok(Some(_)) => {
+                    error!("StorageProvider::read_unbonds: unexpected StoredValue variant");
+                    Err(Error::Storage)
+                }
+                Ok(None) => Ok(Vec::new()),
+                Err(ExecError::BytesRepr(_)) => Err(Error::Serialization),
+                // NOTE: This extra condition is needed to correctly propagate GasLimit to the user.
+                // See also [`Runtime::reverter`] and [`to_auction_error`]
+                Err(ExecError::GasLimit) => Err(Error::GasLimit),
+                Err(err) => {
+                    error!("StorageProvider::read_unbonds: {:?}", err);
+                    Err(Error::Storage)
+                }
+            }
         }
+        Ok(ret)
     }
 
-    fn write_unbonds(
-        &mut self,
-        account_hash: AccountHash,
-        unbonding_purses: Vec<UnbondingPurse>,
-    ) -> Result<(), Error> {
-        let unbond_key = Key::Unbond(account_hash);
-        if unbonding_purses.is_empty() {
-            self.context.prune_gs_unsafe(unbond_key);
-            Ok(())
-        } else {
+    fn write_unbonds(&mut self, unbonds: Vec<Unbond>) -> Result<(), Error> {
+        for unbond in unbonds {
+            let unbond_key = unbond.bid_addr().into();
+            let bid_kind = BidKind::Unbond(Box::new(unbond));
             self.context
-                .metered_write_gs_unsafe(unbond_key, StoredValue::Unbonding(unbonding_purses))
+                .metered_write_gs_unsafe(unbond_key, StoredValue::BidKind(bid_kind))
                 .map_err(|exec_error| {
                     error!("StorageProvider::write_unbonds: {:?}", exec_error);
                     <Option<Error>>::from(exec_error).unwrap_or(Error::Storage)
                 })
         }
+        Ok(())
     }
 
     fn record_era_info(&mut self, era_info: EraInfo) -> Result<(), Error> {
@@ -209,7 +220,7 @@ where
                 error!("RuntimeProvider::used_reservation_count {:?}", exec_error);
                 <Option<Error>>::from(exec_error).unwrap_or(Error::Storage)
             })?;
-        let delegator_account_hashes: Vec<AccountHash> = delegator_keys
+        let delegator_account_hashes: Vec<BidAddrDelegator> = delegator_keys
             .into_iter()
             .filter_map(|key| {
                 if let Key::BidAddr(BidAddr::Delegator { delegator, .. }) = key {
@@ -261,65 +272,57 @@ impl<'a, R> MintProvider for Runtime<'a, R>
 where
     R: StateReader<Key, StoredValue, Error = GlobalStateError>,
 {
-    fn unbond(&mut self, unbonding_purse: &UnbondingPurse) -> Result<(), Error> {
-        let account_hash = AccountHash::from_public_key(
-            unbonding_purse.unbonder_public_key(),
-            cryptography::blake2b,
-        );
+    fn unbond(&mut self, unbond: &Unbond) -> Result<(), Error> {
+        let (maybe_account_hash, target) =
+            match unbond.unbonder_identity().maybe_account_hash() {
+                Some(account_hash) => {
+                    match self.context.read_gs(&Key::Account(account_hash)).map_err(
+                        |exec_error| {
+                            error!("MintProvider::unbond: {:?}", exec_error);
+                            <Option<Error>>::from(exec_error).unwrap_or(Error::Storage)
+                        },
+                    )? {
+                        Some(StoredValue::Account(account)) => {
+                            Ok((Some(account_hash), account.main_purse()))
+                        }
+                        Some(StoredValue::CLValue(cl_value)) => {
+                            let entity_key: Key = cl_value.into_t().map_err(|_| Error::CLValue)?;
+                            match self.context.read_gs_unsafe(&entity_key).map_err(
+                                |exec_error| {
+                                    error!("MintProvider::unbond: {:?}", exec_error);
+                                    <Option<Error>>::from(exec_error).unwrap_or(Error::Storage)
+                                },
+                            )? {
+                                Some(StoredValue::AddressableEntity(entity)) => {
+                                    Ok((Some(account_hash), entity.main_purse()))
+                                }
+                                Some(_cl_value) => Err(Error::CLValue),
+                                None => Err(Error::InvalidPublicKey),
+                            }
+                        }
+                        Some(_cl_value) => Err(Error::CLValue),
+                        None => Err(Error::InvalidPublicKey),
+                    }
+                }
+                None => match unbond.unbonder_identity().maybe_source_purse_uref() {
+                    Some(source_purse_uref_addr) => Ok((
+                        None,
+                        URef::new(source_purse_uref_addr, AccessRights::READ_ADD_WRITE),
+                    )),
+                    None => Err(Error::Unbonding),
+                },
+            }?;
 
-        let maybe_value = self
-            .context
-            .read_gs_unsafe(&Key::Account(account_hash))
-            .map_err(|exec_error| {
-                error!("MintProvider::unbond: {:?}", exec_error);
-                <Option<Error>>::from(exec_error).unwrap_or(Error::Storage)
-            })?;
-
-        let contract_key: Key = match maybe_value {
-            Some(StoredValue::Account(account)) => {
-                self.mint_transfer_direct(
-                    Some(account_hash),
-                    *unbonding_purse.bonding_purse(),
-                    account.main_purse(),
-                    *unbonding_purse.amount(),
-                    None,
-                )
-                .map_err(|_| Error::Transfer)?
-                .map_err(|_| Error::Transfer)?;
-                return Ok(());
-            }
-            Some(StoredValue::CLValue(cl_value)) => {
-                let contract_key: Key = cl_value.into_t().map_err(|_| Error::CLValue)?;
-                contract_key
-            }
-            Some(_cl_value) => return Err(Error::CLValue),
-            None => return Err(Error::InvalidPublicKey),
-        };
-
-        let maybe_value = self
-            .context
-            .read_gs_unsafe(&contract_key)
-            .map_err(|exec_error| {
-                error!("MintProvider::unbond: {:?}", exec_error);
-                <Option<Error>>::from(exec_error).unwrap_or(Error::Storage)
-            })?;
-
-        match maybe_value {
-            Some(StoredValue::AddressableEntity(contract)) => {
-                self.mint_transfer_direct(
-                    Some(account_hash),
-                    *unbonding_purse.bonding_purse(),
-                    contract.main_purse(),
-                    *unbonding_purse.amount(),
-                    None,
-                )
-                .map_err(|_| Error::Transfer)?
-                .map_err(|_| Error::Transfer)?;
-                Ok(())
-            }
-            Some(_cl_value) => Err(Error::CLValue),
-            None => Err(Error::InvalidPublicKey),
-        }
+        self.mint_transfer_direct(
+            maybe_account_hash,
+            *unbond.bonding_purse(),
+            target,
+            *unbond.amount(),
+            None,
+        )
+        .map_err(|_| Error::Transfer)?
+        .map_err(|_| Error::Transfer)?;
+        return Ok(());
     }
 
     /// Allows optimized auction and mint interaction.

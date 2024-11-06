@@ -1,8 +1,9 @@
 use alloc::{collections::BTreeMap, vec::Vec};
 
 use crate::{
+    account::AccountHash,
     bytesrepr::{self, FromBytes, ToBytes},
-    system::auction::{Bid, DelegationRate},
+    system::auction::{Bid, BidAddrDelegator, DelegationRate},
     CLType, CLTyped, PublicKey, U512,
 };
 
@@ -105,7 +106,9 @@ impl From<&Bid> for SeigniorageRecipientV1 {
         let delegator_stake = bid
             .delegators()
             .iter()
-            .map(|(public_key, delegator)| (public_key.clone(), delegator.staked_amount()))
+            .map(|(bid_addr_delegator, delegator_kind)| {
+                (bid_addr_delegator.clone(), delegator_kind.staked_amount())
+            })
             .collect();
         Self {
             stake: *bid.staked_amount(),
@@ -123,9 +126,9 @@ pub struct SeigniorageRecipientV2 {
     /// Delegation rate of a seigniorage recipient.
     delegation_rate: DelegationRate,
     /// Delegators and their bids.
-    delegator_stake: BTreeMap<PublicKey, U512>,
+    delegator_stake: BTreeMap<BidAddrDelegator, U512>,
     /// Delegation rates for reserved slots
-    reservation_delegation_rates: BTreeMap<PublicKey, DelegationRate>,
+    reservation_delegation_rates: BTreeMap<BidAddrDelegator, DelegationRate>,
 }
 
 impl SeigniorageRecipientV2 {
@@ -133,8 +136,8 @@ impl SeigniorageRecipientV2 {
     pub fn new(
         stake: U512,
         delegation_rate: DelegationRate,
-        delegator_stake: BTreeMap<PublicKey, U512>,
-        reservation_delegation_rates: BTreeMap<PublicKey, DelegationRate>,
+        delegator_stake: BTreeMap<BidAddrDelegator, U512>,
+        reservation_delegation_rates: BTreeMap<BidAddrDelegator, DelegationRate>,
     ) -> Self {
         Self {
             stake,
@@ -155,7 +158,7 @@ impl SeigniorageRecipientV2 {
     }
 
     /// Returns delegators of the provided recipient and their stake
-    pub fn delegator_stake(&self) -> &BTreeMap<PublicKey, U512> {
+    pub fn delegator_stake(&self) -> &BTreeMap<BidAddrDelegator, U512> {
         &self.delegator_stake
     }
 
@@ -174,7 +177,7 @@ impl SeigniorageRecipientV2 {
     }
 
     /// Returns delegation rates for reservations of the provided recipient
-    pub fn reservation_delegation_rates(&self) -> &BTreeMap<PublicKey, DelegationRate> {
+    pub fn reservation_delegation_rates(&self) -> &BTreeMap<BidAddrDelegator, DelegationRate> {
         &self.reservation_delegation_rates
     }
 }
@@ -226,7 +229,12 @@ impl From<&Bid> for SeigniorageRecipientV2 {
         let delegator_stake = bid
             .delegators()
             .iter()
-            .map(|(public_key, delegator)| (public_key.clone(), delegator.staked_amount()))
+            .map(|(public_key, delegator)| {
+                (
+                    BidAddrDelegator::Account(AccountHash::from(&public_key.clone())),
+                    delegator.staked_amount(),
+                )
+            })
             .collect();
         Self {
             stake: *bid.staked_amount(),
@@ -239,10 +247,14 @@ impl From<&Bid> for SeigniorageRecipientV2 {
 
 impl From<SeigniorageRecipientV1> for SeigniorageRecipientV2 {
     fn from(snapshot: SeigniorageRecipientV1) -> Self {
+        let mut delegator_stakes = BTreeMap::new();
+        for (k, v) in snapshot.delegator_stake {
+            delegator_stakes.insert(BidAddrDelegator::Account(AccountHash::from(&k)), v);
+        }
         Self {
             stake: snapshot.stake,
             delegation_rate: snapshot.delegation_rate,
-            delegator_stake: snapshot.delegator_stake,
+            delegator_stake: delegator_stakes,
             reservation_delegation_rates: Default::default(),
         }
     }
@@ -273,10 +285,16 @@ impl SeigniorageRecipient {
     }
 
     /// Returns delegators of the provided recipient and their stake
-    pub fn delegator_stake(&self) -> &BTreeMap<PublicKey, U512> {
+    pub fn delegator_stake(&self) -> BTreeMap<BidAddrDelegator, U512> {
         match self {
-            Self::V1(recipient) => &recipient.delegator_stake,
-            Self::V2(recipient) => &recipient.delegator_stake,
+            Self::V1(recipient) => {
+                let mut delegators = BTreeMap::new();
+                for (k, v) in &recipient.delegator_stake {
+                    delegators.insert(BidAddrDelegator::Account(AccountHash::from(k)), *v);
+                }
+                delegators
+            }
+            Self::V2(recipient) => recipient.delegator_stake.clone(),
         }
     }
 
@@ -297,7 +315,9 @@ impl SeigniorageRecipient {
     }
 
     /// Returns delegation rates for reservations of the provided recipient
-    pub fn reservation_delegation_rates(&self) -> Option<&BTreeMap<PublicKey, DelegationRate>> {
+    pub fn reservation_delegation_rates(
+        &self,
+    ) -> Option<&BTreeMap<BidAddrDelegator, DelegationRate>> {
         match self {
             Self::V1(_recipient) => None,
             Self::V2(recipient) => Some(&recipient.reservation_delegation_rates),
@@ -312,8 +332,9 @@ mod tests {
 
     use super::SeigniorageRecipientV2;
     use crate::{
+        account::AccountHash,
         bytesrepr,
-        system::auction::{DelegationRate, SeigniorageRecipientV1},
+        system::auction::{BidAddrDelegator, DelegationRate, SeigniorageRecipientV1},
         PublicKey, SecretKey, U512,
     };
 
@@ -322,22 +343,25 @@ mod tests {
         let delegator_1_key = PublicKey::from(
             &SecretKey::ed25519_from_bytes([42; SecretKey::ED25519_LENGTH]).unwrap(),
         );
+        let delegator_bid_addr_1 = BidAddrDelegator::Account(AccountHash::from(delegator_1_key));
         let delegator_2_key = PublicKey::from(
             &SecretKey::ed25519_from_bytes([43; SecretKey::ED25519_LENGTH]).unwrap(),
         );
+        let delegator_bid_addr_2 = BidAddrDelegator::Account(AccountHash::from(delegator_2_key));
         let delegator_3_key = PublicKey::from(
             &SecretKey::ed25519_from_bytes([44; SecretKey::ED25519_LENGTH]).unwrap(),
         );
+        let delegator_bid_addr_3 = BidAddrDelegator::Account(AccountHash::from(delegator_3_key));
         let seigniorage_recipient = SeigniorageRecipientV2 {
             stake: U512::max_value(),
             delegation_rate: DelegationRate::MAX,
             delegator_stake: BTreeMap::from_iter(vec![
-                (delegator_1_key.clone(), U512::max_value()),
-                (delegator_2_key, U512::max_value()),
-                (delegator_3_key, U512::zero()),
+                (delegator_bid_addr_1.clone(), U512::max_value()),
+                (delegator_bid_addr_2, U512::max_value()),
+                (delegator_bid_addr_3, U512::zero()),
             ]),
             reservation_delegation_rates: BTreeMap::from_iter(vec![(
-                delegator_1_key,
+                delegator_bid_addr_1,
                 DelegationRate::MIN,
             )]),
         };
@@ -373,22 +397,25 @@ mod tests {
         let delegator_1_key = PublicKey::from(
             &SecretKey::ed25519_from_bytes([42; SecretKey::ED25519_LENGTH]).unwrap(),
         );
+        let delegator_bid_addr_1 = BidAddrDelegator::Account(AccountHash::from(delegator_1_key));
         let delegator_2_key = PublicKey::from(
             &SecretKey::ed25519_from_bytes([43; SecretKey::ED25519_LENGTH]).unwrap(),
         );
+        let delegator_bid_addr_2 = BidAddrDelegator::Account(AccountHash::from(delegator_2_key));
         let delegator_3_key = PublicKey::from(
             &SecretKey::ed25519_from_bytes([44; SecretKey::ED25519_LENGTH]).unwrap(),
         );
+        let delegator_bid_addr_3 = BidAddrDelegator::Account(AccountHash::from(delegator_3_key));
         let seigniorage_recipient = SeigniorageRecipientV2 {
             stake: U512::max_value(),
             delegation_rate: DelegationRate::MAX,
             delegator_stake: BTreeMap::from_iter(vec![
-                (delegator_1_key.clone(), U512::max_value()),
-                (delegator_2_key, U512::max_value()),
-                (delegator_3_key, U512::zero()),
+                (delegator_bid_addr_1.clone(), U512::max_value()),
+                (delegator_bid_addr_2, U512::max_value()),
+                (delegator_bid_addr_3, U512::zero()),
             ]),
             reservation_delegation_rates: BTreeMap::from_iter(vec![(
-                delegator_1_key,
+                delegator_bid_addr_1,
                 DelegationRate::MIN,
             )]),
         };
@@ -400,19 +427,22 @@ mod tests {
         let delegator_1_key = PublicKey::from(
             &SecretKey::ed25519_from_bytes([42; SecretKey::ED25519_LENGTH]).unwrap(),
         );
+        let delegator_bid_addr_1 = BidAddrDelegator::Account(AccountHash::from(delegator_1_key));
         let delegator_2_key = PublicKey::from(
             &SecretKey::ed25519_from_bytes([43; SecretKey::ED25519_LENGTH]).unwrap(),
         );
+        let delegator_bid_addr_2 = BidAddrDelegator::Account(AccountHash::from(delegator_2_key));
         let delegator_3_key = PublicKey::from(
             &SecretKey::ed25519_from_bytes([44; SecretKey::ED25519_LENGTH]).unwrap(),
         );
+        let delegator_bid_addr_3 = BidAddrDelegator::Account(AccountHash::from(delegator_3_key));
         let seigniorage_recipient = SeigniorageRecipientV2 {
             stake: U512::max_value(),
-            delegation_rate: DelegationRate::max_value(),
+            delegation_rate: DelegationRate::MAX,
             delegator_stake: BTreeMap::from_iter(vec![
-                (delegator_1_key, U512::max_value()),
-                (delegator_2_key, U512::max_value()),
-                (delegator_3_key, U512::max_value()),
+                (delegator_bid_addr_1.clone(), U512::max_value()),
+                (delegator_bid_addr_2, U512::max_value()),
+                (delegator_bid_addr_3, U512::max_value()),
             ]),
             reservation_delegation_rates: BTreeMap::new(),
         };

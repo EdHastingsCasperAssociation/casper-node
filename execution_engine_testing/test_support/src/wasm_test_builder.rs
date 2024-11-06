@@ -59,7 +59,7 @@ use casper_types::{
     runtime_args,
     system::{
         auction::{
-            BidKind, EraValidators, UnbondingPurses, ValidatorWeights, WithdrawPurses,
+            BidKind, EraValidators, Unbonds, ValidatorWeights, WithdrawPurses,
             ARG_ERA_END_TIMESTAMP_MILLIS, ARG_EVICTED_VALIDATORS, AUCTION_DELAY_KEY, ERA_ID_KEY,
             METHOD_RUN_AUCTION, UNBONDING_DELAY_KEY,
         },
@@ -1743,8 +1743,8 @@ where
             .expect("should have named keys")
     }
 
-    /// Gets [`UnbondingPurses`].
-    pub fn get_unbonds(&mut self) -> UnbondingPurses {
+    /// Gets [`Unbonds`].
+    pub fn get_unbonds(&mut self) -> Unbonds {
         let state_root_hash = self.get_post_state_hash();
 
         let tracking_copy = self
