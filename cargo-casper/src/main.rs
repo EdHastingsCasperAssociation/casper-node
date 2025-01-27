@@ -1,4 +1,5 @@
 use anyhow::{bail, Context};
+use tempfile::TempDir;
 
 use std::{ffi::c_void, fs, path::PathBuf, ptr::NonNull};
 
@@ -17,7 +18,7 @@ pub enum Command {
         features: clap_cargo::Features,
     },
 }
-// ...
+
 #[derive(Debug, clap::Parser)]
 struct Cli {
     #[command(subcommand)]
@@ -41,85 +42,133 @@ unsafe extern "C" fn load_entrypoints_cb(
     ctx.extend_from_slice(slice);
 }
 
+struct Compilation<'a> {
+    workspace: &'a clap_cargo::Workspace,
+    manifest: &'a clap_cargo::Manifest,
+    features: &'a clap_cargo::Features
+}
+
+struct CompilationResults {
+    artifacts: Vec<PathBuf>,
+}
+
+impl<'a> Compilation<'a> {
+    pub fn new(
+        workspace: &'a clap_cargo::Workspace,
+        manifest: &'a clap_cargo::Manifest,
+        features: &'a clap_cargo::Features
+    ) -> Self {
+        Self {
+            workspace,
+            manifest,
+            features
+        }
+    }
+
+    pub fn build<T: IntoIterator<Item = String>>(
+        &self,
+        target: &'static str,
+        extra_features: T
+    ) -> Result<CompilationResults, anyhow::Error> {
+        let tempdir = TempDir::new()
+            .with_context(|| "Failed to create temporary directory")?;
+
+        let package_name = self.workspace.package.first()
+            .with_context(|| "The workspace doesn't contain a package definition")?;
+
+        let mut features = self.features.clone();
+        features.features.extend(extra_features);
+
+        let features_str = features.features.join(",");
+
+        let mut args = vec!["build", "-p", package_name.as_str()];
+        args.extend(["--target", target]);
+        args.extend(["--features", &features_str, "--lib", "--release"]);
+        args.extend([
+            "--target-dir",
+            &tempdir.path().as_os_str().to_str().expect("invalid path"),
+        ]);
+
+        eprintln!("Running command {:?}", args);
+        let mut output = std::process::Command::new("cargo")
+            .args(&args)
+            .spawn()
+            .with_context(|| "Failed to execute command")?;
+
+        let exit_status = output
+            .wait()
+            .with_context(|| "Failed to wait on child")?;
+
+        if !exit_status.success() {
+            eprintln!("Command executed with failing error code");
+            std::process::exit(exit_status.code().unwrap_or(1));
+        }
+
+        let artifact_dir = tempdir.path().join(target).join("release");
+
+        let artifacts: Vec<_> = fs::read_dir(&artifact_dir)
+            .with_context(|| "Artifact read directory failure")?
+            .into_iter()
+            .filter_map(|dir_entry| {
+                let dir_entry = dir_entry.unwrap();
+                let path = dir_entry.path();
+                if path.is_file()
+                    && dbg!(&path)
+                        .extension()?
+                        .to_str()
+                        .expect("valid string")
+                        .ends_with(&std::env::consts::DLL_SUFFIX[1..])
+                {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if artifacts.len() != 1 {
+            bail!("Expected exactly one build artifact: {:?}", artifacts);
+        }
+
+        Ok(CompilationResults {
+            artifacts
+        })
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        // TODO: This is called *Get*Schema, but on top of that, it also
+        // produces a production-ready contract with said schema embedded...
+        //
+        // I'd consider either changing the name of this to something more fitting
+        // or extracting the creation of schema-embedded prod contracts someplace
+        // else entirely (eg. BuildSchema with an optional --embedded flag sounds more appropriate).
         Command::GetSchema {
             output: output_path,
-            manifest: _,
+            manifest,
             workspace,
-            mut features,
+            features,
         } => {
-            //
-            // Stage 1: compile contract package to a native library with extra code that will
+            // Stage 1: Compile contract package to a native library with extra code that will
             // produce ABI information including entrypoints, types, etc.
-            //
-            let tempdir = tempfile::TempDir::new().expect("Failed to create tempdir");
+            let compilation = Compilation::new(&workspace, &manifest, &features);
+            let build_result = compilation.build(
+                env!("TARGET"), [
+                    "casper-sdk/__abi_generator".to_string(),
+                    "casper-macros/__abi_generator".to_string(),
+                ]
+            ).with_context(|| "ABI-rich wasm compilation failure")?;
 
-            let target_platform = env!("TARGET");
-
-            let package_name = workspace.package.first().expect("no package");
-
-            let extra_features = [
-                "casper-sdk/__abi_generator".to_string(),
-                "casper-macros/__abi_generator".to_string(),
-            ];
-            features.features.extend(extra_features);
-
-            let features_str = features.features.join(",");
-
-            let mut args = vec!["build", "-p", package_name.as_str()];
-
-            args.extend(["--target", target_platform]);
-            args.extend(["--features", &features_str, "--lib", "--release"]);
-            args.extend([
-                "--target-dir",
-                &tempdir.path().as_os_str().to_str().expect("invalid path"),
-            ]);
-            eprintln!("Running command {:?}", args);
-
-            let mut output = std::process::Command::new("cargo")
-                .args(&args)
-                .spawn()
-                .expect("Failed to execute command");
-            let exit_status = output.wait().expect("Failed to wait on child");
-            if !exit_status.success() {
-                eprintln!("Command executed with failing error code");
-                std::process::exit(exit_status.code().unwrap_or(1));
-            }
-
-            let artifact_dir = tempdir.path().join(target_platform).join("release");
-
-            let artifacts: Vec<_> = fs::read_dir(&artifact_dir)
-                .with_context(|| "Read directory")?
-                .into_iter()
-                .filter_map(|dir_entry| {
-                    let dir_entry = dir_entry.unwrap();
-                    let path = dir_entry.path();
-                    if path.is_file()
-                        && dbg!(&path)
-                            .extension()?
-                            .to_str()
-                            .expect("valid string")
-                            .ends_with(&std::env::consts::DLL_SUFFIX[1..])
-                    {
-                        Some(path)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            if artifacts.len() != 1 {
-                bail!("Expected exactly one build artifact: {:?}", artifacts);
-            }
-
-            let artifact_path = artifacts.into_iter().next().expect("artifact");
+            // Stage 2: Extract ABI information from the built contract
+            let artifact_path = build_result.artifacts.into_iter().next().expect("artifact");
 
             let lib = unsafe { libloading::Library::new(&artifact_path).unwrap() };
 
             let load_entrypoints: libloading::Symbol<CasperLoadEntrypoints> =
                 unsafe { lib.get(b"__cargo_casper_load_entrypoints").unwrap() };
+
             let collect_abi: libloading::Symbol<CollectABI> =
                 unsafe { lib.get(b"__cargo_casper_collect_abi").unwrap() };
 
@@ -139,6 +188,7 @@ fn main() -> anyhow::Result<()> {
                 defs
             };
 
+            // Stage 3: Construct a schema object from the extracted information
             // TODO: Move schema outside sdk to avoid importing unnecessary deps into wasm build
 
             let schema = casper_sdk::schema::Schema {
@@ -159,21 +209,23 @@ fn main() -> anyhow::Result<()> {
                 serde_json::to_writer_pretty(std::io::stdout(), &schema)?;
             }
 
-            //
-            // Stage 2: Construct a schema object from the extracted information
-            //
-
-            // Stage 3: Build the contract package again, but now using wasm32-unknown-unknown
+            // Stage 4: Build the contract package again, but now using wasm32-unknown-unknown
             // target without extra feature flags - this is the production contract wasm file.
-            // Stage 3a: Optionally (but by default) create an entrypoint in the wasm that will have
+            let build_result = compilation.build("wasm32-unknown-unknown", [])
+                .with_context(|| "ABI-rich wasm compilation failure")?;
+            
+            // Stage 4a: Optionally (but by default) create an entrypoint in the wasm that will have
             // embedded schema JSON file for discoverability (aka internal schema).
-            // Stage 3b: Run wasm optimizations passes that will shrink the size of the wasm.
 
-            //
-            // Stage 4: Update external schema file by adding wasm hash from Stage 3.
-            //
+            // Stage 5: Run wasm optimizations passes that will shrink the size of the wasm.
+            
 
-            // Stage 5: Report all paths
+            // Stage 6: Update external schema file by adding wasm hash from Stage 4.
+            let artifact: &PathBuf = build_result.artifacts.get(0).unwrap();
+            
+
+            // Stage 7: Report all paths
+
         }
     }
     Ok(())
