@@ -10,7 +10,7 @@ use serde_map_to_array::{BTreeMapToArray, KeyValueJsonSchema, KeyValueLabels};
 use crate::{crypto, Block, BlockSignatures, BlockV2, PublicKey, SecretKey, Signature};
 
 #[cfg(feature = "json-schema")]
-static JSON_SIGNED_BLOCK: Lazy<JsonBlockWithSignatures> = Lazy::new(|| {
+static JSON_BLOCK_WITH_SIGNATURES: Lazy<JsonBlockWithSignatures> = Lazy::new(|| {
     let block = BlockV2::example().clone();
     let secret_key = SecretKey::example();
     let public_key = PublicKey::from(secret_key);
@@ -49,7 +49,7 @@ impl JsonBlockWithSignatures {
     // This method is not intended to be used by third party crates.
     #[doc(hidden)]
     pub fn example() -> &'static Self {
-        &JSON_SIGNED_BLOCK
+        &JSON_BLOCK_WITH_SIGNATURES
     }
 }
 struct BlockProofLabels;

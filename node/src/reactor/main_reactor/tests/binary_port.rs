@@ -26,12 +26,12 @@ use casper_types::{
     system::auction::DelegatorKind,
     testing::TestRng,
     Account, AddressableEntity, AvailableBlockRange, Block, BlockHash, BlockHeader,
-    BlockIdentifier, BlockSynchronizerStatus, ByteCode, ByteCodeAddr, ByteCodeHash, ByteCodeKind,
-    CLValue, CLValueDictionary, ChainspecRawBytes, Contract, ContractRuntimeTag, ContractWasm,
-    ContractWasmHash, DictionaryAddr, Digest, EntityAddr, EntityKind, EntityVersions,
-    GlobalStateIdentifier, Key, KeyTag, NextUpgrade, Package, PackageAddr, PackageHash, Peers,
-    ProtocolVersion, PublicKey, Rewards, SecretKey, SignedBlock, StoredValue, Transaction,
-    Transfer, URef, U512,
+    BlockIdentifier, BlockSynchronizerStatus, BlockWithSignatures, ByteCode, ByteCodeAddr,
+    ByteCodeHash, ByteCodeKind, CLValue, CLValueDictionary, ChainspecRawBytes, Contract,
+    ContractRuntimeTag, ContractWasm, ContractWasmHash, DictionaryAddr, Digest, EntityAddr,
+    EntityKind, EntityVersions, GlobalStateIdentifier, Key, KeyTag, NextUpgrade, Package,
+    PackageAddr, PackageHash, Peers, ProtocolVersion, PublicKey, Rewards, SecretKey, StoredValue,
+    Transaction, Transfer, URef, U512,
 };
 use futures::{SinkExt, StreamExt};
 use rand::Rng;
@@ -419,7 +419,7 @@ async fn binary_port_component_handles_all_requests() {
 
     let test_cases = &[
         block_header_info(*highest_block.hash()),
-        signed_block_info(*highest_block.hash()),
+        block_with_signatures_info(*highest_block.hash()),
         peers(),
         uptime(),
         last_progress(),
@@ -568,18 +568,20 @@ fn block_header_info(hash: BlockHash) -> TestCase {
     }
 }
 
-fn signed_block_info(hash: BlockHash) -> TestCase {
+fn block_with_signatures_info(hash: BlockHash) -> TestCase {
     TestCase {
-        name: "signed_block_info",
+        name: "block_with_signatures_info",
         request: BinaryRequest::Get(
-            InformationRequest::SignedBlock(Some(BlockIdentifier::Hash(hash)))
+            InformationRequest::BlockWithSignatures(Some(BlockIdentifier::Hash(hash)))
                 .try_into()
                 .expect("should convert"),
         ),
         asserter: Box::new(move |response| {
-            assert_response::<SignedBlock, _>(response, Some(ResponseType::SignedBlock), |header| {
-                *header.block().hash() == hash
-            })
+            assert_response::<BlockWithSignatures, _>(
+                response,
+                Some(ResponseType::BlockWithSignatures),
+                |header| *header.block().hash() == hash,
+            )
         }),
     }
 }

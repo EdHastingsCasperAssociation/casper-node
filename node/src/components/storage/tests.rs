@@ -1738,7 +1738,7 @@ fn should_hard_reset() {
 
         // Check signatures of deleted blocks can't be retrieved.
         for (index, block) in blocks.iter().enumerate() {
-            let result = storage.read_signed_block_by_hash(*block.hash(), false);
+            let result = storage.read_block_with_signatures_by_hash(*block.hash(), false);
             let should_get_sigs = index < blocks_per_era * reset_era;
             if should_get_sigs {
                 assert!(!result.unwrap().block_signatures().is_empty())
@@ -2727,7 +2727,7 @@ fn assert_block_exists_in_storage(
     if expect_exists {
         assert_eq!(
             storage
-                .read_signed_block_by_height(block_height, false)
+                .read_block_with_signatures_by_height(block_height, false)
                 .unwrap()
                 .block()
                 .hash(),
@@ -2735,7 +2735,7 @@ fn assert_block_exists_in_storage(
         );
         assert_eq!(
             storage
-                .read_signed_block_by_hash(*block_hash, only_from_available_block_range)
+                .read_block_with_signatures_by_hash(*block_hash, only_from_available_block_range)
                 .unwrap()
                 .block()
                 .height(),
@@ -2743,7 +2743,7 @@ fn assert_block_exists_in_storage(
         );
         assert_eq!(
             storage
-                .read_signed_block_by_height(block_height, false)
+                .read_block_with_signatures_by_height(block_height, false)
                 .unwrap()
                 .block()
                 .hash(),
@@ -2751,7 +2751,7 @@ fn assert_block_exists_in_storage(
         );
         assert_eq!(
             storage
-                .read_signed_block_by_height(block_height, only_from_available_block_range)
+                .read_block_with_signatures_by_height(block_height, only_from_available_block_range)
                 .unwrap()
                 .block()
                 .hash(),
@@ -2792,7 +2792,7 @@ fn assert_highest_block_in_storage(
     if only_from_available_block_range {
         assert_eq!(
             storage
-                .read_highest_signed_block(true)
+                .read_highest_block_with_signatures(true)
                 .unwrap()
                 .block()
                 .hash(),
@@ -2806,7 +2806,7 @@ fn assert_highest_block_in_storage(
     }
     assert_eq!(
         storage
-            .read_highest_signed_block(false)
+            .read_highest_block_with_signatures(false)
             .unwrap()
             .block()
             .hash(),

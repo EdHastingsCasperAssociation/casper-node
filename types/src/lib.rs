@@ -103,9 +103,9 @@ pub use block::{
     BlockGlobalAddrTag, BlockHash, BlockHashAndHeight, BlockHeader, BlockHeaderV1, BlockHeaderV2,
     BlockIdentifier, BlockSignatures, BlockSignaturesMergeError, BlockSignaturesV1,
     BlockSignaturesV2, BlockSyncStatus, BlockSynchronizerStatus, BlockV1, BlockV2,
-    BlockValidationError, ChainNameDigest, EraEnd, EraEndV1, EraEndV2, EraReport,
-    FinalitySignature, FinalitySignatureId, FinalitySignatureV1, FinalitySignatureV2,
-    RewardedSignatures, Rewards, SignedBlock, SignedBlockHeader, SignedBlockHeaderValidationError,
+    BlockValidationError, BlockWithSignatures, ChainNameDigest, EraEnd, EraEndV1, EraEndV2,
+    EraReport, FinalitySignature, FinalitySignatureId, FinalitySignatureV1, FinalitySignatureV2,
+    RewardedSignatures, Rewards, SignedBlockHeader, SignedBlockHeaderValidationError,
     SingleBlockRewardedSignatures,
 };
 #[cfg(any(all(feature = "std", feature = "testing"), test))]

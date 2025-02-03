@@ -11,8 +11,8 @@ use casper_types::{
     contracts::ContractPackage,
     execution::{ExecutionResult, ExecutionResultV1},
     AvailableBlockRange, BlockBody, BlockBodyV1, BlockHeader, BlockHeaderV1, BlockSignatures,
-    BlockSignaturesV1, BlockSynchronizerStatus, ChainspecRawBytes, Deploy, NextUpgrade, Package,
-    Peers, ProtocolVersion, SignedBlock, StoredValue, Transaction, Transfer,
+    BlockSignaturesV1, BlockSynchronizerStatus, BlockWithSignatures, ChainspecRawBytes, Deploy,
+    NextUpgrade, Package, Peers, ProtocolVersion, StoredValue, Transaction, Transfer,
 };
 
 use crate::{
@@ -64,7 +64,7 @@ pub enum ResponseType {
     /// Finalized approvals.
     FinalizedApprovals,
     /// Block with signatures.
-    SignedBlock,
+    BlockWithSignatures,
     /// Transaction with approvals and execution info.
     TransactionWithExecutionInfo,
     /// Peers.
@@ -175,7 +175,9 @@ impl TryFrom<u8> for ResponseType {
             x if x == ResponseType::FinalizedApprovals as u8 => {
                 Ok(ResponseType::FinalizedApprovals)
             }
-            x if x == ResponseType::SignedBlock as u8 => Ok(ResponseType::SignedBlock),
+            x if x == ResponseType::BlockWithSignatures as u8 => {
+                Ok(ResponseType::BlockWithSignatures)
+            }
             x if x == ResponseType::TransactionWithExecutionInfo as u8 => {
                 Ok(ResponseType::TransactionWithExecutionInfo)
             }
@@ -260,7 +262,7 @@ impl fmt::Display for ResponseType {
             ResponseType::Transfers => write!(f, "Transfers"),
             ResponseType::FinalizedDeployApprovals => write!(f, "FinalizedDeployApprovals"),
             ResponseType::FinalizedApprovals => write!(f, "FinalizedApprovals"),
-            ResponseType::SignedBlock => write!(f, "SignedBlock"),
+            ResponseType::BlockWithSignatures => write!(f, "BlockWithSignatures"),
             ResponseType::TransactionWithExecutionInfo => write!(f, "TransactionWithExecutionInfo"),
             ResponseType::Peers => write!(f, "Peers"),
             ResponseType::LastProgress => write!(f, "LastProgress"),
@@ -346,8 +348,8 @@ impl PayloadEntity for ExecutionResultV1 {
     const RESPONSE_TYPE: ResponseType = ResponseType::ExecutionResultV1;
 }
 
-impl PayloadEntity for SignedBlock {
-    const RESPONSE_TYPE: ResponseType = ResponseType::SignedBlock;
+impl PayloadEntity for BlockWithSignatures {
+    const RESPONSE_TYPE: ResponseType = ResponseType::BlockWithSignatures;
 }
 
 impl PayloadEntity for TransactionWithExecutionInfo {

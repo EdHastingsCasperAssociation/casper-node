@@ -39,9 +39,10 @@ use casper_types::{
     addressable_entity::NamedKeyAddr,
     bytesrepr::{self, FromBytes, ToBytes},
     contracts::{ContractHash, ContractPackage, ContractPackageHash},
-    BlockHeader, BlockIdentifier, ByteCode, ByteCodeAddr, ByteCodeHash, Chainspec, ContractWasm,
-    ContractWasmHash, Digest, EntityAddr, GlobalStateIdentifier, Key, Package, PackageAddr, Peers,
-    ProtocolVersion, Rewards, SignedBlock, StoredValue, TimeDiff, Transaction, URef,
+    BlockHeader, BlockIdentifier, BlockWithSignatures, ByteCode, ByteCodeAddr, ByteCodeHash,
+    Chainspec, ContractWasm, ContractWasmHash, Digest, EntityAddr, GlobalStateIdentifier, Key,
+    Package, PackageAddr, Peers, ProtocolVersion, Rewards, StoredValue, TimeDiff, Transaction,
+    URef,
 };
 use keep_alive_monitor::KeepAliveMonitor;
 use thiserror::Error as ThisError;
@@ -1067,7 +1068,7 @@ where
             let maybe_header = resolve_block_header(effect_builder, identifier).await;
             BinaryResponse::from_option(maybe_header, protocol_version)
         }
-        InformationRequest::SignedBlock(identifier) => {
+        InformationRequest::BlockWithSignatures(identifier) => {
             let Some(height) = resolve_block_height(effect_builder, identifier).await else {
                 return BinaryResponse::new_empty(protocol_version);
             };
@@ -1078,7 +1079,7 @@ where
                 return BinaryResponse::new_empty(protocol_version);
             };
             BinaryResponse::from_value(
-                SignedBlock::new(block.block, block.block_signatures),
+                BlockWithSignatures::new(block.block, block.block_signatures),
                 protocol_version,
             )
         }

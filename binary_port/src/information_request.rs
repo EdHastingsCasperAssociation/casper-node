@@ -19,8 +19,9 @@ use casper_types::{
 pub enum InformationRequest {
     /// Returns the block header by an identifier, no identifier indicates the latest block.
     BlockHeader(Option<BlockIdentifier>),
-    /// Returns the signed block by an identifier, no identifier indicates the latest block.
-    SignedBlock(Option<BlockIdentifier>),
+    /// Returns the block with signatures by an identifier, no identifier indicates the latest
+    /// block.
+    BlockWithSignatures(Option<BlockIdentifier>),
     /// Returns a transaction with approvals and execution info for a given hash.
     Transaction {
         /// Hash of the transaction to retrieve.
@@ -90,7 +91,9 @@ impl InformationRequest {
     pub fn tag(&self) -> InformationRequestTag {
         match self {
             InformationRequest::BlockHeader(_) => InformationRequestTag::BlockHeader,
-            InformationRequest::SignedBlock(_) => InformationRequestTag::SignedBlock,
+            InformationRequest::BlockWithSignatures(_) => {
+                InformationRequestTag::BlockWithSignatures
+            }
             InformationRequest::Transaction { .. } => InformationRequestTag::Transaction,
             InformationRequest::Peers => InformationRequestTag::Peers,
             InformationRequest::Uptime => InformationRequestTag::Uptime,
@@ -124,7 +127,7 @@ impl InformationRequest {
             InformationRequestTag::BlockHeader => InformationRequest::BlockHeader(
                 rng.gen::<bool>().then(|| BlockIdentifier::random(rng)),
             ),
-            InformationRequestTag::SignedBlock => InformationRequest::SignedBlock(
+            InformationRequestTag::BlockWithSignatures => InformationRequest::BlockWithSignatures(
                 rng.gen::<bool>().then(|| BlockIdentifier::random(rng)),
             ),
             InformationRequestTag::Transaction => InformationRequest::Transaction {
@@ -187,7 +190,7 @@ impl ToBytes for InformationRequest {
             InformationRequest::BlockHeader(block_identifier) => {
                 block_identifier.write_bytes(writer)
             }
-            InformationRequest::SignedBlock(block_identifier) => {
+            InformationRequest::BlockWithSignatures(block_identifier) => {
                 block_identifier.write_bytes(writer)
             }
             InformationRequest::Transaction {
@@ -245,7 +248,7 @@ impl ToBytes for InformationRequest {
             InformationRequest::BlockHeader(block_identifier) => {
                 block_identifier.serialized_length()
             }
-            InformationRequest::SignedBlock(block_identifier) => {
+            InformationRequest::BlockWithSignatures(block_identifier) => {
                 block_identifier.serialized_length()
             }
             InformationRequest::Transaction {
@@ -301,9 +304,12 @@ impl TryFrom<(InformationRequestTag, &[u8])> for InformationRequest {
                 let (block_identifier, remainder) = FromBytes::from_bytes(key_bytes)?;
                 (InformationRequest::BlockHeader(block_identifier), remainder)
             }
-            InformationRequestTag::SignedBlock => {
+            InformationRequestTag::BlockWithSignatures => {
                 let (block_identifier, remainder) = FromBytes::from_bytes(key_bytes)?;
-                (InformationRequest::SignedBlock(block_identifier), remainder)
+                (
+                    InformationRequest::BlockWithSignatures(block_identifier),
+                    remainder,
+                )
             }
             InformationRequestTag::Transaction => {
                 let (hash, remainder) = FromBytes::from_bytes(key_bytes)?;
@@ -406,8 +412,8 @@ impl TryFrom<InformationRequest> for GetRequest {
 pub enum InformationRequestTag {
     /// Block header request.
     BlockHeader = 0,
-    /// Signed block request.
-    SignedBlock = 1,
+    /// Block with signatures request.
+    BlockWithSignatures = 1,
     /// Transaction request.
     Transaction = 2,
     /// Peers request.
@@ -451,7 +457,7 @@ impl InformationRequestTag {
     pub(crate) fn random(rng: &mut TestRng) -> Self {
         match rng.gen_range(0..20) {
             0 => InformationRequestTag::BlockHeader,
-            1 => InformationRequestTag::SignedBlock,
+            1 => InformationRequestTag::BlockWithSignatures,
             2 => InformationRequestTag::Transaction,
             3 => InformationRequestTag::Peers,
             4 => InformationRequestTag::Uptime,
@@ -481,7 +487,7 @@ impl TryFrom<u16> for InformationRequestTag {
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(InformationRequestTag::BlockHeader),
-            1 => Ok(InformationRequestTag::SignedBlock),
+            1 => Ok(InformationRequestTag::BlockWithSignatures),
             2 => Ok(InformationRequestTag::Transaction),
             3 => Ok(InformationRequestTag::Peers),
             4 => Ok(InformationRequestTag::Uptime),

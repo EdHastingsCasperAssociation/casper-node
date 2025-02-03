@@ -14,15 +14,15 @@ use serde::{Deserialize, Serialize};
     any(feature = "std", feature = "json-schema", test),
     derive(Serialize, Deserialize)
 )]
-pub struct SignedBlock {
+pub struct BlockWithSignatures {
     /// Block.
     pub(crate) block: Block,
     // The signatures of the block.
     pub(crate) block_signatures: BlockSignatures,
 }
 
-impl SignedBlock {
-    /// Creates a new `SignedBlock`.
+impl BlockWithSignatures {
+    /// Creates a new `BlockWithSignatures`.
     pub fn new(block: Block, block_signatures: BlockSignatures) -> Self {
         Self {
             block,
@@ -46,15 +46,15 @@ impl SignedBlock {
     }
 }
 
-impl FromBytes for SignedBlock {
+impl FromBytes for BlockWithSignatures {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
         let (block, bytes) = FromBytes::from_bytes(bytes)?;
         let (block_signatures, bytes) = FromBytes::from_bytes(bytes)?;
-        Ok((SignedBlock::new(block, block_signatures), bytes))
+        Ok((BlockWithSignatures::new(block, block_signatures), bytes))
     }
 }
 
-impl ToBytes for SignedBlock {
+impl ToBytes for BlockWithSignatures {
     fn to_bytes(&self) -> Result<Vec<u8>, crate::bytesrepr::Error> {
         let mut buf = bytesrepr::allocate_buffer(self)?;
         self.write_bytes(&mut buf)?;
@@ -72,7 +72,7 @@ impl ToBytes for SignedBlock {
     }
 }
 
-impl Display for SignedBlock {
+impl Display for BlockWithSignatures {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
             f,

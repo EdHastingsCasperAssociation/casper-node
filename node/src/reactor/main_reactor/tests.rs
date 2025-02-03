@@ -863,7 +863,7 @@ impl TestFixture {
         let highest_block = runner
             .main_reactor()
             .storage
-            .read_highest_signed_block(true)
+            .read_highest_block_with_signatures(true)
             .expect("should have block")
             .into_inner()
             .0;

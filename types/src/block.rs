@@ -9,6 +9,7 @@ mod block_signatures;
 mod block_sync_status;
 mod block_v1;
 mod block_v2;
+mod block_with_signatures;
 mod chain_name_digest;
 mod era_end;
 mod finality_signature;
@@ -16,7 +17,6 @@ mod finality_signature_id;
 mod json_compatibility;
 mod rewarded_signatures;
 mod rewards;
-mod signed_block;
 mod signed_block_header;
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
 mod test_block_builder;
@@ -58,6 +58,7 @@ pub use block_signatures::{
 pub use block_sync_status::{BlockSyncStatus, BlockSynchronizerStatus};
 pub use block_v1::BlockV1;
 pub use block_v2::BlockV2;
+pub use block_with_signatures::BlockWithSignatures;
 pub use chain_name_digest::ChainNameDigest;
 pub use era_end::{EraEnd, EraEndV1, EraEndV2, EraReport};
 pub use finality_signature::{FinalitySignature, FinalitySignatureV1, FinalitySignatureV2};
@@ -66,7 +67,6 @@ pub use finality_signature_id::FinalitySignatureId;
 pub use json_compatibility::JsonBlockWithSignatures;
 pub use rewarded_signatures::{RewardedSignatures, SingleBlockRewardedSignatures};
 pub use rewards::Rewards;
-pub use signed_block::SignedBlock;
 pub use signed_block_header::{SignedBlockHeader, SignedBlockHeaderValidationError};
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
 pub use test_block_builder::{TestBlockBuilder, TestBlockV1Builder};

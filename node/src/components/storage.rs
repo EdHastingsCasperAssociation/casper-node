@@ -62,7 +62,7 @@ use std::{
 
 use casper_storage::DbRawBytesSpec;
 #[cfg(test)]
-use casper_types::SignedBlock;
+use casper_types::BlockWithSignatures;
 use casper_types::{
     bytesrepr::{FromBytes, ToBytes},
     execution::{execution_result_v1, ExecutionResult, ExecutionResultV1, ExecutionResultV2},
@@ -2265,11 +2265,11 @@ impl Storage {
             .expect("could not retrieve value from storage")
     }
 
-    pub(crate) fn read_signed_block_by_hash(
+    pub(crate) fn read_block_with_signatures_by_hash(
         &self,
         block_hash: BlockHash,
         only_from_available_block_range: bool,
-    ) -> Option<SignedBlock> {
+    ) -> Option<BlockWithSignatures> {
         let ro_txn = self
             .block_store
             .checkout_ro()
@@ -2297,14 +2297,14 @@ impl Storage {
             debug_assert!(block_signatures.is_verified().is_ok());
             return None;
         }
-        Some(SignedBlock::new(block, block_signatures))
+        Some(BlockWithSignatures::new(block, block_signatures))
     }
 
-    pub(crate) fn read_signed_block_by_height(
+    pub(crate) fn read_block_with_signatures_by_height(
         &self,
         height: u64,
         only_from_available_block_range: bool,
-    ) -> Option<SignedBlock> {
+    ) -> Option<BlockWithSignatures> {
         if !(self.should_return_block(height, only_from_available_block_range)) {
             return None;
         }
@@ -2318,13 +2318,13 @@ impl Storage {
             .read(*hash)
             .expect("should read block signatures")
             .unwrap_or_else(|| self.get_default_block_signatures(&block));
-        Some(SignedBlock::new(block, block_signatures))
+        Some(BlockWithSignatures::new(block, block_signatures))
     }
 
-    pub(crate) fn read_highest_signed_block(
+    pub(crate) fn read_highest_block_with_signatures(
         &self,
         only_from_available_block_range: bool,
-    ) -> Option<SignedBlock> {
+    ) -> Option<BlockWithSignatures> {
         let ro_txn = self
             .block_store
             .checkout_ro()
@@ -2340,7 +2340,7 @@ impl Storage {
             Some(signatures) => signatures,
             None => self.get_default_block_signatures(&highest_block),
         };
-        Some(SignedBlock::new(highest_block, block_signatures))
+        Some(BlockWithSignatures::new(highest_block, block_signatures))
     }
 
     pub(crate) fn read_execution_info(
