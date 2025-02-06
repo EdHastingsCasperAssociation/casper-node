@@ -14,7 +14,6 @@ use tracing::error;
 use casper_types::{
     crypto, BlockHash, BlockHeader, BlockHeaderWithSignatures,
     BlockHeaderWithSignaturesValidationError, BlockSignatures, Digest, EraId, ProtocolConfig,
-    ProtocolVersion,
 };
 
 use crate::{
