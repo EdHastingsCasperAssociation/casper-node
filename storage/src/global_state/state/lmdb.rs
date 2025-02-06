@@ -12,6 +12,7 @@ use casper_types::{
     Digest, Key, StoredValue,
 };
 
+use super::CommitError;
 use crate::{
     data_access_layer::{
         DataAccessLayer, FlushRequest, FlushResult, PutTrieRequest, PutTrieResult, TrieElement,
@@ -37,8 +38,6 @@ use crate::{
     },
     tracking_copy::TrackingCopy,
 };
-
-use super::CommitError;
 
 /// Global state implemented against LMDB as a backing data store.
 pub struct LmdbGlobalState {

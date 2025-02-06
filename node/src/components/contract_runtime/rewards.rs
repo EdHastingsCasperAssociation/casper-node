@@ -229,7 +229,7 @@ impl RewardsInfo {
                 {
                     upgraded_validators.clone()
                 } else {
-                    let request = EraValidatorsRequest::new(state_root_hash, protocol_version);
+                    let request = EraValidatorsRequest::new(state_root_hash);
                     let era_validators_result = data_access_layer.era_validators(request);
                     let msg = format!("{}", era_validators_result);
                     era_validators_result

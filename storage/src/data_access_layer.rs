@@ -12,6 +12,7 @@ pub mod auction;
 /// Balance provider.
 pub mod balance;
 mod balance_hold;
+mod balance_identifier_purse;
 /// Bids provider.
 pub mod bids;
 mod block_global;
@@ -62,6 +63,7 @@ pub use balance_hold::{
     BalanceHoldError, BalanceHoldKind, BalanceHoldMode, BalanceHoldRequest, BalanceHoldResult,
     InsufficientBalanceHandling,
 };
+pub use balance_identifier_purse::{BalanceIdentifierPurseRequest, BalanceIdentifierPurseResult};
 pub use bids::{BidsRequest, BidsResult};
 pub use block_global::{BlockGlobalKind, BlockGlobalRequest, BlockGlobalResult};
 pub use block_rewards::{BlockRewardsError, BlockRewardsRequest, BlockRewardsResult};

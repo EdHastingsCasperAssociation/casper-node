@@ -10,7 +10,7 @@ use num_rational::Ratio;
 /// Selects refund operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HandleRefundMode {
-    /// Burn.
+    /// This variant will cause the refund amount to be calculated and then burned.
     Burn {
         /// Refund limit.
         limit: U512,
@@ -25,7 +25,7 @@ pub enum HandleRefundMode {
         /// Refund ratio.
         ratio: Ratio<u64>,
     },
-    /// Refund.
+    /// This variant will cause the refund amount to be calculated and the refund to be executed.
     Refund {
         /// Refund initiator.
         initiator_addr: Box<InitiatorAddr>,
@@ -44,8 +44,10 @@ pub enum HandleRefundMode {
         /// Target for refund.
         target: Box<BalanceIdentifier>,
     },
-    /// Place a custom hold.
-    CustomHold {
+    /// This variant handles the edge case of custom payment plus no fee plus no refund.
+    /// This ultimately turns into a hold on the initiator, but it takes extra steps to get there
+    /// because the payment has already been fully processed up front and must first be unwound.
+    RefundNoFeeCustomPayment {
         /// Refund initiator.
         initiator_addr: Box<InitiatorAddr>,
         /// Refund limit.
@@ -55,8 +57,9 @@ pub enum HandleRefundMode {
         /// Refund gas price.
         gas_price: u8,
     },
-    /// Refund amount.
-    RefundAmount {
+    /// This variant only calculates and returns the refund amount. It does not
+    /// execute a refund.
+    CalculateAmount {
         /// Refund limit.
         limit: U512,
         /// Refund cost.
@@ -70,12 +73,12 @@ pub enum HandleRefundMode {
         /// Refund source.
         source: Box<BalanceIdentifier>,
     },
-    /// Set refund purse.
+    /// This variant will cause the refund purse tracked by handle_payment to be set.
     SetRefundPurse {
-        /// Target for refund.
+        /// Target for refund, which will receive any refunded token while set.
         target: Box<BalanceIdentifier>,
     },
-    /// Clear refund purse.
+    /// This variant will cause the refund purse tracked by handle_payment to be cleared.
     ClearRefundPurse,
 }
 
@@ -85,8 +88,8 @@ impl HandleRefundMode {
         match self {
             HandleRefundMode::Burn { .. }
             | HandleRefundMode::Refund { .. }
-            | HandleRefundMode::CustomHold { .. }
-            | HandleRefundMode::RefundAmount { .. } => Phase::FinalizePayment,
+            | HandleRefundMode::RefundNoFeeCustomPayment { .. }
+            | HandleRefundMode::CalculateAmount { .. } => Phase::FinalizePayment,
 
             HandleRefundMode::ClearRefundPurse | HandleRefundMode::SetRefundPurse { .. } => {
                 Phase::Payment

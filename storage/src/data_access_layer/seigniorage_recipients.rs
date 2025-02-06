@@ -1,33 +1,24 @@
 //! Support for querying seigniorage recipients.
 
 use crate::tracking_copy::TrackingCopyError;
-use casper_types::{system::auction::SeigniorageRecipientsSnapshot, Digest, ProtocolVersion};
+use casper_types::{system::auction::SeigniorageRecipientsSnapshot, Digest};
 use std::fmt::{Display, Formatter};
 
 /// Request for seigniorage recipients.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SeigniorageRecipientsRequest {
     state_hash: Digest,
-    protocol_version: ProtocolVersion,
 }
 
 impl SeigniorageRecipientsRequest {
     /// Constructs a new SeigniorageRecipientsRequest.
-    pub fn new(state_hash: Digest, protocol_version: ProtocolVersion) -> Self {
-        SeigniorageRecipientsRequest {
-            state_hash,
-            protocol_version,
-        }
+    pub fn new(state_hash: Digest) -> Self {
+        SeigniorageRecipientsRequest { state_hash }
     }
 
     /// Get the state hash.
     pub fn state_hash(&self) -> Digest {
         self.state_hash
-    }
-
-    /// Get the protocol version.
-    pub fn protocol_version(&self) -> ProtocolVersion {
-        self.protocol_version
     }
 }
 

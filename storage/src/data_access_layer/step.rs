@@ -212,7 +212,7 @@ pub enum StepResult {
         /// Effects of the step process.
         effects: Effects,
     },
-    /// Failed to upgrade protocol.
+    /// Failed to execute step.
     Failure(StepError),
 }
 

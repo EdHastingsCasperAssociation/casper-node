@@ -487,23 +487,25 @@ where
             <Option<Error>>::from(exec_error).unwrap_or(Error::MissingValue)
         })?;
         self.mint_read_base_round_reward(mint_hash)
-            .map_err(|exec_error| <Option<Error>>::from(exec_error).unwrap_or(Error::MissingValue))
+            .map_err(|exec_error| <Option<Error>>::from(exec_error).unwrap_or(Error::MintReward))
     }
 
     fn mint(&mut self, amount: U512) -> Result<URef, Error> {
-        let mint_hash = self
-            .get_mint_hash()
-            .map_err(|exec_error| <Option<Error>>::from(exec_error).unwrap_or(Error::MintReward))?;
+        let mint_hash = self.get_mint_hash().map_err(|exec_error| {
+            <Option<Error>>::from(exec_error).unwrap_or(Error::MissingValue)
+        })?;
         self.mint_mint(mint_hash, amount)
-            .map_err(|exec_error| <Option<Error>>::from(exec_error).unwrap_or(Error::MintReward))
+            .map_err(|exec_error| <Option<Error>>::from(exec_error).unwrap_or(Error::MintError))
     }
 
     fn reduce_total_supply(&mut self, amount: U512) -> Result<(), Error> {
-        let mint_hash = self
-            .get_mint_hash()
-            .map_err(|exec_error| <Option<Error>>::from(exec_error).unwrap_or(Error::MintReward))?;
+        let mint_hash = self.get_mint_hash().map_err(|exec_error| {
+            <Option<Error>>::from(exec_error).unwrap_or(Error::MissingValue)
+        })?;
         self.mint_reduce_total_supply(mint_hash, amount)
-            .map_err(|exec_error| <Option<Error>>::from(exec_error).unwrap_or(Error::MintReward))
+            .map_err(|exec_error| {
+                <Option<Error>>::from(exec_error).unwrap_or(Error::MintReduceTotalSupply)
+            })
     }
 }
 

@@ -76,7 +76,6 @@ pub struct RuntimeContext<'a, R> {
     gas_limit: Gas,
     gas_counter: Gas,
     address_generator: Rc<RefCell<AddressGenerator>>,
-    protocol_version: ProtocolVersion,
     phase: Phase,
     engine_config: EngineConfig,
     entry_point_type: EntryPointType,
@@ -112,7 +111,6 @@ where
         tracking_copy: Rc<RefCell<TrackingCopy<R>>>,
         engine_config: EngineConfig,
         block_info: BlockInfo,
-        protocol_version: ProtocolVersion,
         transaction_hash: TransactionHash,
         phase: Phase,
         args: RuntimeArgs,
@@ -143,7 +141,6 @@ where
             gas_limit,
             gas_counter,
             address_generator,
-            protocol_version,
             phase,
             engine_config,
             transfers,
@@ -173,7 +170,6 @@ where
         let engine_config = self.engine_config.clone();
 
         let block_info = self.block_info;
-        let protocol_version = self.protocol_version;
         let transaction_hash = self.transaction_hash;
         let phase = self.phase;
 
@@ -199,7 +195,6 @@ where
             gas_limit,
             gas_counter,
             address_generator,
-            protocol_version,
             phase,
             engine_config,
             transfers,
@@ -388,7 +383,7 @@ where
 
     /// Returns the protocol version.
     pub fn protocol_version(&self) -> ProtocolVersion {
-        self.protocol_version
+        self.block_info.protocol_version()
     }
 
     /// Returns the current phase.
@@ -862,7 +857,7 @@ where
             Ok(entity_addr) => key.is_addable(&entity_addr),
             Err(error) => {
                 error!(?error, "entity_key is unexpected key variant");
-                panic!("is_readable: entity_key is unexpected key variant");
+                panic!("is_addable: entity_key is unexpected key variant");
             }
         }
     }
@@ -873,7 +868,7 @@ where
             Ok(entity_addr) => key.is_writeable(&entity_addr),
             Err(error) => {
                 error!(?error, "entity_key is unexpected key variant");
-                panic!("is_readable: entity_key is unexpected key variant");
+                panic!("is_writeable: entity_key is unexpected key variant");
             }
         }
     }
@@ -1177,12 +1172,6 @@ where
             // Get the current entity record
             let entity = {
                 let mut entity: AddressableEntity = self.read_gs_typed(&context_key)?;
-                // enforce max keys limit
-                if entity.associated_keys().len()
-                    >= (self.engine_config.max_associated_keys() as usize)
-                {
-                    return Err(ExecError::AddKeyFailure(AddKeyFailure::MaxKeysLimit));
-                }
 
                 // Exit early in case of error without updating global state
                 entity
@@ -1199,12 +1188,6 @@ where
             // Take an account out of the global state
             let account = {
                 let mut account: Account = self.read_gs_typed(&context_key)?;
-
-                if account.associated_keys().len()
-                    >= (self.engine_config.max_associated_keys() as usize)
-                {
-                    return Err(ExecError::AddKeyFailure(AddKeyFailure::MaxKeysLimit));
-                }
 
                 // Exit early in case of error without updating global state
                 account

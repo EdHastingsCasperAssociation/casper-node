@@ -136,7 +136,6 @@ impl ExecutionEngineV1 {
             block_info,
             transaction_hash,
             gas_limit,
-            protocol_version,
             Rc::clone(&tc),
             phase,
             RuntimeStack::from_account_hash(
@@ -210,7 +209,6 @@ impl ExecutionEngineV1 {
             block_info,
             transaction_hash,
             gas_limit,
-            protocol_version,
             Rc::clone(&tc),
             phase,
             RuntimeStack::from_account_hash(

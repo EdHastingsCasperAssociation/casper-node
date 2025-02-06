@@ -383,6 +383,7 @@ impl ExecutorV2 {
                                     block_time,
                                     parent_block_hash,
                                     block_height,
+                                    self.execution_engine_v1.config().protocol_version(),
                                 );
 
                                 let entity_addr = EntityAddr::SmartContract(*smart_contract_addr);
@@ -459,8 +460,13 @@ impl ExecutorV2 {
                         (Bytes::from(wasm_bytes), Either::Left(entry_point.as_str()))
                     }
                     Some(StoredValue::Contract(_legacy_contract)) => {
-                        let block_info =
-                            BlockInfo::new(state_hash, block_time, parent_block_hash, block_height);
+                        let block_info = BlockInfo::new(
+                            state_hash,
+                            block_time,
+                            parent_block_hash,
+                            block_height,
+                            self.execution_engine_v1.config().protocol_version(),
+                        );
 
                         let entity_addr = EntityAddr::SmartContract(*smart_contract_addr);
 

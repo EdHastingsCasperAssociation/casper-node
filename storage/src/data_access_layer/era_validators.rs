@@ -1,33 +1,24 @@
 //! Support for querying era validators.
 
 use crate::tracking_copy::TrackingCopyError;
-use casper_types::{system::auction::EraValidators, Digest, ProtocolVersion};
+use casper_types::{system::auction::EraValidators, Digest};
 use std::fmt::{Display, Formatter};
 
 /// Request for era validators.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EraValidatorsRequest {
     state_hash: Digest,
-    protocol_version: ProtocolVersion,
 }
 
 impl EraValidatorsRequest {
     /// Constructs a new EraValidatorsRequest.
-    pub fn new(state_hash: Digest, protocol_version: ProtocolVersion) -> Self {
-        EraValidatorsRequest {
-            state_hash,
-            protocol_version,
-        }
+    pub fn new(state_hash: Digest) -> Self {
+        EraValidatorsRequest { state_hash }
     }
 
     /// Get the state hash.
     pub fn state_hash(&self) -> Digest {
         self.state_hash
-    }
-
-    /// Get the protocol version.
-    pub fn protocol_version(&self) -> ProtocolVersion {
-        self.protocol_version
     }
 }
 

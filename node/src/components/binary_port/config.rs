@@ -12,10 +12,26 @@ const DEFAULT_MAX_MESSAGE_SIZE: u32 = 4 * 1024 * 1024;
 const DEFAULT_MAX_CONNECTIONS: usize = 5;
 /// Default maximum number of requests per second.
 const DEFAULT_QPS_LIMIT: usize = 110;
-/// Default interval between connection keepalive checks.
-const DEFAULT_KEEPALIVE_CHECK_INTERVAL: &str = "10sec";
-/// Default amount of time to wait for activity on a connection before considering it stale.
-const DEFAULT_KEEPALIVE_NO_ACTIVITY_TIMEOUT: &str = "120sec";
+// Initial time given to a connection before it expires
+const DEFAULT_INITIAL_CONNECTION_LIFETIME: &str = "10 seconds";
+// Default amount of time which is given to a connection to extend it's lifetime when a valid
+// [`Command::Get(GetRequest::Record)`] is sent to the node
+const DEFAULT_GET_RECORD_REQUEST_TERMINATION_DELAY: &str = "0 seconds";
+// Default amount of time which is given to a connection to extend it's lifetime when a valid
+// [`Command::Get(GetRequest::Information)`] is sent to the node
+const DEFAULT_GET_INFORMATION_REQUEST_TERMINATION_DELAY: &str = "5 seconds";
+// Default amount of time which is given to a connection to extend it's lifetime when a valid
+// [`Command::Get(GetRequest::State)`] is sent to the node
+const DEFAULT_GET_STATE_REQUEST_TERMINATION_DELAY: &str = "0 seconds";
+// Default amount of time which is given to a connection to extend it's lifetime when a valid
+// [`Command::Get(GetRequest::Trie)`] is sent to the node
+const DEFAULT_GET_TRIE_REQUEST_TERMINATION_DELAY: &str = "0 seconds";
+// Default amount of time which is given to a connection to extend it's lifetime when a valid
+// [`Command::TryAcceptTransaction`] is sent to the node
+const DEFAULT_ACCEPT_TRANSACTION_REQUEST_TERMINATION_DELAY: &str = "24 seconds";
+// Default amount of time which is given to a connection to extend it's lifetime when a valid
+// [`Command::TrySpeculativeExec`] is sent to the node
+const DEFAULT_SPECULATIVE_EXEC_REQUEST_TERMINATION_DELAY: &str = "0 seconds";
 
 /// Binary port server configuration.
 #[derive(Clone, DataSize, Debug, Deserialize, Serialize)]
@@ -40,11 +56,26 @@ pub struct Config {
     pub max_connections: usize,
     /// Maximum number of requests per second.
     pub qps_limit: usize,
-    /// Time of interval between keepalive checks for a binary port connection.
-    pub keepalive_check_interval: TimeDiff,
-    /// Duration of time the keepalive mechanism waits for activity on a binary port connection
-    /// before considering it stale and closing it.
-    pub keepalive_no_activity_timeout: TimeDiff,
+    // Initial time given to a connection before it expires
+    pub initial_connection_lifetime: TimeDiff,
+    // The amount of time which is given to a connection to extend it's lifetime when a valid
+    // [`Command::Get(GetRequest::Record)`] is sent to the node
+    pub get_record_request_termination_delay: TimeDiff,
+    // The amount of time which is given to a connection to extend it's lifetime when a valid
+    // [`Command::Get(GetRequest::Information)`] is sent to the node
+    pub get_information_request_termination_delay: TimeDiff,
+    // The amount of time which is given to a connection to extend it's lifetime when a valid
+    // [`Command::Get(GetRequest::State)`] is sent to the node
+    pub get_state_request_termination_delay: TimeDiff,
+    // The amount of time which is given to a connection to extend it's lifetime when a valid
+    // [`Command::Get(GetRequest::Trie)`] is sent to the node
+    pub get_trie_request_termination_delay: TimeDiff,
+    // The amount of time which is given to a connection to extend it's lifetime when a valid
+    // [`Command::TryAcceptTransaction`] is sent to the node
+    pub accept_transaction_request_termination_delay: TimeDiff,
+    // The amount of time which is given to a connection to extend it's lifetime when a valid
+    // [`Command::TrySpeculativeExec`] is sent to the node
+    pub speculative_exec_request_termination_delay: TimeDiff,
 }
 
 impl Config {
@@ -59,9 +90,30 @@ impl Config {
             max_message_size_bytes: DEFAULT_MAX_MESSAGE_SIZE,
             max_connections: DEFAULT_MAX_CONNECTIONS,
             qps_limit: DEFAULT_QPS_LIMIT,
-            keepalive_check_interval: TimeDiff::from_str(DEFAULT_KEEPALIVE_CHECK_INTERVAL).unwrap(),
-            keepalive_no_activity_timeout: TimeDiff::from_str(
-                DEFAULT_KEEPALIVE_NO_ACTIVITY_TIMEOUT,
+            initial_connection_lifetime: TimeDiff::from_str(DEFAULT_INITIAL_CONNECTION_LIFETIME)
+                .unwrap(),
+            get_record_request_termination_delay: TimeDiff::from_str(
+                DEFAULT_GET_RECORD_REQUEST_TERMINATION_DELAY,
+            )
+            .unwrap(),
+            get_information_request_termination_delay: TimeDiff::from_str(
+                DEFAULT_GET_INFORMATION_REQUEST_TERMINATION_DELAY,
+            )
+            .unwrap(),
+            get_state_request_termination_delay: TimeDiff::from_str(
+                DEFAULT_GET_STATE_REQUEST_TERMINATION_DELAY,
+            )
+            .unwrap(),
+            get_trie_request_termination_delay: TimeDiff::from_str(
+                DEFAULT_GET_TRIE_REQUEST_TERMINATION_DELAY,
+            )
+            .unwrap(),
+            accept_transaction_request_termination_delay: TimeDiff::from_str(
+                DEFAULT_ACCEPT_TRANSACTION_REQUEST_TERMINATION_DELAY,
+            )
+            .unwrap(),
+            speculative_exec_request_termination_delay: TimeDiff::from_str(
+                DEFAULT_SPECULATIVE_EXEC_REQUEST_TERMINATION_DELAY,
             )
             .unwrap(),
         }

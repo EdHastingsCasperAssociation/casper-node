@@ -119,8 +119,6 @@ pub enum ResponseType {
     PackageWithProof,
     /// Addressable entity information.
     AddressableEntityInformation,
-    /// Response to KeepAliveRequest query
-    KeepAliveInformation,
 }
 
 impl ResponseType {
@@ -230,9 +228,6 @@ impl TryFrom<u8> for ResponseType {
             x if x == ResponseType::AddressableEntityInformation as u8 => {
                 Ok(ResponseType::AddressableEntityInformation)
             }
-            x if x == ResponseType::KeepAliveInformation as u8 => {
-                Ok(ResponseType::KeepAliveInformation)
-            }
             _ => Err(()),
         }
     }
@@ -294,9 +289,6 @@ impl fmt::Display for ResponseType {
             ResponseType::PackageWithProof => write!(f, "PackageWithProof"),
             ResponseType::AddressableEntityInformation => {
                 write!(f, "AddressableEntityInformation")
-            }
-            ResponseType::KeepAliveInformation => {
-                write!(f, "KeepAliveInformation")
             }
         }
     }

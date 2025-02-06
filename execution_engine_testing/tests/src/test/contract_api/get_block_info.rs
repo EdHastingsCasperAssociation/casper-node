@@ -1,7 +1,7 @@
 use casper_engine_test_support::{
     ExecuteRequestBuilder, LmdbWasmTestBuilder, DEFAULT_ACCOUNT_ADDR, LOCAL_GENESIS_REQUEST,
 };
-use casper_types::{bytesrepr::ToBytes, runtime_args, BlockHash};
+use casper_types::{bytesrepr::ToBytes, runtime_args, BlockHash, ProtocolVersion};
 
 const CONTRACT_GET_BLOCKINFO: &str = "get_blockinfo.wasm";
 const ARG_FIELD_IDX: &str = "field_idx";
@@ -109,4 +109,57 @@ fn should_run_get_state_hash() {
     .build();
 
     builder.exec(exec_request).expect_success().commit();
+}
+
+const FIELD_IDX_PROTOCOL_VERSION: u8 = 4;
+const ARG_KNOWN_PROTOCOL_VERSION: &str = "known_protocol_version";
+
+#[ignore]
+#[test]
+fn should_run_get_protocol_version() {
+    let mut builder = LmdbWasmTestBuilder::default();
+    builder.run_genesis(LOCAL_GENESIS_REQUEST.clone());
+
+    let protocol_version = ProtocolVersion::V2_0_0;
+    let protocol_version_bytes = protocol_version.to_bytes().expect("should_serialize");
+    let bytes = casper_types::bytesrepr::Bytes::from(protocol_version_bytes);
+
+    let exec_request = ExecuteRequestBuilder::standard(
+        *DEFAULT_ACCOUNT_ADDR,
+        CONTRACT_GET_BLOCKINFO,
+        runtime_args! {
+            ARG_FIELD_IDX => FIELD_IDX_PROTOCOL_VERSION,
+            ARG_KNOWN_PROTOCOL_VERSION => bytes
+        },
+    )
+    .build();
+
+    builder.exec(exec_request).expect_success().commit();
+}
+
+const FIELD_IDX_ADDRESSABLE_ENTITY: u8 = 5;
+const ARG_KNOWN_ADDRESSABLE_ENTITY: &str = "known_addressable_entity";
+
+#[ignore]
+#[test]
+fn should_run_get_addressable_entity() {
+    let addressable_entity: bool = false;
+    let addressable_entity_bytes = addressable_entity.to_bytes().expect("should_serialize");
+    let bytes = casper_types::bytesrepr::Bytes::from(addressable_entity_bytes);
+
+    let exec_request = ExecuteRequestBuilder::standard(
+        *DEFAULT_ACCOUNT_ADDR,
+        CONTRACT_GET_BLOCKINFO,
+        runtime_args! {
+            ARG_FIELD_IDX => FIELD_IDX_ADDRESSABLE_ENTITY,
+            ARG_KNOWN_ADDRESSABLE_ENTITY => bytes
+        },
+    )
+    .build();
+
+    LmdbWasmTestBuilder::default()
+        .run_genesis(LOCAL_GENESIS_REQUEST.clone())
+        .exec(exec_request)
+        .commit()
+        .expect_success();
 }

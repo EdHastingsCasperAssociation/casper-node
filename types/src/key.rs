@@ -76,6 +76,8 @@ const BID_ADDR_PREFIX: &str = "bid-addr-";
 const PACKAGE_PREFIX: &str = "package-";
 const BLOCK_GLOBAL_TIME_PREFIX: &str = "block-time-";
 const BLOCK_GLOBAL_MESSAGE_COUNT_PREFIX: &str = "block-message-count-";
+const BLOCK_GLOBAL_PROTOCOL_VERSION_PREFIX: &str = "block-protocol-version-";
+const BLOCK_GLOBAL_ADDRESSABLE_ENTITY_PREFIX: &str = "block-addressable-entity-";
 const STATE_PREFIX: &str = "state-";
 
 /// The number of bytes in a Blake2b hash
@@ -641,6 +643,8 @@ impl Key {
                 let prefix = match addr {
                     BlockGlobalAddr::BlockTime => BLOCK_GLOBAL_TIME_PREFIX,
                     BlockGlobalAddr::MessageCount => BLOCK_GLOBAL_MESSAGE_COUNT_PREFIX,
+                    BlockGlobalAddr::ProtocolVersion => BLOCK_GLOBAL_PROTOCOL_VERSION_PREFIX,
+                    BlockGlobalAddr::AddressableEntity => BLOCK_GLOBAL_ADDRESSABLE_ENTITY_PREFIX,
                 };
                 format!(
                     "{}{}",
@@ -936,6 +940,29 @@ impl Key {
             return Ok(BlockGlobalAddr::MessageCount.into());
         }
 
+        if let Some(protocol_version) = input.strip_prefix(BLOCK_GLOBAL_PROTOCOL_VERSION_PREFIX) {
+            let padded_bytes = checksummed_hex::decode(protocol_version)
+                .map_err(|error| FromStrError::BlockGlobal(error.to_string()))?;
+            let _padding: [u8; 31] = TryFrom::try_from(padded_bytes.as_ref()).map_err(|_| {
+                FromStrError::BlockGlobal(
+                    "Failed to deserialize global block protocol version key".to_string(),
+                )
+            })?;
+            return Ok(BlockGlobalAddr::ProtocolVersion.into());
+        }
+
+        if let Some(addressable_entity) = input.strip_prefix(BLOCK_GLOBAL_ADDRESSABLE_ENTITY_PREFIX)
+        {
+            let padded_bytes = checksummed_hex::decode(addressable_entity)
+                .map_err(|error| FromStrError::BlockGlobal(error.to_string()))?;
+            let _padding: [u8; 31] = TryFrom::try_from(padded_bytes.as_ref()).map_err(|_| {
+                FromStrError::BlockGlobal(
+                    "Failed to deserialize global block addressable entity key".to_string(),
+                )
+            })?;
+            return Ok(BlockGlobalAddr::AddressableEntity.into());
+        }
+
         match EntryPointAddr::from_formatted_str(input) {
             Ok(entry_point_addr) => return Ok(Key::EntryPoint(entry_point_addr)),
             Err(addressable_entity::FromStrError::InvalidPrefix) => {}
@@ -951,14 +978,6 @@ impl Key {
                 }
             }
         }
-
-        // if let Some(contract_entity_hash) = input.strip_prefix(STATE_PREFIX) {
-        //     let addr = match EntityAddr::from_formatted_str(contract_entity_hash) {
-        //         Ok(ret) => ret,
-        //         Err(err) => panic!("{err}"),
-        //     };
-        //     return Ok(Key::State(addr));
-        // }
 
         Err(FromStrError::UnknownPrefix)
     }
@@ -991,16 +1010,6 @@ impl Key {
             _ => None,
         }
     }
-
-    // /// Returns [`EntityAddr`] of `self` if `self` is of type [`Key::AddressableEntity`],
-    // ///  otherwise returns `None`.
-    // pub fn as_entity_addr(&self) -> Option<EntityAddr> {
-    //     match self {
-    //         Key::AddressableEntity(addr) => Some(*addr),
-    //         Key::Account(account_hash) => Some(EntityAddr::Account(account_hash.value())),
-    //         _ => None,
-    //     }
-    // }
 
     /// Returns the inner bytes of `self` if `self` is of type [`Key::SmartContract`], otherwise
     /// returns `None`.
@@ -2714,6 +2723,8 @@ mod tests {
         round_trip(&Key::NamedKey(NamedKeyAddr::default()));
         round_trip(&Key::BlockGlobal(BlockGlobalAddr::BlockTime));
         round_trip(&Key::BlockGlobal(BlockGlobalAddr::MessageCount));
+        round_trip(&Key::BlockGlobal(BlockGlobalAddr::ProtocolVersion));
+        round_trip(&Key::BlockGlobal(BlockGlobalAddr::AddressableEntity));
         round_trip(&Key::BalanceHold(BalanceHoldAddr::default()));
         round_trip(&Key::State(EntityAddr::new_system(zeros)));
     }

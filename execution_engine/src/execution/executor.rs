@@ -7,7 +7,7 @@ use casper_storage::{
 };
 use casper_types::{
     account::AccountHash, contract_messages::Messages, contracts::NamedKeys, execution::Effects,
-    ContextAccessRights, EntityAddr, EntryPointType, Gas, Key, Phase, ProtocolVersion, RuntimeArgs,
+    ContextAccessRights, EntityAddr, EntryPointType, Gas, Key, Phase, RuntimeArgs,
     RuntimeFootprint, StoredValue, TransactionHash, U512,
 };
 
@@ -55,7 +55,6 @@ impl Executor {
         block_info: BlockInfo,
         txn_hash: TransactionHash,
         gas_limit: Gas,
-        protocol_version: ProtocolVersion,
         tracking_copy: Rc<RefCell<TrackingCopy<R>>>,
         phase: Phase,
         stack: RuntimeStack,
@@ -110,7 +109,6 @@ impl Executor {
             address_generator,
             tracking_copy,
             block_info,
-            protocol_version,
             txn_hash,
             phase,
             args.clone(),
@@ -176,7 +174,6 @@ impl Executor {
         address_generator: Rc<RefCell<AddressGenerator>>,
         tracking_copy: Rc<RefCell<TrackingCopy<R>>>,
         block_info: BlockInfo,
-        protocol_version: ProtocolVersion,
         txn_hash: TransactionHash,
         phase: Phase,
         runtime_args: RuntimeArgs,
@@ -202,7 +199,6 @@ impl Executor {
             tracking_copy,
             self.config.clone(),
             block_info,
-            protocol_version,
             txn_hash,
             phase,
             runtime_args,

@@ -337,18 +337,14 @@ impl MainReactor {
         // `RootNotFound`, we'll initiate fetching of the corresponding global state.
         let effects = async move {
             // Send the requests to contract runtime.
-            let before_era_validators_request = EraValidatorsRequest::new(
-                global_states_metadata.before_state_hash,
-                global_states_metadata.before_protocol_version,
-            );
+            let before_era_validators_request =
+                EraValidatorsRequest::new(global_states_metadata.before_state_hash);
             let before_era_validators_result = effect_builder
                 .get_era_validators_from_contract_runtime(before_era_validators_request)
                 .await;
 
-            let after_era_validators_request = EraValidatorsRequest::new(
-                global_states_metadata.after_state_hash,
-                global_states_metadata.after_protocol_version,
-            );
+            let after_era_validators_request =
+                EraValidatorsRequest::new(global_states_metadata.after_state_hash);
             let after_era_validators_result = effect_builder
                 .get_era_validators_from_contract_runtime(after_era_validators_request)
                 .await;

@@ -101,11 +101,9 @@ pub(crate) struct GlobalStatesMetadata {
     pub(crate) after_hash: BlockHash,
     pub(crate) after_era_id: EraId,
     pub(crate) after_state_hash: Digest,
-    pub(crate) after_protocol_version: ProtocolVersion,
     // Hash, global state and protocol version of the block before upgrade
     pub(crate) before_hash: BlockHash,
     pub(crate) before_state_hash: Digest,
-    pub(crate) before_protocol_version: ProtocolVersion,
 }
 
 /// Headers and signatures required to prove that if a given trusted block hash is on the correct
@@ -207,10 +205,8 @@ impl SyncLeap {
                 after_hash: after_header.block_hash(),
                 after_era_id: after_header.era_id(),
                 after_state_hash: *after_header.state_root_hash(),
-                after_protocol_version: after_header.protocol_version(),
                 before_hash: before_header.block_hash(),
                 before_state_hash: *before_header.state_root_hash(),
-                before_protocol_version: before_header.protocol_version(),
             }
         })
     }
@@ -1827,27 +1823,14 @@ mod tests {
         assert_eq!(global_states_metadata.after_hash, *chain[9].hash());
         assert_eq!(global_states_metadata.after_era_id, chain[9].era_id());
         assert_eq!(
-            global_states_metadata.after_protocol_version,
-            chain[9].protocol_version()
-        );
-        assert_eq!(
             global_states_metadata.after_state_hash,
             *chain[9].state_root_hash()
         );
 
         assert_eq!(global_states_metadata.before_hash, *chain[8].hash());
         assert_eq!(
-            global_states_metadata.before_protocol_version,
-            chain[8].protocol_version()
-        );
-        assert_eq!(
             global_states_metadata.before_state_hash,
             *chain[8].state_root_hash()
-        );
-
-        assert_ne!(
-            global_states_metadata.before_protocol_version,
-            global_states_metadata.after_protocol_version
         );
     }
 
@@ -1889,27 +1872,14 @@ mod tests {
         assert_eq!(global_states_metadata.after_hash, *chain[9].hash());
         assert_eq!(global_states_metadata.after_era_id, chain[9].era_id());
         assert_eq!(
-            global_states_metadata.after_protocol_version,
-            chain[9].protocol_version()
-        );
-        assert_eq!(
             global_states_metadata.after_state_hash,
             *chain[9].state_root_hash()
         );
 
         assert_eq!(global_states_metadata.before_hash, *chain[8].hash());
         assert_eq!(
-            global_states_metadata.before_protocol_version,
-            chain[8].protocol_version()
-        );
-        assert_eq!(
             global_states_metadata.before_state_hash,
             *chain[8].state_root_hash()
-        );
-
-        assert_ne!(
-            global_states_metadata.before_protocol_version,
-            global_states_metadata.after_protocol_version
         );
     }
 

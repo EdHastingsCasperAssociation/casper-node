@@ -3,7 +3,7 @@ use std::{
     net::SocketAddr,
 };
 
-use casper_binary_port::{BinaryRequest, BinaryResponse, GetRequest};
+use casper_binary_port::{BinaryResponse, Command, GetRequest};
 use tokio::net::TcpStream;
 
 use crate::effect::Responder;
@@ -17,7 +17,7 @@ pub(crate) enum Event {
         responder: Responder<()>,
     },
     HandleRequest {
-        request: BinaryRequest,
+        request: Command,
         responder: Responder<BinaryResponse>,
     },
 }
@@ -28,7 +28,7 @@ impl Display for Event {
             Event::Initialize => write!(f, "initialize"),
             Event::AcceptConnection { peer, .. } => write!(f, "accept connection from {}", peer),
             Event::HandleRequest { request, .. } => match request {
-                BinaryRequest::Get(request) => match request {
+                Command::Get(request) => match request {
                     GetRequest::Record {
                         record_type_tag,
                         key,
@@ -41,13 +41,12 @@ impl Display for Event {
                     GetRequest::State(state_request) => state_request.as_ref().fmt(f),
                     GetRequest::Trie { trie_key } => write!(f, "get trie ({})", trie_key),
                 },
-                BinaryRequest::TryAcceptTransaction { transaction, .. } => {
+                Command::TryAcceptTransaction { transaction, .. } => {
                     write!(f, "try accept transaction ({})", transaction.hash())
                 }
-                BinaryRequest::TrySpeculativeExec { transaction, .. } => {
+                Command::TrySpeculativeExec { transaction, .. } => {
                     write!(f, "try speculative exec ({})", transaction.hash())
                 }
-                BinaryRequest::KeepAliveRequest => write!(f, "keep alive request"),
             },
         }
     }

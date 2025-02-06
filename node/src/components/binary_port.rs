@@ -1,8 +1,8 @@
 //! The Binary Port
 mod config;
+mod connection_terminator;
 mod error;
 mod event;
-mod keep_alive_monitor;
 mod metrics;
 mod rate_limiter;
 #[cfg(test)]
@@ -12,8 +12,8 @@ use std::{convert::TryFrom, net::SocketAddr, sync::Arc};
 
 use casper_binary_port::{
     AccountInformation, AddressableEntityInformation, BalanceResponse, BinaryMessage,
-    BinaryMessageCodec, BinaryRequest, BinaryRequestHeader, BinaryRequestTag, BinaryResponse,
-    BinaryResponseAndRequest, ContractInformation, DictionaryItemIdentifier, DictionaryQueryResult,
+    BinaryMessageCodec, BinaryResponse, BinaryResponseAndRequest, Command, CommandHeader,
+    CommandTag, ContractInformation, DictionaryItemIdentifier, DictionaryQueryResult,
     EntityIdentifier, EraIdentifier, ErrorCode, GetRequest, GetTrieFullResult,
     GlobalStateEntityQualifier, GlobalStateQueryResult, GlobalStateRequest, InformationRequest,
     InformationRequestTag, KeyPrefix, NodeStatus, PackageIdentifier, PurseIdentifier,
@@ -37,21 +37,20 @@ use casper_storage::{
 use casper_types::{
     account::AccountHash,
     addressable_entity::NamedKeyAddr,
-    bytesrepr::{self, FromBytes, ToBytes},
+    bytesrepr::{self, Bytes, FromBytes, ToBytes},
     contracts::{ContractHash, ContractPackage, ContractPackageHash},
     BlockHeader, BlockIdentifier, BlockWithSignatures, ByteCode, ByteCodeAddr, ByteCodeHash,
     Chainspec, ContractWasm, ContractWasmHash, Digest, EntityAddr, GlobalStateIdentifier, Key,
-    Package, PackageAddr, Peers, ProtocolVersion, Rewards, StoredValue, TimeDiff, Transaction,
-    URef,
+    Package, PackageAddr, Peers, ProtocolVersion, Rewards, StoredValue, TimeDiff, Timestamp,
+    Transaction, URef,
 };
-use keep_alive_monitor::KeepAliveMonitor;
+use connection_terminator::ConnectionTerminator;
 use thiserror::Error as ThisError;
 
 use datasize::DataSize;
 use either::Either;
 use futures::{SinkExt, StreamExt};
 use once_cell::sync::OnceCell;
-use prometheus::Registry;
 use rate_limiter::{LimiterResponse, RateLimiter, RateLimiterError};
 use tokio::{
     join,
@@ -59,12 +58,13 @@ use tokio::{
     select,
     sync::{Mutex, Notify, OwnedSemaphorePermit, Semaphore},
 };
-use tokio_util::codec::Framed;
-use tracing::{debug, error, info, warn};
+use tokio_util::codec::{Encoder, Framed};
+use tracing::{debug, error, info, trace, warn};
 
 #[cfg(test)]
 use futures::{future::BoxFuture, FutureExt};
 
+use self::error::Error;
 use crate::{
     contract_runtime::SpeculativeExecutionResult,
     effect::{
@@ -79,8 +79,7 @@ use crate::{
     types::NodeRng,
     utils::{display_error, ListeningError},
 };
-
-use self::{error::Error, metrics::Metrics};
+pub(crate) use metrics::Metrics;
 
 use super::{Component, ComponentState, InitializedComponent, PortBoundComponent};
 
@@ -118,8 +117,6 @@ pub(crate) struct BinaryPort {
     #[data_size(skip)]
     chainspec: Arc<Chainspec>,
     #[data_size(skip)]
-    protocol_version: ProtocolVersion,
-    #[data_size(skip)]
     connection_limit: Arc<Semaphore>,
     #[data_size(skip)]
     metrics: Arc<Metrics>,
@@ -130,32 +127,22 @@ pub(crate) struct BinaryPort {
     #[data_size(skip)]
     server_join_handle: OnceCell<tokio::task::JoinHandle<()>>,
     #[data_size(skip)]
-    rate_limiter: Arc<Mutex<RateLimiter>>,
+    rate_limiter: OnceCell<Arc<Mutex<RateLimiter>>>,
 }
 
 impl BinaryPort {
-    pub(crate) fn new(
-        config: Config,
-        chainspec: Arc<Chainspec>,
-        registry: &Registry,
-    ) -> Result<Self, BinaryPortInitializationError> {
-        let rate_limiter = Arc::new(Mutex::new(
-            RateLimiter::new(config.qps_limit, TimeDiff::from_seconds(1))
-                .map_err(BinaryPortInitializationError::from)?,
-        ));
-        let protocol_version = chainspec.protocol_version();
-        Ok(Self {
+    pub(crate) fn new(config: Config, chainspec: Arc<Chainspec>, metrics: Metrics) -> Self {
+        Self {
             state: ComponentState::Uninitialized,
             connection_limit: Arc::new(Semaphore::new(config.max_connections)),
             config: Arc::new(config),
             chainspec,
-            protocol_version,
-            metrics: Arc::new(Metrics::new(registry).map_err(BinaryPortInitializationError::from)?),
+            metrics: Arc::new(metrics),
             local_addr: Arc::new(OnceCell::new()),
             shutdown_trigger: Arc::new(Notify::new()),
             server_join_handle: OnceCell::new(),
-            rate_limiter,
-        })
+            rate_limiter: OnceCell::new(),
+        }
     }
 
     /// Returns the binding address.
@@ -167,11 +154,42 @@ impl BinaryPort {
     }
 }
 
+struct BinaryRequestTerminationDelayValues {
+    get_record: TimeDiff,
+    get_information: TimeDiff,
+    get_state: TimeDiff,
+    get_trie: TimeDiff,
+    accept_transaction: TimeDiff,
+    speculative_exec: TimeDiff,
+}
+
+impl BinaryRequestTerminationDelayValues {
+    fn from_config(config: &Config) -> Self {
+        BinaryRequestTerminationDelayValues {
+            get_record: config.get_record_request_termination_delay,
+            get_information: config.get_information_request_termination_delay,
+            get_state: config.get_state_request_termination_delay,
+            get_trie: config.get_trie_request_termination_delay,
+            accept_transaction: config.accept_transaction_request_termination_delay,
+            speculative_exec: config.speculative_exec_request_termination_delay,
+        }
+    }
+    fn get_life_termination_delay(&self, request: &Command) -> TimeDiff {
+        match request {
+            Command::Get(GetRequest::Record { .. }) => self.get_record,
+            Command::Get(GetRequest::Information { .. }) => self.get_information,
+            Command::Get(GetRequest::State(_)) => self.get_state,
+            Command::Get(GetRequest::Trie { .. }) => self.get_trie,
+            Command::TryAcceptTransaction { .. } => self.accept_transaction,
+            Command::TrySpeculativeExec { .. } => self.speculative_exec,
+        }
+    }
+}
+
 async fn handle_request<REv>(
-    req: BinaryRequest,
+    req: Command,
     effect_builder: EffectBuilder<REv>,
     config: &Config,
-    chainspec: &Chainspec,
     metrics: &Metrics,
     protocol_version: ProtocolVersion,
 ) -> BinaryResponse
@@ -189,43 +207,28 @@ where
         + Send,
 {
     match req {
-        BinaryRequest::TryAcceptTransaction { transaction } => {
+        Command::TryAcceptTransaction { transaction } => {
             metrics.binary_port_try_accept_transaction_count.inc();
-            try_accept_transaction(effect_builder, transaction, false, protocol_version).await
+            try_accept_transaction(effect_builder, transaction, false).await
         }
-        BinaryRequest::TrySpeculativeExec { transaction } => {
+        Command::TrySpeculativeExec { transaction } => {
             metrics.binary_port_try_speculative_exec_count.inc();
             if !config.allow_request_speculative_exec {
                 debug!(
                     hash = %transaction.hash(),
                     "received a request for speculative execution while the feature is disabled"
                 );
-                return BinaryResponse::new_error(ErrorCode::FunctionDisabled, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::FunctionDisabled);
             }
-            let response =
-                try_accept_transaction(effect_builder, transaction.clone(), true, protocol_version)
-                    .await;
+            let response = try_accept_transaction(effect_builder, transaction.clone(), true).await;
             if !response.is_success() {
                 return response;
             }
-            try_speculative_execution(effect_builder, transaction, protocol_version).await
+            try_speculative_execution(effect_builder, transaction).await
         }
-        BinaryRequest::Get(get_req) => {
-            handle_get_request(
-                get_req,
-                effect_builder,
-                config,
-                chainspec,
-                metrics,
-                protocol_version,
-            )
-            .await
+        Command::Get(get_req) => {
+            handle_get_request(get_req, effect_builder, config, metrics, protocol_version).await
         }
-        BinaryRequest::KeepAliveRequest => BinaryResponse::from_raw_bytes(
-            ResponseType::KeepAliveInformation,
-            vec![],
-            protocol_version,
-        ),
     }
 }
 
@@ -233,7 +236,6 @@ async fn handle_get_request<REv>(
     get_req: GetRequest,
     effect_builder: EffectBuilder<REv>,
     config: &Config,
-    chainspec: &Chainspec,
     metrics: &Metrics,
     protocol_version: ProtocolVersion,
 ) -> BinaryResponse
@@ -257,25 +259,22 @@ where
         } if RecordId::try_from(record_type_tag) == Ok(RecordId::Transfer) => {
             metrics.binary_port_get_record_count.inc();
             if key.is_empty() {
-                return BinaryResponse::new_empty(protocol_version);
+                return BinaryResponse::new_empty();
             }
             let Ok(block_hash) = bytesrepr::deserialize_from_slice(&key) else {
                 debug!("received an incorrectly serialized key for a transfer record");
-                return BinaryResponse::new_error(
-                    ErrorCode::TransferRecordMalformedKey,
-                    protocol_version,
-                );
+                return BinaryResponse::new_error(ErrorCode::TransferRecordMalformedKey);
             };
             let Some(transfers) = effect_builder
                 .get_block_transfers_from_storage(block_hash)
                 .await
             else {
-                return BinaryResponse::new_empty(protocol_version);
+                return BinaryResponse::new_empty();
             };
             let Ok(serialized) = bincode::serialize(&transfers) else {
-                return BinaryResponse::new_error(ErrorCode::InternalError, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::InternalError);
             };
-            BinaryResponse::from_raw_bytes(ResponseType::Transfers, serialized, protocol_version)
+            BinaryResponse::from_raw_bytes(ResponseType::Transfers, serialized)
         }
         GetRequest::Record {
             record_type_tag,
@@ -283,24 +282,18 @@ where
         } => {
             metrics.binary_port_get_record_count.inc();
             if key.is_empty() {
-                return BinaryResponse::new_empty(protocol_version);
+                return BinaryResponse::new_empty();
             }
             match RecordId::try_from(record_type_tag) {
                 Ok(record_id) => {
                     let Some(db_bytes) = effect_builder.get_raw_data(record_id, key).await else {
-                        return BinaryResponse::new_empty(protocol_version);
+                        return BinaryResponse::new_empty();
                     };
                     let payload_type =
                         ResponseType::from_record_id(record_id, db_bytes.is_legacy());
-                    BinaryResponse::from_raw_bytes(
-                        payload_type,
-                        db_bytes.into_raw_bytes(),
-                        protocol_version,
-                    )
+                    BinaryResponse::from_raw_bytes(payload_type, db_bytes.into_raw_bytes())
                 }
-                Err(_) => {
-                    BinaryResponse::new_error(ErrorCode::UnsupportedRequest, protocol_version)
-                }
+                Err(_) => BinaryResponse::new_error(ErrorCode::UnsupportedRequest),
             }
         }
         GetRequest::Information { info_type_tag, key } => {
@@ -310,33 +303,23 @@ where
                     tag = info_type_tag,
                     "received an unknown information request tag"
                 );
-                return BinaryResponse::new_error(ErrorCode::UnsupportedRequest, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::UnsupportedRequest);
             };
             match InformationRequest::try_from((tag, &key[..])) {
                 Ok(req) => handle_info_request(req, effect_builder, protocol_version).await,
                 Err(error) => {
                     debug!(?tag, %error, "failed to parse an information request");
-                    BinaryResponse::new_error(
-                        ErrorCode::MalformedInformationRequest,
-                        protocol_version,
-                    )
+                    BinaryResponse::new_error(ErrorCode::MalformedInformationRequest)
                 }
             }
         }
         GetRequest::State(req) => {
             metrics.binary_port_get_state_count.inc();
-            handle_state_request(effect_builder, *req, protocol_version, config, chainspec).await
+            handle_state_request(effect_builder, *req, protocol_version, config).await
         }
         GetRequest::Trie { trie_key } => {
             metrics.binary_port_get_trie_count.inc();
-            handle_trie_request(
-                effect_builder,
-                trie_key,
-                protocol_version,
-                config,
-                chainspec,
-            )
-            .await
+            handle_trie_request(effect_builder, trie_key, config).await
         }
     }
 }
@@ -345,14 +328,13 @@ async fn handle_get_items_by_prefix<REv>(
     state_identifier: Option<GlobalStateIdentifier>,
     key_prefix: KeyPrefix,
     effect_builder: EffectBuilder<REv>,
-    protocol_version: ProtocolVersion,
 ) -> BinaryResponse
 where
     REv: From<Event> + From<ContractRuntimeRequest> + From<StorageRequest>,
 {
     let Some(state_root_hash) = resolve_state_root_hash(effect_builder, state_identifier).await
     else {
-        return BinaryResponse::new_error(ErrorCode::RootNotFound, protocol_version);
+        return BinaryResponse::new_error(ErrorCode::RootNotFound);
     };
     let storage_key_prefix = match key_prefix {
         KeyPrefix::DelegatorBidAddrsByValidator(hash) => {
@@ -372,15 +354,11 @@ where
     };
     let request = PrefixedValuesRequest::new(state_root_hash, storage_key_prefix);
     match effect_builder.get_prefixed_values(request).await {
-        PrefixedValuesResult::Success { values, .. } => {
-            BinaryResponse::from_value(values, protocol_version)
-        }
-        PrefixedValuesResult::RootNotFound => {
-            BinaryResponse::new_error(ErrorCode::RootNotFound, protocol_version)
-        }
+        PrefixedValuesResult::Success { values, .. } => BinaryResponse::from_value(values),
+        PrefixedValuesResult::RootNotFound => BinaryResponse::new_error(ErrorCode::RootNotFound),
         PrefixedValuesResult::Failure(error) => {
             debug!(%error, "failed when querying for values by prefix");
-            BinaryResponse::new_error(ErrorCode::InternalError, protocol_version)
+            BinaryResponse::new_error(ErrorCode::InternalError)
         }
     }
 }
@@ -389,26 +367,21 @@ async fn handle_get_all_items<REv>(
     state_identifier: Option<GlobalStateIdentifier>,
     key_tag: casper_types::KeyTag,
     effect_builder: EffectBuilder<REv>,
-    protocol_version: ProtocolVersion,
 ) -> BinaryResponse
 where
     REv: From<Event> + From<ContractRuntimeRequest> + From<StorageRequest>,
 {
     let Some(state_root_hash) = resolve_state_root_hash(effect_builder, state_identifier).await
     else {
-        return BinaryResponse::new_error(ErrorCode::RootNotFound, protocol_version);
+        return BinaryResponse::new_error(ErrorCode::RootNotFound);
     };
     let request = TaggedValuesRequest::new(state_root_hash, TaggedValuesSelection::All(key_tag));
     match effect_builder.get_tagged_values(request).await {
-        TaggedValuesResult::Success { values, .. } => {
-            BinaryResponse::from_value(values, protocol_version)
-        }
-        TaggedValuesResult::RootNotFound => {
-            BinaryResponse::new_error(ErrorCode::RootNotFound, protocol_version)
-        }
+        TaggedValuesResult::Success { values, .. } => BinaryResponse::from_value(values),
+        TaggedValuesResult::RootNotFound => BinaryResponse::new_error(ErrorCode::RootNotFound),
         TaggedValuesResult::Failure(error) => {
             debug!(%error, "failed when querying for all values by tag");
-            BinaryResponse::new_error(ErrorCode::InternalError, protocol_version)
+            BinaryResponse::new_error(ErrorCode::InternalError)
         }
     }
 }
@@ -418,7 +391,6 @@ async fn handle_state_request<REv>(
     request: GlobalStateRequest,
     protocol_version: ProtocolVersion,
     config: &Config,
-    _chainspec: &Chainspec,
 ) -> BinaryResponse
 where
     REv: From<Event>
@@ -432,28 +404,27 @@ where
             let Some(state_root_hash) =
                 resolve_state_root_hash(effect_builder, state_identifier).await
             else {
-                return BinaryResponse::new_error(ErrorCode::RootNotFound, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::RootNotFound);
             };
             match get_global_state_item(effect_builder, state_root_hash, base_key, path).await {
-                Ok(Some(result)) => BinaryResponse::from_value(result, protocol_version),
-                Ok(None) => BinaryResponse::new_empty(protocol_version),
-                Err(err) => BinaryResponse::new_error(err, protocol_version),
+                Ok(Some(result)) => BinaryResponse::from_value(result),
+                Ok(None) => BinaryResponse::new_empty(),
+                Err(err) => BinaryResponse::new_error(err),
             }
         }
         GlobalStateEntityQualifier::AllItems { key_tag } => {
             if !config.allow_request_get_all_values {
                 debug!(%key_tag, "received a request for items by key tag while the feature is disabled");
-                BinaryResponse::new_error(ErrorCode::FunctionDisabled, protocol_version)
+                BinaryResponse::new_error(ErrorCode::FunctionDisabled)
             } else {
-                handle_get_all_items(state_identifier, key_tag, effect_builder, protocol_version)
-                    .await
+                handle_get_all_items(state_identifier, key_tag, effect_builder).await
             }
         }
         GlobalStateEntityQualifier::DictionaryItem { identifier } => {
             let Some(state_root_hash) =
                 resolve_state_root_hash(effect_builder, state_identifier).await
             else {
-                return BinaryResponse::new_error(ErrorCode::RootNotFound, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::RootNotFound);
             };
             let result = match identifier {
                 DictionaryItemIdentifier::AccountNamedKey {
@@ -515,16 +486,16 @@ where
                 }
             };
             match result {
-                Ok(Some(result)) => BinaryResponse::from_value(result, protocol_version),
-                Ok(None) => BinaryResponse::new_empty(protocol_version),
-                Err(err) => BinaryResponse::new_error(err, protocol_version),
+                Ok(Some(result)) => BinaryResponse::from_value(result),
+                Ok(None) => BinaryResponse::new_empty(),
+                Err(err) => BinaryResponse::new_error(err),
             }
         }
         GlobalStateEntityQualifier::Balance { purse_identifier } => {
             let Some(state_root_hash) =
                 resolve_state_root_hash(effect_builder, state_identifier).await
             else {
-                return BinaryResponse::new_empty(protocol_version);
+                return BinaryResponse::new_empty();
             };
             get_balance(
                 effect_builder,
@@ -535,13 +506,7 @@ where
             .await
         }
         GlobalStateEntityQualifier::ItemsByPrefix { key_prefix } => {
-            handle_get_items_by_prefix(
-                state_identifier,
-                key_prefix,
-                effect_builder,
-                protocol_version,
-            )
-            .await
+            handle_get_items_by_prefix(state_identifier, key_prefix, effect_builder).await
         }
     }
 }
@@ -549,9 +514,7 @@ where
 async fn handle_trie_request<REv>(
     effect_builder: EffectBuilder<REv>,
     trie_key: Digest,
-    protocol_version: ProtocolVersion,
     config: &Config,
-    _chainspec: &Chainspec,
 ) -> BinaryResponse
 where
     REv: From<Event>
@@ -561,17 +524,16 @@ where
 {
     if !config.allow_request_get_trie {
         debug!(%trie_key, "received a trie request while the feature is disabled");
-        BinaryResponse::new_error(ErrorCode::FunctionDisabled, protocol_version)
+        BinaryResponse::new_error(ErrorCode::FunctionDisabled)
     } else {
         let req = TrieRequest::new(trie_key, None);
         match effect_builder.get_trie(req).await.into_raw() {
-            Ok(result) => BinaryResponse::from_value(
-                GetTrieFullResult::new(result.map(TrieRaw::into_inner)),
-                protocol_version,
-            ),
+            Ok(result) => {
+                BinaryResponse::from_value(GetTrieFullResult::new(result.map(TrieRaw::into_inner)))
+            }
             Err(error) => {
                 debug!(%error, "failed when querying for a trie");
-                BinaryResponse::new_error(ErrorCode::InternalError, protocol_version)
+                BinaryResponse::new_error(ErrorCode::InternalError)
             }
         }
     }
@@ -723,9 +685,7 @@ where
         ProofHandling::Proofs,
     );
     match effect_builder.get_balance(balance_req).await {
-        BalanceResult::RootNotFound => {
-            BinaryResponse::new_error(ErrorCode::RootNotFound, protocol_version)
-        }
+        BalanceResult::RootNotFound => BinaryResponse::new_error(ErrorCode::RootNotFound),
         BalanceResult::Success {
             total_balance,
             available_balance,
@@ -738,7 +698,7 @@ where
             } = proofs_result
             else {
                 warn!("binary port received no proofs for a balance request with proofs");
-                return BinaryResponse::new_error(ErrorCode::InternalError, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::InternalError);
             };
             let response = BalanceResponse {
                 total_balance,
@@ -746,14 +706,14 @@ where
                 total_balance_proof,
                 balance_holds,
             };
-            BinaryResponse::from_value(response, protocol_version)
+            BinaryResponse::from_value(response)
         }
         BalanceResult::Failure(TrackingCopyError::KeyNotFound(_)) => {
-            BinaryResponse::new_error(ErrorCode::PurseNotFound, protocol_version)
+            BinaryResponse::new_error(ErrorCode::PurseNotFound)
         }
         BalanceResult::Failure(error) => {
             debug!(%error, "failed when querying for a balance");
-            BinaryResponse::new_error(ErrorCode::FailedQuery, protocol_version)
+            BinaryResponse::new_error(ErrorCode::FailedQuery)
         }
     }
 }
@@ -1066,22 +1026,22 @@ where
     match req {
         InformationRequest::BlockHeader(identifier) => {
             let maybe_header = resolve_block_header(effect_builder, identifier).await;
-            BinaryResponse::from_option(maybe_header, protocol_version)
+            BinaryResponse::from_option(maybe_header)
         }
         InformationRequest::BlockWithSignatures(identifier) => {
             let Some(height) = resolve_block_height(effect_builder, identifier).await else {
-                return BinaryResponse::new_empty(protocol_version);
+                return BinaryResponse::new_empty();
             };
             let Some(block) = effect_builder
                 .get_block_at_height_with_metadata_from_storage(height, true)
                 .await
             else {
-                return BinaryResponse::new_empty(protocol_version);
+                return BinaryResponse::new_empty();
             };
-            BinaryResponse::from_value(
-                BlockWithSignatures::new(block.block, block.block_signatures),
-                protocol_version,
-            )
+            BinaryResponse::from_value(BlockWithSignatures::new(
+                block.block,
+                block.block_signatures,
+            ))
         }
         InformationRequest::Transaction {
             hash,
@@ -1091,59 +1051,51 @@ where
                 .get_transaction_and_exec_info_from_storage(hash, with_finalized_approvals)
                 .await
             else {
-                return BinaryResponse::new_empty(protocol_version);
+                return BinaryResponse::new_empty();
             };
-            BinaryResponse::from_value(
-                TransactionWithExecutionInfo::new(transaction, execution_info),
-                protocol_version,
-            )
+            BinaryResponse::from_value(TransactionWithExecutionInfo::new(
+                transaction,
+                execution_info,
+            ))
         }
-        InformationRequest::Peers => BinaryResponse::from_value(
-            Peers::from(effect_builder.network_peers().await),
-            protocol_version,
-        ),
-        InformationRequest::Uptime => {
-            BinaryResponse::from_value(effect_builder.get_uptime().await, protocol_version)
+        InformationRequest::Peers => {
+            BinaryResponse::from_value(Peers::from(effect_builder.network_peers().await))
         }
+        InformationRequest::Uptime => BinaryResponse::from_value(effect_builder.get_uptime().await),
         InformationRequest::LastProgress => {
-            BinaryResponse::from_value(effect_builder.get_last_progress().await, protocol_version)
+            BinaryResponse::from_value(effect_builder.get_last_progress().await)
         }
         InformationRequest::ReactorState => {
             let state = effect_builder.get_reactor_state().await;
-            BinaryResponse::from_value(ReactorStateName::new(state), protocol_version)
+            BinaryResponse::from_value(ReactorStateName::new(state))
         }
         InformationRequest::NetworkName => {
-            BinaryResponse::from_value(effect_builder.get_network_name().await, protocol_version)
+            BinaryResponse::from_value(effect_builder.get_network_name().await)
         }
-        InformationRequest::ConsensusValidatorChanges => BinaryResponse::from_value(
-            effect_builder.get_consensus_validator_changes().await,
-            protocol_version,
-        ),
-        InformationRequest::BlockSynchronizerStatus => BinaryResponse::from_value(
-            effect_builder.get_block_synchronizer_status().await,
-            protocol_version,
-        ),
+        InformationRequest::ConsensusValidatorChanges => {
+            BinaryResponse::from_value(effect_builder.get_consensus_validator_changes().await)
+        }
+        InformationRequest::BlockSynchronizerStatus => {
+            BinaryResponse::from_value(effect_builder.get_block_synchronizer_status().await)
+        }
         InformationRequest::AvailableBlockRange => BinaryResponse::from_value(
             effect_builder
                 .get_available_block_range_from_storage()
                 .await,
-            protocol_version,
         ),
         InformationRequest::NextUpgrade => {
-            BinaryResponse::from_option(effect_builder.get_next_upgrade().await, protocol_version)
+            BinaryResponse::from_option(effect_builder.get_next_upgrade().await)
         }
         InformationRequest::ConsensusStatus => {
-            BinaryResponse::from_option(effect_builder.consensus_status().await, protocol_version)
+            BinaryResponse::from_option(effect_builder.consensus_status().await)
         }
-        InformationRequest::ChainspecRawBytes => BinaryResponse::from_value(
-            (*effect_builder.get_chainspec_raw_bytes().await).clone(),
-            protocol_version,
-        ),
+        InformationRequest::ChainspecRawBytes => {
+            BinaryResponse::from_value((*effect_builder.get_chainspec_raw_bytes().await).clone())
+        }
         InformationRequest::LatestSwitchBlockHeader => BinaryResponse::from_option(
             effect_builder
                 .get_latest_switch_block_header_from_storage()
                 .await,
-            protocol_version,
         ),
         InformationRequest::NodeStatus => {
             let (
@@ -1186,7 +1138,7 @@ where
             let reactor_state = ReactorStateName::new(reactor_state);
 
             let Ok(uptime) = TimeDiff::try_from(node_uptime) else {
-                return BinaryResponse::new_error(ErrorCode::InternalError, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::InternalError);
             };
 
             let status = NodeStatus {
@@ -1207,7 +1159,7 @@ where
                 latest_switch_block_hash: latest_switch_block_header
                     .map(|header| header.block_hash()),
             };
-            BinaryResponse::from_value(status, protocol_version)
+            BinaryResponse::from_value(status)
         }
         InformationRequest::Reward {
             era_identifier,
@@ -1217,26 +1169,21 @@ where
             let Some(header) =
                 resolve_era_switch_block_header(effect_builder, era_identifier).await
             else {
-                return BinaryResponse::new_error(ErrorCode::SwitchBlockNotFound, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::SwitchBlockNotFound);
             };
             let Some(previous_height) = header.height().checked_sub(1) else {
                 // there's not going to be any rewards for the genesis block
                 debug!("received a request for rewards in the genesis block");
-                return BinaryResponse::new_empty(protocol_version);
+                return BinaryResponse::new_empty();
             };
             let Some(parent_header) = effect_builder
                 .get_block_header_at_height_from_storage(previous_height, true)
                 .await
             else {
-                return BinaryResponse::new_error(
-                    ErrorCode::SwitchBlockParentNotFound,
-                    protocol_version,
-                );
+                return BinaryResponse::new_error(ErrorCode::SwitchBlockParentNotFound);
             };
-            let snapshot_request = SeigniorageRecipientsRequest::new(
-                *parent_header.state_root_hash(),
-                parent_header.protocol_version(),
-            );
+            let snapshot_request =
+                SeigniorageRecipientsRequest::new(*parent_header.state_root_hash());
 
             let snapshot = match effect_builder
                 .get_seigniorage_recipients_snapshot_from_contract_runtime(snapshot_request)
@@ -1246,40 +1193,40 @@ where
                     seigniorage_recipients,
                 } => seigniorage_recipients,
                 SeigniorageRecipientsResult::RootNotFound => {
-                    return BinaryResponse::new_error(ErrorCode::RootNotFound, protocol_version)
+                    return BinaryResponse::new_error(ErrorCode::RootNotFound)
                 }
                 SeigniorageRecipientsResult::Failure(error) => {
                     warn!(%error, "failed when querying for seigniorage recipients");
-                    return BinaryResponse::new_error(ErrorCode::FailedQuery, protocol_version);
+                    return BinaryResponse::new_error(ErrorCode::FailedQuery);
                 }
                 SeigniorageRecipientsResult::AuctionNotFound => {
                     warn!("auction not found when querying for seigniorage recipients");
-                    return BinaryResponse::new_error(ErrorCode::InternalError, protocol_version);
+                    return BinaryResponse::new_error(ErrorCode::InternalError);
                 }
                 SeigniorageRecipientsResult::ValueNotFound(error) => {
                     warn!(%error, "value not found when querying for seigniorage recipients");
-                    return BinaryResponse::new_error(ErrorCode::InternalError, protocol_version);
+                    return BinaryResponse::new_error(ErrorCode::InternalError);
                 }
             };
             let Some(era_end) = header.clone_era_end() else {
                 // switch block should have an era end
-                warn!(
+                error!(
                     hash = %header.block_hash(),
-                    "era end not found in the switch block retrieved from storage"
+                    "switch block missing era end (undefined behavior)"
                 );
-                return BinaryResponse::new_error(ErrorCode::InternalError, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::InternalError);
             };
             let block_rewards = match era_end.rewards() {
                 Rewards::V2(rewards) => rewards,
                 Rewards::V1(_) => {
-                    return BinaryResponse::new_error(
-                        ErrorCode::UnsupportedRewardsV1Request,
-                        protocol_version,
-                    )
+                    //It is possible to calculate V1 rewards, but previously we didn't support an
+                    // endpoint to report it in that way. We could implement it
+                    // in a future release if there is interest in it - it's not trivial though.
+                    return BinaryResponse::new_error(ErrorCode::UnsupportedRewardsV1Request);
                 }
             };
             let Some(validator_rewards) = block_rewards.get(&validator) else {
-                return BinaryResponse::new_empty(protocol_version);
+                return BinaryResponse::new_empty();
             };
 
             let seigniorage_recipient =
@@ -1300,18 +1247,16 @@ where
                         *seigniorage_recipient.delegation_rate(),
                         header.block_hash(),
                     );
-                    BinaryResponse::from_value(response, protocol_version)
+                    BinaryResponse::from_value(response)
                 }
                 (Err(error), _) => {
                     warn!(%error, "failed when calculating rewards");
-                    BinaryResponse::new_error(ErrorCode::InternalError, protocol_version)
+                    BinaryResponse::new_error(ErrorCode::InternalError)
                 }
-                _ => BinaryResponse::new_empty(protocol_version),
+                _ => BinaryResponse::new_empty(),
             }
         }
-        InformationRequest::ProtocolVersion => {
-            BinaryResponse::from_value(protocol_version, protocol_version)
-        }
+        InformationRequest::ProtocolVersion => BinaryResponse::from_value(protocol_version),
         InformationRequest::Package {
             state_identifier,
             identifier,
@@ -1319,7 +1264,7 @@ where
             let Some(state_root_hash) =
                 resolve_state_root_hash(effect_builder, state_identifier).await
             else {
-                return BinaryResponse::new_error(ErrorCode::RootNotFound, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::RootNotFound);
             };
             let either = match identifier {
                 PackageIdentifier::ContractPackageHash(hash) => {
@@ -1333,13 +1278,11 @@ where
             };
             match either {
                 Ok(Some(Either::Left(contract_package))) => {
-                    BinaryResponse::from_value(contract_package, protocol_version)
+                    BinaryResponse::from_value(contract_package)
                 }
-                Ok(Some(Either::Right(package))) => {
-                    BinaryResponse::from_value(package, protocol_version)
-                }
-                Ok(None) => BinaryResponse::new_empty(protocol_version),
-                Err(err) => BinaryResponse::new_error(err, protocol_version),
+                Ok(Some(Either::Right(package))) => BinaryResponse::from_value(package),
+                Ok(None) => BinaryResponse::new_empty(),
+                Err(err) => BinaryResponse::new_error(err),
             }
         }
         InformationRequest::Entity {
@@ -1350,56 +1293,44 @@ where
             let Some(state_root_hash) =
                 resolve_state_root_hash(effect_builder, state_identifier).await
             else {
-                return BinaryResponse::new_error(ErrorCode::RootNotFound, protocol_version);
+                return BinaryResponse::new_error(ErrorCode::RootNotFound);
             };
             match identifier {
                 EntityIdentifier::ContractHash(hash) => {
                     match get_contract(effect_builder, state_root_hash, hash, include_bytecode)
                         .await
                     {
-                        Ok(Some(Either::Left(contract))) => {
-                            BinaryResponse::from_value(contract, protocol_version)
-                        }
-                        Ok(Some(Either::Right(entity))) => {
-                            BinaryResponse::from_value(entity, protocol_version)
-                        }
-                        Ok(None) => BinaryResponse::new_empty(protocol_version),
-                        Err(err) => BinaryResponse::new_error(err, protocol_version),
+                        Ok(Some(Either::Left(contract))) => BinaryResponse::from_value(contract),
+                        Ok(Some(Either::Right(entity))) => BinaryResponse::from_value(entity),
+                        Ok(None) => BinaryResponse::new_empty(),
+                        Err(err) => BinaryResponse::new_error(err),
                     }
                 }
                 EntityIdentifier::AccountHash(hash) => {
                     match get_account(effect_builder, state_root_hash, hash, include_bytecode).await
                     {
-                        Ok(Some(Either::Left(account))) => {
-                            BinaryResponse::from_value(account, protocol_version)
-                        }
-                        Ok(Some(Either::Right(entity))) => {
-                            BinaryResponse::from_value(entity, protocol_version)
-                        }
-                        Ok(None) => BinaryResponse::new_empty(protocol_version),
-                        Err(err) => BinaryResponse::new_error(err, protocol_version),
+                        Ok(Some(Either::Left(account))) => BinaryResponse::from_value(account),
+                        Ok(Some(Either::Right(entity))) => BinaryResponse::from_value(entity),
+                        Ok(None) => BinaryResponse::new_empty(),
+                        Err(err) => BinaryResponse::new_error(err),
                     }
                 }
                 EntityIdentifier::PublicKey(pub_key) => {
                     let hash = pub_key.to_account_hash();
                     match get_account(effect_builder, state_root_hash, hash, include_bytecode).await
                     {
-                        Ok(Some(Either::Left(account))) => {
-                            BinaryResponse::from_value(account, protocol_version)
-                        }
-                        Ok(Some(Either::Right(entity))) => {
-                            BinaryResponse::from_value(entity, protocol_version)
-                        }
-                        Ok(None) => BinaryResponse::new_empty(protocol_version),
-                        Err(err) => BinaryResponse::new_error(err, protocol_version),
+                        Ok(Some(Either::Left(account))) => BinaryResponse::from_value(account),
+                        Ok(Some(Either::Right(entity))) => BinaryResponse::from_value(entity),
+                        Ok(None) => BinaryResponse::new_empty(),
+                        Err(err) => BinaryResponse::new_error(err),
                     }
                 }
                 EntityIdentifier::EntityAddr(addr) => {
                     match get_entity(effect_builder, state_root_hash, addr, include_bytecode).await
                     {
-                        Ok(Some(entity)) => BinaryResponse::from_value(entity, protocol_version),
-                        Ok(None) => BinaryResponse::new_empty(protocol_version),
-                        Err(err) => BinaryResponse::new_error(err, protocol_version),
+                        Ok(Some(entity)) => BinaryResponse::from_value(entity),
+                        Ok(None) => BinaryResponse::new_empty(),
+                        Err(err) => BinaryResponse::new_error(err),
                     }
                 }
             }
@@ -1411,7 +1342,6 @@ async fn try_accept_transaction<REv>(
     effect_builder: EffectBuilder<REv>,
     transaction: Transaction,
     is_speculative: bool,
-    protocol_version: ProtocolVersion,
 ) -> BinaryResponse
 where
     REv: From<AcceptTransactionRequest>,
@@ -1420,15 +1350,14 @@ where
         .try_accept_transaction(transaction, is_speculative)
         .await
         .map_or_else(
-            |err| BinaryResponse::new_error(err.into(), protocol_version),
-            |()| BinaryResponse::new_empty(protocol_version),
+            |err| BinaryResponse::new_error(err.into()),
+            |()| BinaryResponse::new_empty(),
         )
 }
 
 async fn try_speculative_execution<REv>(
     effect_builder: EffectBuilder<REv>,
     transaction: Transaction,
-    protocol_version: ProtocolVersion,
 ) -> BinaryResponse
 where
     REv: From<Event> + From<ContractRuntimeRequest> + From<StorageRequest>,
@@ -1438,7 +1367,7 @@ where
         .await
     {
         Some(tip) => tip,
-        None => return BinaryResponse::new_error(ErrorCode::NoCompleteBlocks, protocol_version),
+        None => return BinaryResponse::new_error(ErrorCode::NoCompleteBlocks),
     };
 
     let result = effect_builder
@@ -1448,13 +1377,13 @@ where
     match result {
         SpeculativeExecutionResult::InvalidTransaction(error) => {
             debug!(%error, "invalid transaction submitted for speculative execution");
-            BinaryResponse::new_error(error.into(), protocol_version)
+            BinaryResponse::new_error(error.into())
         }
         SpeculativeExecutionResult::WasmV1(spec_exec_result) => {
-            BinaryResponse::from_value(spec_exec_result, protocol_version)
+            BinaryResponse::from_value(spec_exec_result)
         }
         SpeculativeExecutionResult::ReceivedV1Transaction => {
-            BinaryResponse::new_error(ErrorCode::ReceivedV1Transaction, protocol_version)
+            BinaryResponse::new_error(ErrorCode::ReceivedV1Transaction)
         }
     }
 }
@@ -1462,10 +1391,10 @@ where
 async fn handle_client_loop<REv>(
     stream: TcpStream,
     effect_builder: EffectBuilder<REv>,
-    max_message_size_bytes: u32,
+    config: Arc<Config>,
     rate_limiter: Arc<Mutex<RateLimiter>>,
-    version: ProtocolVersion,
-    monitor: KeepAliveMonitor,
+    monitor: ConnectionTerminator,
+    life_extensions_config: BinaryRequestTerminationDelayValues,
 ) -> Result<(), Error>
 where
     REv: From<Event>
@@ -1480,10 +1409,12 @@ where
         + From<ChainspecRawBytesRequest>
         + Send,
 {
-    let mut framed = Framed::new(stream, BinaryMessageCodec::new(max_message_size_bytes));
-    monitor.start().await;
+    let codec = BinaryMessageCodec::new(config.max_message_size_bytes);
+    let mut framed = Framed::new(stream, codec);
+    monitor
+        .terminate_at(Timestamp::now() + config.initial_connection_lifetime)
+        .await;
     let cancellation_token = monitor.get_cancellation_token();
-
     loop {
         select! {
             maybe_bytes = framed.next() => {
@@ -1491,18 +1422,21 @@ where
                     debug!("remote party closed the connection");
                     return Ok(());
                 };
-                monitor.tick().await;
-                let result = result?;
-                let payload = result.payload();
+                let limiter_response = rate_limiter.lock().await.throttle();
+                let binary_message = result?;
+                let payload = binary_message.payload();
                 if payload.is_empty() {
+                    // This should be unreachable, we reject 0-length messages earlier
+                    warn!("Empty payload detected late.");
                     return Err(Error::NoPayload);
-                };
-
-                let (response, id) =
-                    handle_payload(effect_builder, payload, version, Arc::clone(&rate_limiter)).await;
+                }
+                let mut bytes_buf = bytes::BytesMut::with_capacity(payload.len() + 4);
+                let response =
+                    handle_payload(effect_builder, payload, limiter_response, &monitor, &life_extensions_config).await;
+                codec.clone().encode(binary_message, &mut bytes_buf)?;
                 framed
                     .send(BinaryMessage::new(
-                        BinaryResponseAndRequest::new(response, payload, id).to_bytes()?,
+                        BinaryResponseAndRequest::new(response, Bytes::from(bytes_buf.freeze().to_vec())).to_bytes()?,
                     ))
                     .await?
             }
@@ -1514,27 +1448,27 @@ where
     }
 }
 
-fn extract_header(payload: &[u8]) -> Result<(BinaryRequestHeader, &[u8]), ErrorCode> {
+fn extract_header(payload: &[u8]) -> Result<(CommandHeader, &[u8]), ErrorCode> {
     const BINARY_VERSION_LENGTH_BYTES: usize = std::mem::size_of::<u16>();
 
     if payload.len() < BINARY_VERSION_LENGTH_BYTES {
-        return Err(ErrorCode::MalformedBinaryVersion);
+        return Err(ErrorCode::TooLittleBytesForRequestHeaderVersion);
     }
 
     let binary_protocol_version = match u16::from_bytes(payload) {
         Ok((binary_protocol_version, _)) => binary_protocol_version,
-        Err(_) => return Err(ErrorCode::MalformedProtocolVersion),
+        Err(_) => return Err(ErrorCode::MalformedCommandHeaderVersion),
     };
 
-    if binary_protocol_version != BinaryRequestHeader::BINARY_REQUEST_VERSION {
-        return Err(ErrorCode::BinaryProtocolVersionMismatch);
+    if binary_protocol_version != CommandHeader::HEADER_VERSION {
+        return Err(ErrorCode::CommandHeaderVersionMismatch);
     }
 
-    match BinaryRequestHeader::from_bytes(payload) {
+    match CommandHeader::from_bytes(payload) {
         Ok((header, remainder)) => Ok((header, remainder)),
         Err(error) => {
             debug!(%error, "failed to parse binary request header");
-            Err(ErrorCode::MalformedBinaryRequestHeader)
+            Err(ErrorCode::MalformedCommandHeader)
         }
     }
 }
@@ -1542,64 +1476,44 @@ fn extract_header(payload: &[u8]) -> Result<(BinaryRequestHeader, &[u8]), ErrorC
 async fn handle_payload<REv>(
     effect_builder: EffectBuilder<REv>,
     payload: &[u8],
-    protocol_version: ProtocolVersion,
-    rate_limiter: Arc<Mutex<RateLimiter>>,
-) -> (BinaryResponse, u16)
+    limiter_response: LimiterResponse,
+    connection_terminator: &ConnectionTerminator,
+    life_extensions_config: &BinaryRequestTerminationDelayValues,
+) -> BinaryResponse
 where
     REv: From<Event>,
 {
     let (header, remainder) = match extract_header(payload) {
         Ok(header) => header,
-        Err(error_code) => return (BinaryResponse::new_error(error_code, protocol_version), 0),
+        Err(error_code) => return BinaryResponse::new_error(error_code),
     };
 
-    let request_id = header.id();
-
-    if let LimiterResponse::Throttled = rate_limiter.lock().await.throttle() {
-        return (
-            BinaryResponse::new_error(ErrorCode::RequestThrottled, protocol_version),
-            request_id,
-        );
-    }
-
-    if !header
-        .protocol_version()
-        .is_compatible_with(&protocol_version)
-    {
-        return (
-            BinaryResponse::new_error(ErrorCode::UnsupportedProtocolVersion, protocol_version),
-            request_id,
-        );
+    if let LimiterResponse::Throttled = limiter_response {
+        return BinaryResponse::new_error(ErrorCode::RequestThrottled);
     }
 
     // we might receive a request added in a minor version if we're behind
-    let Ok(tag) = BinaryRequestTag::try_from(header.type_tag()) else {
-        return (
-            BinaryResponse::new_error(ErrorCode::UnsupportedRequest, protocol_version),
-            request_id,
-        );
+    let Ok(tag) = CommandTag::try_from(header.type_tag()) else {
+        return BinaryResponse::new_error(ErrorCode::UnsupportedRequest);
     };
 
-    let request = match BinaryRequest::try_from((tag, remainder)) {
+    let request = match Command::try_from((tag, remainder)) {
         Ok(request) => request,
         Err(error) => {
             debug!(%error, "failed to parse binary request body");
-            return (
-                BinaryResponse::new_error(ErrorCode::MalformedBinaryRequest, protocol_version),
-                request_id,
-            );
+            return BinaryResponse::new_error(ErrorCode::MalformedCommand);
         }
     };
+    connection_terminator
+        .delay_termination(life_extensions_config.get_life_termination_delay(&request))
+        .await;
 
-    (
-        effect_builder
-            .make_request(
-                |responder| Event::HandleRequest { request, responder },
-                QueueKind::Regular,
-            )
-            .await,
-        request_id,
-    )
+    effect_builder
+        .make_request(
+            |responder| Event::HandleRequest { request, responder },
+            QueueKind::Regular,
+        )
+        .await
 }
 
 async fn handle_client<REv>(
@@ -1609,7 +1523,6 @@ async fn handle_client<REv>(
     config: Arc<Config>,
     _permit: OwnedSemaphorePermit,
     rate_limiter: Arc<Mutex<RateLimiter>>,
-    protocol_version: ProtocolVersion,
 ) where
     REv: From<Event>
         + From<StorageRequest>
@@ -1623,24 +1536,20 @@ async fn handle_client<REv>(
         + From<ChainspecRawBytesRequest>
         + Send,
 {
-    let keep_alive_monitor = KeepAliveMonitor::new(
-        config.keepalive_check_interval,
-        config.keepalive_no_activity_timeout,
-        TimeDiff::from_millis(20),
-        5,
-    );
+    let keep_alive_monitor = ConnectionTerminator::new();
+    let life_extensions_config = BinaryRequestTerminationDelayValues::from_config(&config);
     if let Err(err) = handle_client_loop(
         stream,
         effect_builder,
-        config.max_message_size_bytes,
+        config,
         rate_limiter,
-        protocol_version,
         keep_alive_monitor,
+        life_extensions_config,
     )
     .await
     {
         // Low severity is used to prevent malicious clients from causing log floods.
-        info!(%addr, err=display_error(&err), "binary port client handler error");
+        trace!(%addr, err=display_error(&err), "binary port client handler error");
     }
 }
 
@@ -1857,6 +1766,31 @@ where
             }
             ComponentState::Initializing => match event {
                 Event::Initialize => {
+                    let rate_limiter_res =
+                        RateLimiter::new(self.config.qps_limit, TimeDiff::from_seconds(1));
+                    match rate_limiter_res {
+                        Ok(rate_limiter) => {
+                            match self.rate_limiter.set(Arc::new(Mutex::new(rate_limiter))) {
+                                Ok(_) => {}
+                                Err(_) => {
+                                    error!("failed to initialize binary port, rate limiter already initialized");
+                                    <Self as InitializedComponent<REv>>::set_state(
+                                        self,
+                                        ComponentState::Fatal("failed to initialize binary port, rate limiter already initialized".to_string()),
+                                    );
+                                    return Effects::new();
+                                }
+                            };
+                        }
+                        Err(error) => {
+                            error!(%error, "failed to initialize binary port");
+                            <Self as InitializedComponent<REv>>::set_state(
+                                self,
+                                ComponentState::Fatal(error.to_string()),
+                            );
+                            return Effects::new();
+                        }
+                    };
                     let (effects, state) = self.bind(self.config.enable_server, effect_builder);
                     <Self as InitializedComponent<MainEvent>>::set_state(self, state);
                     effects
@@ -1887,7 +1821,11 @@ where
                     if let Ok(permit) = Arc::clone(&self.connection_limit).try_acquire_owned() {
                         self.metrics.binary_port_connections_count.inc();
                         let config = Arc::clone(&self.config);
-                        let rate_limiter = Arc::clone(&self.rate_limiter);
+                        let rate_limiter = Arc::clone(
+                            self.rate_limiter
+                                .get()
+                                .expect("This should have been set during initialization"),
+                        );
                         tokio::spawn(handle_client(
                             peer,
                             stream,
@@ -1895,7 +1833,6 @@ where
                             config,
                             permit,
                             rate_limiter,
-                            self.protocol_version,
                         ));
                     } else {
                         warn!(
@@ -1907,15 +1844,13 @@ where
                 }
                 Event::HandleRequest { request, responder } => {
                     let config = Arc::clone(&self.config);
-                    let chainspec = Arc::clone(&self.chainspec);
                     let metrics = Arc::clone(&self.metrics);
-                    let protocol_version = self.protocol_version;
+                    let protocol_version = self.chainspec.protocol_version();
                     async move {
                         let response = handle_request(
                             request,
                             effect_builder,
                             &config,
-                            &chainspec,
                             &metrics,
                             protocol_version,
                         )

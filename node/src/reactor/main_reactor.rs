@@ -35,7 +35,7 @@ use casper_types::{
 use crate::testing::network::NetworkedReactor;
 use crate::{
     components::{
-        binary_port::BinaryPort,
+        binary_port::{BinaryPort, BinaryPortInitializationError, Metrics as BinaryPortMetrics},
         block_accumulator::{self, BlockAccumulator},
         block_synchronizer::{self, BlockSynchronizer},
         block_validator::{self, BlockValidator},
@@ -1153,12 +1153,13 @@ impl reactor::Reactor for MainReactor {
             protocol_version,
             chainspec.network_config.name.clone(),
         );
-
+        let binary_port_metrics =
+            BinaryPortMetrics::new(registry).map_err(BinaryPortInitializationError::from)?;
         let binary_port = BinaryPort::new(
             config.binary_port_server.clone(),
             chainspec.clone(),
-            registry,
-        )?;
+            binary_port_metrics,
+        );
         let event_stream_server = EventStreamServer::new(
             config.event_stream_server.clone(),
             storage.root_path().to_path_buf(),

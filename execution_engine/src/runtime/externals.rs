@@ -682,7 +682,7 @@ where
                     output_size,
                 ) = Args::parse(args)?;
                 self.charge_host_function_call(
-                    &host_function_costs.add_package_version,
+                    &host_function_costs.add_contract_version_with_message_topics,
                     [
                         contract_package_hash_ptr,
                         contract_package_hash_size,
