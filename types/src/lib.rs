@@ -101,11 +101,11 @@ pub use block::JsonBlockWithSignatures;
 pub use block::{
     AvailableBlockRange, Block, BlockBody, BlockBodyV1, BlockBodyV2, BlockGlobalAddr,
     BlockGlobalAddrTag, BlockHash, BlockHashAndHeight, BlockHeader, BlockHeaderV1, BlockHeaderV2,
-    BlockIdentifier, BlockSignatures, BlockSignaturesMergeError, BlockSignaturesV1,
-    BlockSignaturesV2, BlockSyncStatus, BlockSynchronizerStatus, BlockV1, BlockV2,
-    BlockValidationError, BlockWithSignatures, ChainNameDigest, EraEnd, EraEndV1, EraEndV2,
-    EraReport, FinalitySignature, FinalitySignatureId, FinalitySignatureV1, FinalitySignatureV2,
-    RewardedSignatures, Rewards, SignedBlockHeader, SignedBlockHeaderValidationError,
+    BlockHeaderWithSignatures, BlockHeaderWithSignaturesValidationError, BlockIdentifier,
+    BlockSignatures, BlockSignaturesMergeError, BlockSignaturesV1, BlockSignaturesV2,
+    BlockSyncStatus, BlockSynchronizerStatus, BlockV1, BlockV2, BlockValidationError,
+    BlockWithSignatures, ChainNameDigest, EraEnd, EraEndV1, EraEndV2, EraReport, FinalitySignature,
+    FinalitySignatureId, FinalitySignatureV1, FinalitySignatureV2, RewardedSignatures, Rewards,
     SingleBlockRewardedSignatures,
 };
 #[cfg(any(all(feature = "std", feature = "testing"), test))]

@@ -10,8 +10,8 @@ use casper_types::{
     contract_messages::{MessagePayload, MessageTopicOperation},
     contracts::{ContractHash, ContractPackageHash, ContractVersion, NamedKeys},
     system::CallerInfo,
-    ApiError, BlockTime, CLTyped, CLValue, Digest, HashAlgorithm, Key, Phase, RuntimeArgs, URef,
-    BLAKE2B_DIGEST_LENGTH, BLOCKTIME_SERIALIZED_LENGTH, PHASE_SERIALIZED_LENGTH,
+    ApiError, BlockTime, CLTyped, CLValue, Digest, HashAlgorithm, Key, Phase, ProtocolVersion,
+    RuntimeArgs, URef, BLAKE2B_DIGEST_LENGTH, BLOCKTIME_SERIALIZED_LENGTH, PHASE_SERIALIZED_LENGTH,
 };
 
 use crate::{contract_api, ext_ffi, unwrap_or_revert::UnwrapOrRevert};
@@ -255,6 +255,10 @@ pub fn get_blocktime() -> BlockTime {
 
 /// The default length of hashes such as account hash, state hash, hash addresses, etc.
 pub const DEFAULT_HASH_LENGTH: u8 = 32;
+/// The default size of ProtocolVersion. It's 3×u32 (major, minor, patch), so 12 bytes.
+pub const PROTOCOL_VERSION_LENGTH: u8 = 12;
+///The default size of the addressable entity flag.
+pub const ADDRESSABLE_ENTITY_LENGTH: u8 = 1;
 /// Index for the block time field of block info.
 pub const BLOCK_TIME_FIELD_IDX: u8 = 0;
 /// Index for the block height field of block info.
@@ -263,6 +267,10 @@ pub const BLOCK_HEIGHT_FIELD_IDX: u8 = 1;
 pub const PARENT_BLOCK_HASH_FIELD_IDX: u8 = 2;
 /// Index for the state hash field of block info.
 pub const STATE_HASH_FIELD_IDX: u8 = 3;
+/// Index for the protocol version field of block info.
+pub const PROTOCOL_VERSION_FIELD_IDX: u8 = 4;
+/// Index for the addressable entity field of block info.
+pub const ADDRESSABLE_ENTITY_FIELD_IDX: u8 = 5;
 
 /// Returns the block height.
 pub fn get_block_height() -> u64 {
@@ -301,6 +309,34 @@ pub fn get_state_hash() -> Digest {
             dest_non_null_ptr.as_ptr(),
             DEFAULT_HASH_LENGTH as usize,
             DEFAULT_HASH_LENGTH as usize,
+        )
+    };
+    bytesrepr::deserialize(bytes).unwrap_or_revert()
+}
+
+/// Returns the protocol version.
+pub fn get_protocol_version() -> ProtocolVersion {
+    let dest_non_null_ptr = contract_api::alloc_bytes(PROTOCOL_VERSION_LENGTH as usize);
+    let bytes = unsafe {
+        ext_ffi::casper_get_block_info(PROTOCOL_VERSION_FIELD_IDX, dest_non_null_ptr.as_ptr());
+        Vec::from_raw_parts(
+            dest_non_null_ptr.as_ptr(),
+            PROTOCOL_VERSION_LENGTH as usize,
+            PROTOCOL_VERSION_LENGTH as usize,
+        )
+    };
+    bytesrepr::deserialize(bytes).unwrap_or_revert()
+}
+
+/// Returns whether or not the addressable entity is turned on.
+pub fn get_addressable_entity() -> bool {
+    let dest_non_null_ptr = contract_api::alloc_bytes(ADDRESSABLE_ENTITY_LENGTH as usize);
+    let bytes = unsafe {
+        ext_ffi::casper_get_block_info(ADDRESSABLE_ENTITY_FIELD_IDX, dest_non_null_ptr.as_ptr());
+        Vec::from_raw_parts(
+            dest_non_null_ptr.as_ptr(),
+            ADDRESSABLE_ENTITY_LENGTH as usize,
+            ADDRESSABLE_ENTITY_LENGTH as usize,
         )
     };
     bytesrepr::deserialize(bytes).unwrap_or_revert()

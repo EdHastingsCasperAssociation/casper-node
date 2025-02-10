@@ -62,7 +62,7 @@ impl ValidatorWeightsByEraIdRequest {
 
 impl From<ValidatorWeightsByEraIdRequest> for EraValidatorsRequest {
     fn from(input: ValidatorWeightsByEraIdRequest) -> Self {
-        EraValidatorsRequest::new(input.state_hash, input.protocol_version)
+        EraValidatorsRequest::new(input.state_hash)
     }
 }
 

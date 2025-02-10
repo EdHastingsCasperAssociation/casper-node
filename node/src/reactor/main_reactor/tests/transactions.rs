@@ -425,6 +425,39 @@ pub fn exec_result_is_success(exec_result: &ExecutionResult) -> bool {
 }
 
 #[tokio::test]
+async fn should_accept_transfer_without_id() {
+    let initial_stakes = InitialStakes::FromVec(vec![u128::MAX, 1]);
+
+    let config = ConfigsOverride::default().with_pricing_handling(PricingHandling::Fixed);
+    let mut fixture = TestFixture::new(initial_stakes, Some(config)).await;
+    let transfer_amount = fixture
+        .chainspec
+        .transaction_config
+        .native_transfer_minimum_motes
+        + 100;
+
+    let alice_secret_key = Arc::clone(&fixture.node_contexts[0].secret_key);
+    let charlie_secret_key = Arc::new(SecretKey::random(&mut fixture.rng));
+
+    fixture.run_until_consensus_in_era(ERA_ONE, ONE_MIN).await;
+
+    let (_, _, result) = transfer_to_account(
+        &mut fixture,
+        transfer_amount,
+        &alice_secret_key,
+        PublicKey::from(&*charlie_secret_key),
+        PricingMode::Fixed {
+            gas_price_tolerance: 1,
+            additional_computation_factor: 0,
+        },
+        None,
+    )
+    .await;
+
+    assert!(exec_result_is_success(&result))
+}
+
+#[tokio::test]
 async fn transfer_cost_fixed_price_no_fee_no_refund() {
     const TRANSFER_AMOUNT: u64 = 30_000_000_000;
 
@@ -536,39 +569,6 @@ async fn transfer_cost_fixed_price_no_fee_no_refund() {
         alice_available_balance.available_balance(),
         alice_total_balance.available_balance()
     );
-}
-
-#[tokio::test]
-async fn should_accept_transfer_without_id() {
-    let initial_stakes = InitialStakes::FromVec(vec![u128::MAX, 1]);
-
-    let config = ConfigsOverride::default().with_pricing_handling(PricingHandling::Fixed);
-    let mut fixture = TestFixture::new(initial_stakes, Some(config)).await;
-    let transfer_amount = fixture
-        .chainspec
-        .transaction_config
-        .native_transfer_minimum_motes
-        + 100;
-
-    let alice_secret_key = Arc::clone(&fixture.node_contexts[0].secret_key);
-    let charlie_secret_key = Arc::new(SecretKey::random(&mut fixture.rng));
-
-    fixture.run_until_consensus_in_era(ERA_ONE, ONE_MIN).await;
-
-    let (_, _, result) = transfer_to_account(
-        &mut fixture,
-        transfer_amount,
-        &alice_secret_key,
-        PublicKey::from(&*charlie_secret_key),
-        PricingMode::Fixed {
-            gas_price_tolerance: 1,
-            additional_computation_factor: 0,
-        },
-        None,
-    )
-    .await;
-
-    assert!(exec_result_is_success(&result))
 }
 
 #[tokio::test]
@@ -1864,7 +1864,7 @@ async fn no_refund_no_fee_custom_payment() {
         .join("ee_601_regression.wasm");
     let module_bytes = Bytes::from(std::fs::read(contract_file).expect("cannot read module bytes"));
 
-    let expected_transaction_gas = 1000u64;
+    let expected_transaction_gas = 1_000_000_000_000u64;
     let expected_transaction_cost = expected_transaction_gas * MIN_GAS_PRICE as u64;
 
     let mut txn = Transaction::from(
@@ -3995,7 +3995,79 @@ async fn gh_5058_regression_custom_payment_with_deploy_variant_works() {
                 .into(),
             args: runtime_args! {
                 "amount" => payment_amount,
-                "this_is_payment" => true,
+            },
+        };
+
+        let session = ExecutableDeployItem::ModuleBytes {
+            module_bytes: std::fs::read(base_path.join("do_nothing.wasm"))
+                .unwrap()
+                .into(),
+            args: runtime_args! {},
+        };
+
+        Transaction::Deploy(Deploy::new_signed(
+            timestamp,
+            ttl,
+            gas_price,
+            vec![],
+            chain_name.clone(),
+            payment,
+            session,
+            &ALICE_SECRET_KEY,
+            Some(ALICE_PUBLIC_KEY.clone()),
+        ))
+    };
+
+    let acct = get_balance(&mut test.fixture, &ALICE_PUBLIC_KEY, None, true);
+    assert!(acct.total_balance().cloned().unwrap() >= payment_amount);
+
+    let (_txn_hash, _block_height, exec_result) = test.send_transaction(txn).await;
+
+    assert_eq!(exec_result.error_message(), None);
+}
+
+#[tokio::test]
+async fn should_penalize_failed_custom_payment() {
+    let config = SingleTransactionTestCase::default_test_config()
+        .with_pricing_handling(PricingHandling::Classic)
+        .with_refund_handling(RefundHandling::NoRefund)
+        .with_fee_handling(FeeHandling::NoFee);
+
+    let mut test = SingleTransactionTestCase::new(
+        ALICE_SECRET_KEY.clone(),
+        BOB_SECRET_KEY.clone(),
+        CHARLIE_SECRET_KEY.clone(),
+        Some(config),
+    )
+    .await;
+
+    test.fixture
+        .run_until_consensus_in_era(ERA_ONE, ONE_MIN)
+        .await;
+
+    // This WASM creates named key called "new_key". Then it would loop endlessly trying to write a
+    // value to storage. Eventually it will run out of gas and it should exit causing a revert.
+    let base_path = RESOURCES_PATH
+        .parent()
+        .unwrap()
+        .join("target")
+        .join("wasm32-unknown-unknown")
+        .join("release");
+
+    let payment_amount = U512::from(1_000_000u64);
+
+    let txn = {
+        let timestamp = Timestamp::now();
+        let ttl = TimeDiff::from_seconds(100);
+        let gas_price = 1;
+        let chain_name = test.chainspec().network_config.name.clone();
+
+        let payment = ExecutableDeployItem::ModuleBytes {
+            module_bytes: std::fs::read(base_path.join("do_nothing.wasm"))
+                .unwrap()
+                .into(),
+            args: runtime_args! {
+                "amount" => payment_amount,
             },
         };
 
@@ -4026,5 +4098,101 @@ async fn gh_5058_regression_custom_payment_with_deploy_variant_works() {
 
     let (_txn_hash, _block_height, exec_result) = test.send_transaction(txn).await;
 
-    assert_eq!(exec_result.error_message(), None);
+    assert_ne!(exec_result.error_message(), None);
+
+    assert!(exec_result
+        .error_message()
+        .expect("should have err message")
+        .starts_with("Insufficient custom payment"))
+}
+
+#[tokio::test]
+async fn gh_5082_install_upgrade_should_allow_adding_new_version() {
+    let config = SingleTransactionTestCase::default_test_config()
+        .with_pricing_handling(PricingHandling::Classic)
+        .with_refund_handling(RefundHandling::NoRefund)
+        .with_fee_handling(FeeHandling::NoFee);
+
+    let mut test = SingleTransactionTestCase::new(
+        ALICE_SECRET_KEY.clone(),
+        BOB_SECRET_KEY.clone(),
+        CHARLIE_SECRET_KEY.clone(),
+        Some(config),
+    )
+    .await;
+
+    test.fixture
+        .run_until_consensus_in_era(ERA_ONE, ONE_MIN)
+        .await;
+
+    // This WASM creates named key called "new_key". Then it would loop endlessly trying to write a
+    // value to storage. Eventually it will run out of gas and it should exit causing a revert.
+    let base_path = RESOURCES_PATH
+        .parent()
+        .unwrap()
+        .join("target")
+        .join("wasm32-unknown-unknown")
+        .join("release");
+
+    let txn_1 = {
+        let chain_name = test.chainspec().network_config.name.clone();
+
+        let module_bytes = std::fs::read(base_path.join("do_nothing_stored.wasm")).unwrap();
+        let mut txn = Transaction::from(
+            TransactionV1Builder::new_session(
+                true,
+                module_bytes.into(),
+                TransactionRuntimeParams::VmCasperV1,
+            )
+            .with_initiator_addr(ALICE_PUBLIC_KEY.clone())
+            .with_pricing_mode(PricingMode::PaymentLimited {
+                payment_amount: 100_000_000_000u64,
+                gas_price_tolerance: 1,
+                standard_payment: true,
+            })
+            .with_chain_name(chain_name)
+            .build()
+            .unwrap(),
+        );
+        txn.sign(&ALICE_SECRET_KEY);
+        txn
+    };
+
+    let (_txn_hash, _block_height, exec_result_1) = test.send_transaction(txn_1).await;
+
+    assert_eq!(exec_result_1.error_message(), None); // should succeed
+
+    let txn_2 = {
+        let chain_name = test.chainspec().network_config.name.clone();
+
+        let module_bytes = std::fs::read(base_path.join("do_nothing_stored.wasm")).unwrap();
+        let mut txn = Transaction::from(
+            TransactionV1Builder::new_session(
+                true,
+                module_bytes.into(),
+                TransactionRuntimeParams::VmCasperV1,
+            )
+            .with_initiator_addr(BOB_PUBLIC_KEY.clone())
+            .with_pricing_mode(PricingMode::PaymentLimited {
+                payment_amount: 100_000_000_000u64,
+                gas_price_tolerance: 1,
+                // This is the key part of the test: we are using `standard_payment == false` to use
+                // session code as payment code. This should fail to add new
+                // contract version.
+                standard_payment: false,
+            })
+            .with_chain_name(chain_name)
+            .build()
+            .unwrap(),
+        );
+        txn.sign(&BOB_SECRET_KEY);
+        txn
+    };
+
+    let (_txn_hash, _block_height, exec_result_2) = test.send_transaction(txn_2).await;
+
+    assert_eq!(
+        exec_result_2.error_message(),
+        Some("ApiError::NotAllowedToAddContractVersion [48]".to_string())
+    ); // should not succeed, adding new contract version during payment is not allowed.
 }

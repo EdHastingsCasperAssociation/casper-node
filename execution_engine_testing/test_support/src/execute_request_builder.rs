@@ -6,11 +6,12 @@ use casper_execution_engine::engine_state::{
 use casper_types::{
     account::AccountHash, addressable_entity::DEFAULT_ENTRY_POINT_NAME, runtime_args,
     AddressableEntityHash, BlockHash, BlockTime, Digest, EntityVersion, Gas, InitiatorAddr,
-    PackageHash, Phase, RuntimeArgs, TransactionHash, TransactionV1Hash,
+    PackageHash, Phase, ProtocolVersion, RuntimeArgs, TransactionHash, TransactionV1Hash,
 };
 
 use crate::{
     deploy_item::DeployItem, DeployItemBuilder, ARG_AMOUNT, DEFAULT_BLOCK_TIME, DEFAULT_PAYMENT,
+    DEFAULT_PROTOCOL_VERSION,
 };
 
 /// A request comprising a [`WasmV1Request`] for use as session code, and an optional custom
@@ -37,6 +38,7 @@ pub struct ExecuteRequestBuilder {
     block_time: BlockTime,
     block_height: u64,
     parent_block_hash: BlockHash,
+    protocol_version: ProtocolVersion,
     transaction_hash: TransactionHash,
     initiator_addr: InitiatorAddr,
     payment: Option<ExecutableItem>,
@@ -60,6 +62,8 @@ impl ExecuteRequestBuilder {
         TransactionHash::V1(TransactionV1Hash::from_raw([2; 32]));
     /// The default value used for `WasmV1Request::entry_point`.
     pub const DEFAULT_ENTRY_POINT: &'static str = "call";
+    /// The default protocol version stored in the BlockInfo
+    pub const DEFAULT_PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion::V2_0_0;
 
     /// Converts a `SessionInputData` into an `ExecuteRequestBuilder`.
     pub fn from_session_input_data(session_input_data: &SessionInputData) -> Self {
@@ -68,6 +72,7 @@ impl ExecuteRequestBuilder {
             BlockTime::new(DEFAULT_BLOCK_TIME),
             BlockHash::default(),
             0,
+            DEFAULT_PROTOCOL_VERSION,
         );
         let authorization_keys = session_input_data.signers();
         let session =
@@ -89,6 +94,7 @@ impl ExecuteRequestBuilder {
                 BlockTime::new(DEFAULT_BLOCK_TIME),
                 BlockHash::default(),
                 0,
+                DEFAULT_PROTOCOL_VERSION,
             );
             let request = WasmV1Request::new_custom_payment(
                 block_info,
@@ -107,6 +113,7 @@ impl ExecuteRequestBuilder {
             block_time: session.block_info.block_time,
             block_height: session.block_info.block_height,
             parent_block_hash: session.block_info.parent_block_hash,
+            protocol_version: session.block_info.protocol_version,
             transaction_hash: session.transaction_hash,
             initiator_addr: session.initiator_addr,
             payment,
@@ -129,6 +136,7 @@ impl ExecuteRequestBuilder {
             BlockTime::new(DEFAULT_BLOCK_TIME),
             BlockHash::default(),
             0,
+            DEFAULT_PROTOCOL_VERSION,
         );
         let session = deploy_item
             .new_session_from_deploy_item(block_info, Gas::new(DEFAULT_GAS_LIMIT))
@@ -149,6 +157,7 @@ impl ExecuteRequestBuilder {
                 BlockTime::new(DEFAULT_BLOCK_TIME),
                 BlockHash::default(),
                 0,
+                DEFAULT_PROTOCOL_VERSION,
             );
             let request = deploy_item
                 .new_custom_payment_from_deploy_item(block_info, Gas::new(DEFAULT_GAS_LIMIT))
@@ -164,6 +173,7 @@ impl ExecuteRequestBuilder {
             block_time: session.block_info.block_time,
             block_height: session.block_info.block_height,
             parent_block_hash: session.block_info.parent_block_hash,
+            protocol_version: session.block_info.protocol_version,
             transaction_hash: session.transaction_hash,
             initiator_addr: session.initiator_addr,
             payment,
@@ -324,6 +334,7 @@ impl ExecuteRequestBuilder {
             block_time,
             block_height,
             parent_block_hash,
+            protocol_version,
             transaction_hash,
             initiator_addr,
             payment,
@@ -337,7 +348,13 @@ impl ExecuteRequestBuilder {
             authorization_keys,
         } = self;
 
-        let block_info = BlockInfo::new(state_hash, block_time, parent_block_hash, block_height);
+        let block_info = BlockInfo::new(
+            state_hash,
+            block_time,
+            parent_block_hash,
+            block_height,
+            protocol_version,
+        );
         let maybe_custom_payment = payment.map(|executable_item| WasmV1Request {
             block_info,
             transaction_hash,

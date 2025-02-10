@@ -23,10 +23,10 @@ use casper_types::{
     execution::{Effects, ExecutionResult, ExecutionResultV2},
     generate_ed25519_keypair,
     testing::TestRng,
-    ApprovalsHash, AvailableBlockRange, Block, BlockHash, BlockHeader, BlockSignatures,
-    BlockSignaturesV2, BlockV2, ChainNameDigest, Chainspec, ChainspecRawBytes, Deploy, DeployHash,
-    Digest, EraId, ExecutionInfo, FinalitySignature, FinalitySignatureV2, Gas, InitiatorAddr,
-    ProtocolVersion, PublicKey, SecretKey, SignedBlockHeader, TestBlockBuilder, TestBlockV1Builder,
+    ApprovalsHash, AvailableBlockRange, Block, BlockHash, BlockHeader, BlockHeaderWithSignatures,
+    BlockSignatures, BlockSignaturesV2, BlockV2, ChainNameDigest, Chainspec, ChainspecRawBytes,
+    Deploy, DeployHash, Digest, EraId, ExecutionInfo, FinalitySignature, FinalitySignatureV2, Gas,
+    InitiatorAddr, ProtocolVersion, PublicKey, SecretKey, TestBlockBuilder, TestBlockV1Builder,
     TimeDiff, Transaction, TransactionConfig, TransactionHash, TransactionV1Hash, Transfer,
     TransferV2, U512,
 };
@@ -76,10 +76,12 @@ fn block_headers_into_heights(block_headers: &[BlockHeader]) -> Vec<u64> {
         .collect()
 }
 
-fn signed_block_headers_into_heights(signed_block_headers: &[SignedBlockHeader]) -> Vec<u64> {
-    signed_block_headers
+fn block_headers_with_signatures_into_heights(
+    block_headers_with_signatures: &[BlockHeaderWithSignatures],
+) -> Vec<u64> {
+    block_headers_with_signatures
         .iter()
-        .map(|signed_block_header| signed_block_header.block_header().height())
+        .map(|block_header_with_signatures| block_header_with_signatures.block_header().height())
         .collect()
 }
 
@@ -1947,18 +1949,18 @@ fn should_get_trusted_ancestor_headers() {
 }
 
 #[test]
-fn should_get_signed_block_headers() {
+fn should_get_block_headers_with_signatures() {
     let (storage, _, blocks) = create_sync_leap_test_chain(&[], false, None);
 
     let get_results = |requested_height: usize| -> Vec<u64> {
         let txn = storage.block_store.checkout_ro().unwrap();
         let requested_block_header = blocks.get(requested_height).unwrap().clone_header();
         let highest_block_header_with_sufficient_signatures = storage
-            .get_highest_complete_signed_block_header(&txn)
+            .get_highest_complete_block_header_with_signatures(&txn)
             .unwrap()
             .unwrap();
         storage
-            .get_signed_block_headers(
+            .get_block_headers_with_signatures(
                 &txn,
                 &requested_block_header,
                 &highest_block_header_with_sufficient_signatures,
@@ -1966,7 +1968,9 @@ fn should_get_signed_block_headers() {
             .unwrap()
             .unwrap()
             .iter()
-            .map(|signed_block_header| signed_block_header.block_header().height())
+            .map(|block_header_with_signatures| {
+                block_header_with_signatures.block_header().height()
+            })
             .collect()
     };
 
@@ -1990,19 +1994,19 @@ fn should_get_signed_block_headers() {
 }
 
 #[test]
-fn should_get_signed_block_headers_when_no_sufficient_finality_in_most_recent_block() {
+fn should_get_block_headers_with_signatures_when_no_sufficient_finality_in_most_recent_block() {
     let (storage, _, blocks) = create_sync_leap_test_chain(&[12], false, None);
 
     let get_results = |requested_height: usize| -> Vec<u64> {
         let txn = storage.block_store.checkout_ro().unwrap();
         let requested_block_header = blocks.get(requested_height).unwrap().clone_header();
         let highest_block_header_with_sufficient_signatures = storage
-            .get_highest_complete_signed_block_header(&txn)
+            .get_highest_complete_block_header_with_signatures(&txn)
             .unwrap()
             .unwrap();
 
         storage
-            .get_signed_block_headers(
+            .get_block_headers_with_signatures(
                 &txn,
                 &requested_block_header,
                 &highest_block_header_with_sufficient_signatures,
@@ -2010,7 +2014,9 @@ fn should_get_signed_block_headers_when_no_sufficient_finality_in_most_recent_bl
             .unwrap()
             .unwrap()
             .iter()
-            .map(|signed_block_header| signed_block_header.block_header().height())
+            .map(|block_header_with_signatures| {
+                block_header_with_signatures.block_header().height()
+            })
             .collect()
     };
 
@@ -2052,7 +2058,7 @@ fn should_get_sync_leap() {
         vec![5, 4],
     );
     assert_eq!(
-        signed_block_headers_into_heights(&sync_leap.signed_block_headers),
+        block_headers_with_signatures_into_heights(&sync_leap.block_headers_with_signatures),
         vec![7, 10, 12]
     );
 
@@ -2062,7 +2068,7 @@ fn should_get_sync_leap() {
 }
 
 #[test]
-fn sync_leap_signed_block_headers_should_be_empty_when_asked_for_a_tip() {
+fn sync_leap_block_headers_with_signatures_should_be_empty_when_asked_for_a_tip() {
     let (storage, chainspec, blocks) = create_sync_leap_test_chain(&[], false, None);
 
     let requested_block_hash = *blocks.get(12).unwrap().hash();
@@ -2079,7 +2085,10 @@ fn sync_leap_signed_block_headers_should_be_empty_when_asked_for_a_tip() {
         block_headers_into_heights(&sync_leap.trusted_ancestor_headers),
         vec![11, 10],
     );
-    assert!(signed_block_headers_into_heights(&sync_leap.signed_block_headers).is_empty());
+    assert!(
+        block_headers_with_signatures_into_heights(&sync_leap.block_headers_with_signatures)
+            .is_empty()
+    );
 
     sync_leap
         .validate(&SyncLeapValidationMetaData::from_chainspec(&chainspec))
@@ -2104,7 +2113,10 @@ fn sync_leap_should_populate_trusted_ancestor_headers_if_tip_is_a_switch_block()
         block_headers_into_heights(&sync_leap.trusted_ancestor_headers),
         vec![12, 11, 10],
     );
-    assert!(signed_block_headers_into_heights(&sync_leap.signed_block_headers).is_empty());
+    assert!(
+        block_headers_with_signatures_into_heights(&sync_leap.block_headers_with_signatures)
+            .is_empty()
+    );
 
     sync_leap
         .validate(&SyncLeapValidationMetaData::from_chainspec(&chainspec))

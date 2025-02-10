@@ -17,7 +17,7 @@ use num_traits::{CheckedMul, Zero};
 use tempfile::TempDir;
 
 use casper_execution_engine::engine_state::{
-    Error, ExecutionEngineV1, WasmV1Request, WasmV1Result, DEFAULT_MAX_QUERY_DEPTH,
+    EngineConfig, Error, ExecutionEngineV1, WasmV1Request, WasmV1Result, DEFAULT_MAX_QUERY_DEPTH,
 };
 use casper_storage::{
     data_access_layer::{
@@ -1264,6 +1264,12 @@ where
         self
     }
 
+    /// Update the engine config of the builder.
+    pub fn with_engine_config(&mut self, engine_config: EngineConfig) -> &mut Self {
+        self.execution_engine = Rc::new(ExecutionEngineV1::new(engine_config));
+        self
+    }
+
     /// Sets blocktime into global state.
     pub fn with_block_time(&mut self, block_time: BlockTime) -> &mut Self {
         if let Some(state_root_hash) = self.post_state_hash {
@@ -1693,7 +1699,7 @@ where
     /// Gets [`EraValidators`].
     pub fn get_era_validators(&mut self) -> EraValidators {
         let state_hash = self.get_post_state_hash();
-        let request = EraValidatorsRequest::new(state_hash, DEFAULT_PROTOCOL_VERSION);
+        let request = EraValidatorsRequest::new(state_hash);
         let result = self.data_access_layer.era_validators(request);
 
         if let EraValidatorsResult::Success { era_validators } = result {

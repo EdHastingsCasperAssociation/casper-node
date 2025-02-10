@@ -31,6 +31,7 @@ impl BinaryMessage {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct BinaryMessageCodec {
     max_message_size_bytes: u32,
 }
@@ -76,6 +77,9 @@ impl codec::Decoder for BinaryMessageCodec {
     fn decode(&mut self, src: &mut bytes::BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let (length, have_full_frame) = if let [b1, b2, b3, b4, remainder @ ..] = &src[..] {
             let length = LengthEncoding::from_le_bytes([*b1, *b2, *b3, *b4]) as usize;
+            if length == 0 {
+                return Err(Error::EmptyRequest);
+            }
             let remainder_length = remainder.len();
             (length, remainder_length >= length)
         } else {
@@ -94,10 +98,6 @@ impl codec::Decoder for BinaryMessageCodec {
             // Not enough bytes to read the whole message.
             return Ok(None);
         };
-
-        if length == 0 {
-            return Err(Error::EmptyRequest);
-        }
 
         src.advance(LENGTH_ENCODING_SIZE_BYTES);
         Ok(Some(BinaryMessage(src.split_to(length).freeze())))

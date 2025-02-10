@@ -67,9 +67,9 @@ use casper_types::{
     bytesrepr::{FromBytes, ToBytes},
     execution::{execution_result_v1, ExecutionResult, ExecutionResultV1, ExecutionResultV2},
     Approval, ApprovalsHash, AvailableBlockRange, Block, BlockBody, BlockHash, BlockHeader,
-    BlockSignatures, BlockSignaturesV1, BlockSignaturesV2, BlockV2, ChainNameDigest, DeployHash,
-    EraId, ExecutionInfo, FinalitySignature, ProtocolVersion, SignedBlockHeader, Timestamp,
-    Transaction, TransactionConfig, TransactionHash, TransactionId, Transfer, U512,
+    BlockHeaderWithSignatures, BlockSignatures, BlockSignaturesV1, BlockSignaturesV2, BlockV2,
+    ChainNameDigest, DeployHash, EraId, ExecutionInfo, FinalitySignature, ProtocolVersion,
+    Timestamp, Transaction, TransactionConfig, TransactionHash, TransactionId, Transfer, U512,
 };
 use datasize::DataSize;
 use num_rational::Ratio;
@@ -1359,10 +1359,10 @@ impl Storage {
 
     /// Retrieves the highest block header with metadata from storage, if one exists. May return an
     /// LMDB error.
-    fn get_highest_complete_signed_block_header(
+    fn get_highest_complete_block_header_with_signatures(
         &self,
         txn: &(impl DataReader<BlockHeight, BlockHeader> + DataReader<BlockHash, BlockSignatures>),
-    ) -> Result<Option<SignedBlockHeader>, FatalStorageError> {
+    ) -> Result<Option<BlockHeaderWithSignatures>, FatalStorageError> {
         let highest_complete_block_height = match self.completed_blocks.highest_sequence() {
             Some(sequence) => sequence.high(),
             None => {
@@ -1389,7 +1389,10 @@ impl Storage {
                         )),
                     },
                 };
-                Ok(Some(SignedBlockHeader::new(header, block_signatures)))
+                Ok(Some(BlockHeaderWithSignatures::new(
+                    header,
+                    block_signatures,
+                )))
             }
             None => Ok(None),
         }
@@ -1469,20 +1472,25 @@ impl Storage {
 
     /// Returns headers of all known switch blocks after the trusted block but before
     /// highest block, with signatures, plus the signed highest block.
-    fn get_signed_block_headers(
+    fn get_block_headers_with_signatures(
         &self,
         txn: &(impl DataReader<BlockHash, BlockSignatures> + DataReader<EraId, BlockHeader>),
         trusted_block_header: &BlockHeader,
-        highest_signed_block_header: &SignedBlockHeader,
-    ) -> Result<Option<Vec<SignedBlockHeader>>, FatalStorageError> {
+        highest_block_header_with_signatures: &BlockHeaderWithSignatures,
+    ) -> Result<Option<Vec<BlockHeaderWithSignatures>>, FatalStorageError> {
         if trusted_block_header.block_hash()
-            == highest_signed_block_header.block_header().block_hash()
+            == highest_block_header_with_signatures
+                .block_header()
+                .block_hash()
         {
             return Ok(Some(vec![]));
         }
 
         let start_era_id: u64 = trusted_block_header.next_block_era_id().into();
-        let current_era_id: u64 = highest_signed_block_header.block_header().era_id().into();
+        let current_era_id: u64 = highest_block_header_with_signatures
+            .block_header()
+            .era_id()
+            .into();
 
         let mut result = vec![];
 
@@ -1505,12 +1513,15 @@ impl Storage {
                             )),
                         },
                     };
-                    result.push(SignedBlockHeader::new(block_header, block_signatures));
+                    result.push(BlockHeaderWithSignatures::new(
+                        block_header,
+                        block_signatures,
+                    ));
                 }
                 None => return Ok(None),
             }
         }
-        result.push(highest_signed_block_header.clone());
+        result.push(highest_block_header_with_signatures.clone());
 
         Ok(Some(result))
     }
@@ -1740,12 +1751,12 @@ impl Storage {
                 trusted_ancestor_only: true,
                 trusted_block_header,
                 trusted_ancestor_headers,
-                signed_block_headers: vec![],
+                block_headers_with_signatures: vec![],
             }));
         }
 
         let highest_complete_block_header =
-            match self.get_highest_complete_signed_block_header(&txn)? {
+            match self.get_highest_complete_block_header_with_signatures(&txn)? {
                 Some(highest_complete_block_header) => highest_complete_block_header,
                 None => return Ok(FetchResponse::NotFound(sync_leap_identifier)),
             };
@@ -1764,13 +1775,13 @@ impl Storage {
                 trusted_ancestor_only: false,
                 trusted_block_header,
                 trusted_ancestor_headers: vec![],
-                signed_block_headers: vec![],
+                block_headers_with_signatures: vec![],
             }));
         }
 
         // The `highest_complete_block_header` and `trusted_block_header` are both within the
         // highest complete block range, thus so are all the switch blocks between them.
-        if let Some(signed_block_headers) = self.get_signed_block_headers(
+        if let Some(block_headers_with_signatures) = self.get_block_headers_with_signatures(
             &txn,
             &trusted_block_header,
             &highest_complete_block_header,
@@ -1779,7 +1790,7 @@ impl Storage {
                 trusted_ancestor_only: false,
                 trusted_block_header,
                 trusted_ancestor_headers,
-                signed_block_headers,
+                block_headers_with_signatures,
             }));
         }
 

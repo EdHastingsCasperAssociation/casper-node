@@ -1,7 +1,4 @@
-use casper_types::{
-    bytesrepr::{self, Bytes, FromBytes, ToBytes},
-    ProtocolVersion,
-};
+use casper_types::bytesrepr::{self, Bytes, FromBytes, ToBytes};
 
 use crate::{
     binary_response_header::BinaryResponseHeader,
@@ -23,55 +20,51 @@ pub struct BinaryResponse {
 
 impl BinaryResponse {
     /// Creates new empty binary response.
-    pub fn new_empty(protocol_version: ProtocolVersion) -> Self {
+    pub fn new_empty() -> Self {
         Self {
-            header: BinaryResponseHeader::new(None, protocol_version),
+            header: BinaryResponseHeader::new(None),
             payload: vec![],
         }
     }
 
     /// Creates new binary response with error code.
-    pub fn new_error(error: ErrorCode, protocol_version: ProtocolVersion) -> Self {
+    pub fn new_error(error: ErrorCode) -> Self {
         BinaryResponse {
-            header: BinaryResponseHeader::new_error(error, protocol_version),
+            header: BinaryResponseHeader::new_error(error),
             payload: vec![],
         }
     }
 
     /// Creates new binary response from raw bytes.
-    pub fn from_raw_bytes(
-        payload_type: ResponseType,
-        payload: Vec<u8>,
-        protocol_version: ProtocolVersion,
-    ) -> Self {
+    pub fn from_raw_bytes(payload_type: ResponseType, payload: Vec<u8>) -> Self {
         BinaryResponse {
-            header: BinaryResponseHeader::new(Some(payload_type), protocol_version),
+            header: BinaryResponseHeader::new(Some(payload_type)),
             payload,
         }
     }
 
     /// Creates a new binary response from a value.
-    pub fn from_value<V>(val: V, protocol_version: ProtocolVersion) -> Self
+    pub fn from_value<V>(val: V) -> Self
     where
         V: ToBytes + PayloadEntity,
     {
         ToBytes::to_bytes(&val).map_or(
-            BinaryResponse::new_error(ErrorCode::InternalError, protocol_version),
+            BinaryResponse::new_error(ErrorCode::InternalError),
             |payload| BinaryResponse {
                 payload,
-                header: BinaryResponseHeader::new(Some(V::RESPONSE_TYPE), protocol_version),
+                header: BinaryResponseHeader::new(Some(V::RESPONSE_TYPE)),
             },
         )
     }
 
     /// Creates a new binary response from an optional value.
-    pub fn from_option<V>(opt: Option<V>, protocol_version: ProtocolVersion) -> Self
+    pub fn from_option<V>(opt: Option<V>) -> Self
     where
         V: ToBytes + PayloadEntity,
     {
         match opt {
-            Some(val) => Self::from_value(val, protocol_version),
-            None => Self::new_empty(protocol_version),
+            Some(val) => Self::from_value(val),
+            None => Self::new_empty(),
         }
     }
 
@@ -98,11 +91,6 @@ impl BinaryResponse {
     /// Returns the payload.
     pub fn payload(&self) -> &[u8] {
         self.payload.as_ref()
-    }
-
-    /// Returns the protocol version.
-    pub fn protocol_version(&self) -> ProtocolVersion {
-        self.header.protocol_version()
     }
 
     #[cfg(test)]

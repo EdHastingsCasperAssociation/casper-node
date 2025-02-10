@@ -10,6 +10,10 @@ pub enum BlockGlobalKind {
     BlockTime(BlockTime),
     /// Message count.
     MessageCount(u64),
+    /// Protocol version.
+    ProtocolVersion(ProtocolVersion),
+    /// Addressable entity flag.
+    AddressableEntity(bool),
 }
 
 impl Default for BlockGlobalKind {
@@ -34,6 +38,30 @@ impl BlockGlobalRequest {
         block_time: BlockTime,
     ) -> Self {
         let block_global_kind = BlockGlobalKind::BlockTime(block_time);
+        BlockGlobalRequest {
+            state_hash,
+            protocol_version,
+            block_global_kind,
+        }
+    }
+
+    /// Returns protocol version setting request.
+    pub fn set_protocol_version(state_hash: Digest, protocol_version: ProtocolVersion) -> Self {
+        let block_global_kind = BlockGlobalKind::ProtocolVersion(protocol_version);
+        BlockGlobalRequest {
+            state_hash,
+            protocol_version,
+            block_global_kind,
+        }
+    }
+
+    /// Returns addressable entity flag setting request.
+    pub fn set_addressable_entity(
+        state_hash: Digest,
+        protocol_version: ProtocolVersion,
+        addressable_entity: bool,
+    ) -> Self {
+        let block_global_kind = BlockGlobalKind::AddressableEntity(addressable_entity);
         BlockGlobalRequest {
             state_hash,
             protocol_version,

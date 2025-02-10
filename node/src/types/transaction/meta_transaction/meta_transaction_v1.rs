@@ -115,6 +115,26 @@ impl MetaTransactionV1 {
         self.lane_id == AUCTION_LANE_ID
     }
 
+    pub(crate) fn is_v1_wasm(&self) -> bool {
+        match &self.target {
+            TransactionTarget::Native => false,
+            TransactionTarget::Stored {
+                runtime: stored_runtime,
+                ..
+            } => {
+                matches!(stored_runtime, TransactionRuntimeParams::VmCasperV1 { .. })
+                    && (!self.is_native_mint() && !self.is_native_auction())
+            }
+            TransactionTarget::Session {
+                runtime: session_runtime,
+                ..
+            } => {
+                matches!(session_runtime, TransactionRuntimeParams::VmCasperV1 { .. })
+                    && (!self.is_native_mint() && !self.is_native_auction())
+            }
+        }
+    }
+
     pub(crate) fn is_v2_wasm(&self) -> bool {
         match &self.target {
             TransactionTarget::Native => false,

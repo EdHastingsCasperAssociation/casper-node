@@ -77,6 +77,11 @@ impl ProtocolVersion {
         self.0
     }
 
+    /// Returns the inner [`SemVer`] destructed into a tuple of (major, minor, patch).
+    pub const fn destructure(&self) -> (u32, u32, u32) {
+        (self.0.major, self.0.minor, self.0.patch)
+    }
+
     /// Checks if next version can be followed.
     pub fn check_next_version(&self, next: &ProtocolVersion) -> VersionCheckResult {
         // Protocol major versions should increase monotonically by 1.

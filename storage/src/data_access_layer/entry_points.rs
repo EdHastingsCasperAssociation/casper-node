@@ -110,7 +110,7 @@ pub enum EntryPointExistsResult {
 
 impl EntryPointExistsResult {
     /// Returns `true` if the result is `Success`.
-    pub fn is_some(self) -> bool {
+    pub fn is_success(self) -> bool {
         matches!(self, Self::Success { .. })
     }
 }

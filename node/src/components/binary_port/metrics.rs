@@ -31,7 +31,7 @@ const BINARY_PORT_TRIE_COUNT_HELP: &str = "number of Get queries received for th
 
 /// Metrics.
 #[derive(Debug)]
-pub(super) struct Metrics {
+pub(crate) struct Metrics {
     /// Number of `TryAcceptTransaction` queries received.
     pub(super) binary_port_try_accept_transaction_count: IntCounter,
     /// Number of `TrySpeculativeExec` queries received.

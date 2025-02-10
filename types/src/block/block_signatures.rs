@@ -218,7 +218,7 @@ impl BlockSignatures {
     }
 
     /// Sets the era ID to its max value, rendering it and hence `self` invalid (assuming the
-    /// relevant era ID for this `SignedBlockHeader` wasn't already the max value).
+    /// relevant era ID for this `BlockHeaderWithSignatures` wasn't already the max value).
     #[cfg(any(feature = "testing", test))]
     pub fn invalidate_era(&mut self) {
         match self {

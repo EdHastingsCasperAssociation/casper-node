@@ -28,315 +28,312 @@ pub enum ErrorCode {
     /// Wasm preprocessing.
     #[error("wasm preprocessing")]
     WasmPreprocessing = 5,
-    /// Invalid protocol version.
-    #[error("unsupported protocol version")]
-    UnsupportedProtocolVersion = 6,
     /// Internal error.
     #[error("internal error")]
-    InternalError = 7,
+    InternalError = 6,
     /// The query failed.
     #[error("the query failed")]
-    FailedQuery = 8,
+    FailedQuery = 7,
     /// Bad request.
     #[error("bad request")]
-    BadRequest = 9,
+    BadRequest = 8,
     /// Received an unsupported type of request.
     #[error("unsupported request")]
-    UnsupportedRequest = 10,
+    UnsupportedRequest = 9,
     /// Dictionary URef not found.
     #[error("dictionary URef not found")]
-    DictionaryURefNotFound = 11,
+    DictionaryURefNotFound = 10,
     /// This node has no complete blocks.
     #[error("no complete blocks")]
-    NoCompleteBlocks = 12,
+    NoCompleteBlocks = 11,
     /// The deploy had an invalid chain name
     #[error("the deploy had an invalid chain name")]
-    InvalidDeployChainName = 13,
+    InvalidDeployChainName = 12,
     /// Deploy dependencies are no longer supported
     #[error("the dependencies for this transaction are no longer supported")]
-    InvalidDeployDependenciesNoLongerSupported = 14,
+    InvalidDeployDependenciesNoLongerSupported = 13,
     /// The deploy sent to the network had an excessive size
     #[error("the deploy had an excessive size")]
-    InvalidDeployExcessiveSize = 15,
+    InvalidDeployExcessiveSize = 14,
     /// The deploy sent to the network had an excessive time to live
     #[error("the deploy had an excessive time to live")]
-    InvalidDeployExcessiveTimeToLive = 16,
+    InvalidDeployExcessiveTimeToLive = 15,
     /// The deploy sent to the network had a timestamp referencing a time that has yet to occur.
     #[error("the deploys timestamp is in the future")]
-    InvalidDeployTimestampInFuture = 17,
+    InvalidDeployTimestampInFuture = 16,
     /// The deploy sent to the network had an invalid body hash
     #[error("the deploy had an invalid body hash")]
-    InvalidDeployBodyHash = 18,
+    InvalidDeployBodyHash = 17,
     /// The deploy sent to the network had an invalid deploy hash i.e. the provided deploy hash
     /// didn't match the derived deploy hash
     #[error("the deploy had an invalid deploy hash")]
-    InvalidDeployHash = 19,
+    InvalidDeployHash = 18,
     /// The deploy sent to the network had an empty approval set
     #[error("the deploy had no approvals")]
-    InvalidDeployEmptyApprovals = 20,
+    InvalidDeployEmptyApprovals = 19,
     /// The deploy sent to the network had an invalid approval
     #[error("the deploy had an invalid approval")]
-    InvalidDeployApproval = 21,
+    InvalidDeployApproval = 20,
     /// The deploy sent to the network had an excessive session args length
     #[error("the deploy had an excessive session args length")]
-    InvalidDeployExcessiveSessionArgsLength = 22,
+    InvalidDeployExcessiveSessionArgsLength = 21,
     /// The deploy sent to the network had an excessive payment args length
     #[error("the deploy had an excessive payment args length")]
-    InvalidDeployExcessivePaymentArgsLength = 23,
+    InvalidDeployExcessivePaymentArgsLength = 22,
     /// The deploy sent to the network had a missing payment amount
     #[error("the deploy had a missing payment amount")]
-    InvalidDeployMissingPaymentAmount = 24,
+    InvalidDeployMissingPaymentAmount = 23,
     /// The deploy sent to the network had a payment amount that was not parseable
     #[error("the deploy sent to the network had a payment amount that was unable to be parsed")]
-    InvalidDeployFailedToParsePaymentAmount = 25,
+    InvalidDeployFailedToParsePaymentAmount = 24,
     /// The deploy sent to the network exceeded the block gas limit
     #[error("the deploy sent to the network exceeded the block gas limit")]
-    InvalidDeployExceededBlockGasLimit = 26,
+    InvalidDeployExceededBlockGasLimit = 25,
     /// The deploy sent to the network was missing a transfer amount
     #[error("the deploy sent to the network was missing a transfer amount")]
-    InvalidDeployMissingTransferAmount = 27,
+    InvalidDeployMissingTransferAmount = 26,
     /// The deploy sent to the network had a transfer amount that was unable to be parseable
     #[error("the deploy sent to the network had a transfer amount that was unable to be parsed")]
-    InvalidDeployFailedToParseTransferAmount = 28,
+    InvalidDeployFailedToParseTransferAmount = 27,
     /// The deploy sent to the network had a transfer amount that was insufficient
     #[error("the deploy sent to the network had an insufficient transfer amount")]
-    InvalidDeployInsufficientTransferAmount = 29,
+    InvalidDeployInsufficientTransferAmount = 28,
     /// The deploy sent to the network had excessive approvals
     #[error("the deploy sent to the network had excessive approvals")]
-    InvalidDeployExcessiveApprovals = 30,
+    InvalidDeployExcessiveApprovals = 29,
     /// The network was unable to calculate the gas limit for the deploy
     #[error("the network was unable to calculate the gas limit associated with the deploy")]
-    InvalidDeployUnableToCalculateGasLimit = 31,
+    InvalidDeployUnableToCalculateGasLimit = 30,
     /// The network was unable to calculate the gas cost for the deploy
     #[error("the network was unable to calculate the gas cost for the deploy")]
-    InvalidDeployUnableToCalculateGasCost = 32,
+    InvalidDeployUnableToCalculateGasCost = 31,
     /// The deploy sent to the network was invalid for an unspecified reason
     #[error("the deploy sent to the network was invalid for an unspecified reason")]
-    InvalidDeployUnspecified = 33,
+    InvalidDeployUnspecified = 32,
     /// The transaction sent to the network had an invalid chain name
     #[error("the transaction sent to the network had an invalid chain name")]
-    InvalidTransactionChainName = 34,
+    InvalidTransactionChainName = 33,
     /// The transaction sent to the network had an excessive size
     #[error("the transaction sent to the network had an excessive size")]
-    InvalidTransactionExcessiveSize = 35,
+    InvalidTransactionExcessiveSize = 34,
     /// The transaction sent to the network had an excessive time to live
     #[error("the transaction sent to the network had an excessive time to live")]
-    InvalidTransactionExcessiveTimeToLive = 36,
+    InvalidTransactionExcessiveTimeToLive = 35,
     /// The transaction sent to the network had a timestamp located in the future.
     #[error("the transaction sent to the network had a timestamp that has not yet occurred")]
-    InvalidTransactionTimestampInFuture = 37,
+    InvalidTransactionTimestampInFuture = 36,
     /// The transaction sent to the network had a provided body hash that conflicted with hash
     /// derived by the network
     #[error("the transaction sent to the network had an invalid body hash")]
-    InvalidTransactionBodyHash = 38,
+    InvalidTransactionBodyHash = 37,
     /// The transaction sent to the network had a provided hash that conflicted with the hash
     /// derived by the network
     #[error("the transaction sent to the network had an invalid hash")]
-    InvalidTransactionHash = 39,
+    InvalidTransactionHash = 38,
     /// The transaction sent to the network had an empty approvals set
     #[error("the transaction sent to the network had no approvals")]
-    InvalidTransactionEmptyApprovals = 40,
+    InvalidTransactionEmptyApprovals = 39,
     /// The transaction sent to the network had an invalid approval
     #[error("the transaction sent to the network had an invalid approval")]
-    InvalidTransactionInvalidApproval = 41,
+    InvalidTransactionInvalidApproval = 40,
     /// The transaction sent to the network had excessive args length
     #[error("the transaction sent to the network had excessive args length")]
-    InvalidTransactionExcessiveArgsLength = 42,
+    InvalidTransactionExcessiveArgsLength = 41,
     /// The transaction sent to the network had excessive approvals
     #[error("the transaction sent to the network had excessive approvals")]
-    InvalidTransactionExcessiveApprovals = 43,
+    InvalidTransactionExcessiveApprovals = 42,
     /// The transaction sent to the network exceeds the block gas limit
     #[error("the transaction sent to the network exceeds the networks block gas limit")]
-    InvalidTransactionExceedsBlockGasLimit = 44,
+    InvalidTransactionExceedsBlockGasLimit = 43,
     /// The transaction sent to the network had a missing arg
     #[error("the transaction sent to the network was missing an argument")]
-    InvalidTransactionMissingArg = 45,
+    InvalidTransactionMissingArg = 44,
     /// The transaction sent to the network had an argument with an unexpected type
     #[error("the transaction sent to the network had an unexpected argument type")]
-    InvalidTransactionUnexpectedArgType = 46,
+    InvalidTransactionUnexpectedArgType = 45,
     /// The transaction sent to the network had an invalid argument
     #[error("the transaction sent to the network had an invalid argument")]
-    InvalidTransactionInvalidArg = 47,
+    InvalidTransactionInvalidArg = 46,
     /// The transaction sent to the network had an insufficient transfer amount
     #[error("the transaction sent to the network had an insufficient transfer amount")]
-    InvalidTransactionInsufficientTransferAmount = 48,
+    InvalidTransactionInsufficientTransferAmount = 47,
     /// The transaction sent to the network had a custom entry point when it should have a non
     /// custom entry point.
     #[error("the native transaction sent to the network should not have a custom entry point")]
-    InvalidTransactionEntryPointCannotBeCustom = 49,
+    InvalidTransactionEntryPointCannotBeCustom = 48,
     /// The transaction sent to the network had a standard entry point when it must be custom.
     #[error("the non-native transaction sent to the network must have a custom entry point")]
-    InvalidTransactionEntryPointMustBeCustom = 50,
+    InvalidTransactionEntryPointMustBeCustom = 49,
     /// The transaction sent to the network had empty module bytes
     #[error("the transaction sent to the network had empty module bytes")]
-    InvalidTransactionEmptyModuleBytes = 51,
+    InvalidTransactionEmptyModuleBytes = 50,
     /// The transaction sent to the network had an invalid gas price conversion
     #[error("the transaction sent to the network had an invalid gas price conversion")]
-    InvalidTransactionGasPriceConversion = 52,
+    InvalidTransactionGasPriceConversion = 51,
     /// The network was unable to calculate the gas limit for the transaction sent.
     #[error("the network was unable to calculate the gas limit for the transaction sent")]
-    InvalidTransactionUnableToCalculateGasLimit = 53,
+    InvalidTransactionUnableToCalculateGasLimit = 52,
     /// The network was unable to calculate the gas cost for the transaction sent.
     #[error("the network was unable to calculate the gas cost for the transaction sent.")]
-    InvalidTransactionUnableToCalculateGasCost = 54,
+    InvalidTransactionUnableToCalculateGasCost = 53,
     /// The transaction sent to the network had an invalid pricing mode
     #[error("the transaction sent to the network had an invalid pricing mode")]
-    InvalidTransactionPricingMode = 55,
+    InvalidTransactionPricingMode = 54,
     /// The transaction sent to the network was invalid for an unspecified reason
     #[error("the transaction sent to the network was invalid for an unspecified reason")]
-    InvalidTransactionUnspecified = 56,
+    InvalidTransactionUnspecified = 55,
     /// As the various enums are tagged non_exhaustive, it is possible that in the future none of
     /// these previous errors cover the error that occurred, therefore we need some catchall in
     /// the case that nothing else works.
     #[error("the transaction or deploy sent to the network was invalid for an unspecified reason")]
-    InvalidTransactionOrDeployUnspecified = 57,
+    InvalidTransactionOrDeployUnspecified = 56,
     /// The switch block for the requested era was not found
     #[error("the switch block for the requested era was not found")]
-    SwitchBlockNotFound = 58,
+    SwitchBlockNotFound = 57,
     #[error("the parent of the switch block for the requested era was not found")]
     /// The parent of the switch block for the requested era was not found
-    SwitchBlockParentNotFound = 59,
+    SwitchBlockParentNotFound = 58,
     #[error("cannot serve rewards stored in V1 format")]
     /// Cannot serve rewards stored in V1 format
-    UnsupportedRewardsV1Request = 60,
-    /// Invalid binary port version.
-    #[error("binary protocol version mismatch")]
-    BinaryProtocolVersionMismatch = 61,
+    UnsupportedRewardsV1Request = 59,
+    /// Invalid binary request header versions.
+    #[error("binary request header versions mismatch")]
+    CommandHeaderVersionMismatch = 60,
     /// Blockchain is empty
     #[error("blockchain is empty")]
-    EmptyBlockchain = 62,
+    EmptyBlockchain = 61,
     /// Expected deploy, but got transaction
     #[error("expected deploy, got transaction")]
-    ExpectedDeploy = 63,
+    ExpectedDeploy = 62,
     /// Expected transaction, but got deploy
     #[error("expected transaction V1, got deploy")]
-    ExpectedTransaction = 64,
+    ExpectedTransaction = 63,
     /// Transaction has expired
     #[error("transaction has expired")]
-    TransactionExpired = 65,
+    TransactionExpired = 64,
     /// Transactions parameters are missing or incorrect
     #[error("missing or incorrect transaction parameters")]
-    MissingOrIncorrectParameters = 66,
+    MissingOrIncorrectParameters = 65,
     /// No such addressable entity
     #[error("no such addressable entity")]
-    NoSuchAddressableEntity = 67,
+    NoSuchAddressableEntity = 66,
     // No such contract at hash
     #[error("no such contract at hash")]
-    NoSuchContractAtHash = 68,
+    NoSuchContractAtHash = 67,
     /// No such entry point
     #[error("no such entry point")]
-    NoSuchEntryPoint = 69,
+    NoSuchEntryPoint = 68,
     /// No such package at hash
     #[error("no such package at hash")]
-    NoSuchPackageAtHash = 70,
+    NoSuchPackageAtHash = 69,
     /// Invalid entity at version
     #[error("invalid entity at version")]
-    InvalidEntityAtVersion = 71,
+    InvalidEntityAtVersion = 70,
     /// Disabled entity at version
     #[error("disabled entity at version")]
-    DisabledEntityAtVersion = 72,
+    DisabledEntityAtVersion = 71,
     /// Missing entity at version
     #[error("missing entity at version")]
-    MissingEntityAtVersion = 73,
+    MissingEntityAtVersion = 72,
     /// Invalid associated keys
     #[error("invalid associated keys")]
-    InvalidAssociatedKeys = 74,
+    InvalidAssociatedKeys = 73,
     /// Insufficient signature weight
     #[error("insufficient signature weight")]
-    InsufficientSignatureWeight = 75,
+    InsufficientSignatureWeight = 74,
     /// Insufficient balance
     #[error("insufficient balance")]
-    InsufficientBalance = 76,
+    InsufficientBalance = 75,
     /// Unknown balance
     #[error("unknown balance")]
-    UnknownBalance = 77,
+    UnknownBalance = 76,
     /// Invalid payment variant for deploy
     #[error("invalid payment variant for deploy")]
-    DeployInvalidPaymentVariant = 78,
+    DeployInvalidPaymentVariant = 77,
     /// Missing payment amount for deploy
     #[error("missing payment amount for deploy")]
-    DeployMissingPaymentAmount = 79,
+    DeployMissingPaymentAmount = 78,
     /// Failed to parse payment amount for deploy
     #[error("failed to parse payment amount for deploy")]
-    DeployFailedToParsePaymentAmount = 80,
+    DeployFailedToParsePaymentAmount = 79,
     /// Missing transfer target for deploy
     #[error("missing transfer target for deploy")]
-    DeployMissingTransferTarget = 81,
+    DeployMissingTransferTarget = 80,
     /// Missing module bytes for deploy
     #[error("missing module bytes for deploy")]
-    DeployMissingModuleBytes = 82,
+    DeployMissingModuleBytes = 81,
     /// Entry point cannot be 'call'
     #[error("entry point cannot be 'call'")]
-    InvalidTransactionEntryPointCannotBeCall = 83,
+    InvalidTransactionEntryPointCannotBeCall = 82,
     /// Invalid transaction lane
     #[error("invalid transaction lane")]
-    InvalidTransactionInvalidTransactionLane = 84,
+    InvalidTransactionInvalidTransactionLane = 83,
     /// Gas price tolerance too low
     #[error("gas price tolerance too low")]
-    GasPriceToleranceTooLow = 85,
+    GasPriceToleranceTooLow = 84,
     /// Received V1 Transaction for spec exec.
     #[error("received v1 transaction for speculative execution")]
-    ReceivedV1Transaction = 86,
+    ReceivedV1Transaction = 85,
     /// Purse was not found for given identifier.
     #[error("purse was not found for given identifier")]
-    PurseNotFound = 87,
+    PurseNotFound = 86,
     /// Too many requests per second.
     #[error("request was throttled")]
-    RequestThrottled = 88,
+    RequestThrottled = 87,
     /// Expected named arguments.
     #[error("expected named arguments")]
-    ExpectedNamedArguments = 89,
+    ExpectedNamedArguments = 88,
     /// Invalid transaction runtime.
     #[error("invalid transaction runtime")]
-    InvalidTransactionRuntime = 90,
+    InvalidTransactionRuntime = 89,
     /// Key in transfer request malformed
     #[error("malformed transfer record key")]
-    TransferRecordMalformedKey = 91,
+    TransferRecordMalformedKey = 90,
     /// Malformed information request
     #[error("malformed information request")]
-    MalformedInformationRequest = 92,
+    MalformedInformationRequest = 91,
     /// Malformed binary version
-    #[error("malformed version bytes in header of binary request")]
-    MalformedBinaryVersion = 93,
-    /// Malformed binary protocolVersion
-    #[error("malformed protocol version")]
-    MalformedProtocolVersion = 94,
+    #[error("not enough bytes to read version of the binary request header")]
+    TooLittleBytesForRequestHeaderVersion = 92,
+    /// Malformed command header version
+    #[error("malformed commnd header version")]
+    MalformedCommandHeaderVersion = 93,
     /// Malformed header
-    #[error("malformed header of binary request")]
-    MalformedBinaryRequestHeader = 95,
-    /// Malformed binary request
-    #[error("malformed binary request")]
-    MalformedBinaryRequest = 96,
+    #[error("malformed command header")]
+    MalformedCommandHeader = 94,
+    /// Malformed command
+    #[error("malformed command")]
+    MalformedCommand = 95,
     /// No matching lane for transaction
     #[error("couldn't associate a transaction lane with the transaction")]
-    InvalidTransactionNoWasmLaneMatches = 97,
+    InvalidTransactionNoWasmLaneMatches = 96,
     /// Entry point must be 'call'
     #[error("entry point must be 'call'")]
-    InvalidTransactionEntryPointMustBeCall = 98,
+    InvalidTransactionEntryPointMustBeCall = 97,
     /// One of the payloads field cannot be deserialized
     #[error("One of the payloads field cannot be deserialized")]
-    InvalidTransactionCannotDeserializeField = 99,
+    InvalidTransactionCannotDeserializeField = 98,
     /// Can't calculate hash of the payload fields
     #[error("Can't calculate hash of the payload fields")]
-    InvalidTransactionCannotCalculateFieldsHash = 100,
+    InvalidTransactionCannotCalculateFieldsHash = 99,
     /// Unexpected fields in payload
     #[error("Unexpected fields in payload")]
-    InvalidTransactionUnexpectedFields = 101,
+    InvalidTransactionUnexpectedFields = 100,
     /// Expected bytes arguments
     #[error("expected bytes arguments")]
-    InvalidTransactionExpectedBytesArguments = 102,
+    InvalidTransactionExpectedBytesArguments = 101,
     /// Missing seed field in transaction
     #[error("Missing seed field in transaction")]
-    InvalidTransactionMissingSeed = 103,
+    InvalidTransactionMissingSeed = 102,
     /// Pricing mode not supported
     #[error("Pricing mode not supported")]
-    PricingModeNotSupported = 104,
+    PricingModeNotSupported = 103,
     /// Gas limit not supported
     #[error("Gas limit not supported")]
-    InvalidDeployGasLimitNotSupported = 105,
+    InvalidDeployGasLimitNotSupported = 104,
     /// Invalid runtime for Transaction::Deploy
     #[error("Invalid runtime for Transaction::Deploy")]
-    InvalidDeployInvalidRuntime = 106,
+    InvalidDeployInvalidRuntime = 105,
 }
 
 impl TryFrom<u16> for ErrorCode {
@@ -350,107 +347,106 @@ impl TryFrom<u16> for ErrorCode {
             3 => Ok(ErrorCode::RootNotFound),
             4 => Ok(ErrorCode::InvalidItemVariant),
             5 => Ok(ErrorCode::WasmPreprocessing),
-            6 => Ok(ErrorCode::UnsupportedProtocolVersion),
-            7 => Ok(ErrorCode::InternalError),
-            8 => Ok(ErrorCode::FailedQuery),
-            9 => Ok(ErrorCode::BadRequest),
-            10 => Ok(ErrorCode::UnsupportedRequest),
-            11 => Ok(ErrorCode::DictionaryURefNotFound),
-            12 => Ok(ErrorCode::NoCompleteBlocks),
-            13 => Ok(ErrorCode::InvalidDeployChainName),
-            14 => Ok(ErrorCode::InvalidDeployDependenciesNoLongerSupported),
-            15 => Ok(ErrorCode::InvalidDeployExcessiveSize),
-            16 => Ok(ErrorCode::InvalidDeployExcessiveTimeToLive),
-            17 => Ok(ErrorCode::InvalidDeployTimestampInFuture),
-            18 => Ok(ErrorCode::InvalidDeployBodyHash),
-            19 => Ok(ErrorCode::InvalidDeployHash),
-            20 => Ok(ErrorCode::InvalidDeployEmptyApprovals),
-            21 => Ok(ErrorCode::InvalidDeployApproval),
-            22 => Ok(ErrorCode::InvalidDeployExcessiveSessionArgsLength),
-            23 => Ok(ErrorCode::InvalidDeployExcessivePaymentArgsLength),
-            24 => Ok(ErrorCode::InvalidDeployMissingPaymentAmount),
-            25 => Ok(ErrorCode::InvalidDeployFailedToParsePaymentAmount),
-            26 => Ok(ErrorCode::InvalidDeployExceededBlockGasLimit),
-            27 => Ok(ErrorCode::InvalidDeployMissingTransferAmount),
-            28 => Ok(ErrorCode::InvalidDeployFailedToParseTransferAmount),
-            29 => Ok(ErrorCode::InvalidDeployInsufficientTransferAmount),
-            30 => Ok(ErrorCode::InvalidDeployExcessiveApprovals),
-            31 => Ok(ErrorCode::InvalidDeployUnableToCalculateGasLimit),
-            32 => Ok(ErrorCode::InvalidDeployUnableToCalculateGasCost),
-            33 => Ok(ErrorCode::InvalidDeployUnspecified),
-            34 => Ok(ErrorCode::InvalidTransactionChainName),
-            35 => Ok(ErrorCode::InvalidTransactionExcessiveSize),
-            36 => Ok(ErrorCode::InvalidTransactionExcessiveTimeToLive),
-            37 => Ok(ErrorCode::InvalidTransactionTimestampInFuture),
-            38 => Ok(ErrorCode::InvalidTransactionBodyHash),
-            39 => Ok(ErrorCode::InvalidTransactionHash),
-            40 => Ok(ErrorCode::InvalidTransactionEmptyApprovals),
-            41 => Ok(ErrorCode::InvalidTransactionInvalidApproval),
-            42 => Ok(ErrorCode::InvalidTransactionExcessiveArgsLength),
-            43 => Ok(ErrorCode::InvalidTransactionExcessiveApprovals),
-            44 => Ok(ErrorCode::InvalidTransactionExceedsBlockGasLimit),
-            45 => Ok(ErrorCode::InvalidTransactionMissingArg),
-            46 => Ok(ErrorCode::InvalidTransactionUnexpectedArgType),
-            47 => Ok(ErrorCode::InvalidTransactionInvalidArg),
-            48 => Ok(ErrorCode::InvalidTransactionInsufficientTransferAmount),
-            49 => Ok(ErrorCode::InvalidTransactionEntryPointCannotBeCustom),
-            50 => Ok(ErrorCode::InvalidTransactionEntryPointMustBeCustom),
-            51 => Ok(ErrorCode::InvalidTransactionEmptyModuleBytes),
-            52 => Ok(ErrorCode::InvalidTransactionGasPriceConversion),
-            53 => Ok(ErrorCode::InvalidTransactionUnableToCalculateGasLimit),
-            54 => Ok(ErrorCode::InvalidTransactionUnableToCalculateGasCost),
-            55 => Ok(ErrorCode::InvalidTransactionPricingMode),
-            56 => Ok(ErrorCode::InvalidTransactionUnspecified),
-            57 => Ok(ErrorCode::InvalidTransactionOrDeployUnspecified),
-            58 => Ok(ErrorCode::SwitchBlockNotFound),
-            59 => Ok(ErrorCode::SwitchBlockParentNotFound),
-            60 => Ok(ErrorCode::UnsupportedRewardsV1Request),
-            61 => Ok(ErrorCode::BinaryProtocolVersionMismatch),
-            62 => Ok(ErrorCode::EmptyBlockchain),
-            63 => Ok(ErrorCode::ExpectedDeploy),
-            64 => Ok(ErrorCode::ExpectedTransaction),
-            65 => Ok(ErrorCode::TransactionExpired),
-            66 => Ok(ErrorCode::MissingOrIncorrectParameters),
-            67 => Ok(ErrorCode::NoSuchAddressableEntity),
-            68 => Ok(ErrorCode::NoSuchContractAtHash),
-            69 => Ok(ErrorCode::NoSuchEntryPoint),
-            70 => Ok(ErrorCode::NoSuchPackageAtHash),
-            71 => Ok(ErrorCode::InvalidEntityAtVersion),
-            72 => Ok(ErrorCode::DisabledEntityAtVersion),
-            73 => Ok(ErrorCode::MissingEntityAtVersion),
-            74 => Ok(ErrorCode::InvalidAssociatedKeys),
-            75 => Ok(ErrorCode::InsufficientSignatureWeight),
-            76 => Ok(ErrorCode::InsufficientBalance),
-            77 => Ok(ErrorCode::UnknownBalance),
-            78 => Ok(ErrorCode::DeployInvalidPaymentVariant),
-            79 => Ok(ErrorCode::DeployMissingPaymentAmount),
-            80 => Ok(ErrorCode::DeployFailedToParsePaymentAmount),
-            81 => Ok(ErrorCode::DeployMissingTransferTarget),
-            82 => Ok(ErrorCode::DeployMissingModuleBytes),
-            83 => Ok(ErrorCode::InvalidTransactionEntryPointCannotBeCall),
-            84 => Ok(ErrorCode::InvalidTransactionInvalidTransactionLane),
-            85 => Ok(ErrorCode::GasPriceToleranceTooLow),
-            86 => Ok(ErrorCode::ReceivedV1Transaction),
-            87 => Ok(ErrorCode::PurseNotFound),
-            88 => Ok(ErrorCode::RequestThrottled),
-            89 => Ok(ErrorCode::ExpectedNamedArguments),
-            90 => Ok(ErrorCode::InvalidTransactionRuntime),
-            91 => Ok(ErrorCode::TransferRecordMalformedKey),
-            92 => Ok(ErrorCode::MalformedInformationRequest),
-            93 => Ok(ErrorCode::MalformedBinaryVersion),
-            94 => Ok(ErrorCode::MalformedProtocolVersion),
-            95 => Ok(ErrorCode::MalformedBinaryRequestHeader),
-            96 => Ok(ErrorCode::MalformedBinaryRequest),
-            97 => Ok(ErrorCode::InvalidTransactionNoWasmLaneMatches),
-            98 => Ok(ErrorCode::InvalidTransactionEntryPointMustBeCall),
-            99 => Ok(ErrorCode::InvalidTransactionCannotDeserializeField),
-            100 => Ok(ErrorCode::InvalidTransactionCannotCalculateFieldsHash),
-            101 => Ok(ErrorCode::InvalidTransactionUnexpectedFields),
-            102 => Ok(ErrorCode::InvalidTransactionExpectedBytesArguments),
-            103 => Ok(ErrorCode::InvalidTransactionMissingSeed),
-            104 => Ok(ErrorCode::PricingModeNotSupported),
-            105 => Ok(ErrorCode::InvalidDeployGasLimitNotSupported),
-            106 => Ok(ErrorCode::InvalidDeployInvalidRuntime),
+            6 => Ok(ErrorCode::InternalError),
+            7 => Ok(ErrorCode::FailedQuery),
+            8 => Ok(ErrorCode::BadRequest),
+            9 => Ok(ErrorCode::UnsupportedRequest),
+            10 => Ok(ErrorCode::DictionaryURefNotFound),
+            11 => Ok(ErrorCode::NoCompleteBlocks),
+            12 => Ok(ErrorCode::InvalidDeployChainName),
+            13 => Ok(ErrorCode::InvalidDeployDependenciesNoLongerSupported),
+            14 => Ok(ErrorCode::InvalidDeployExcessiveSize),
+            15 => Ok(ErrorCode::InvalidDeployExcessiveTimeToLive),
+            16 => Ok(ErrorCode::InvalidDeployTimestampInFuture),
+            17 => Ok(ErrorCode::InvalidDeployBodyHash),
+            18 => Ok(ErrorCode::InvalidDeployHash),
+            19 => Ok(ErrorCode::InvalidDeployEmptyApprovals),
+            20 => Ok(ErrorCode::InvalidDeployApproval),
+            21 => Ok(ErrorCode::InvalidDeployExcessiveSessionArgsLength),
+            22 => Ok(ErrorCode::InvalidDeployExcessivePaymentArgsLength),
+            23 => Ok(ErrorCode::InvalidDeployMissingPaymentAmount),
+            24 => Ok(ErrorCode::InvalidDeployFailedToParsePaymentAmount),
+            25 => Ok(ErrorCode::InvalidDeployExceededBlockGasLimit),
+            26 => Ok(ErrorCode::InvalidDeployMissingTransferAmount),
+            27 => Ok(ErrorCode::InvalidDeployFailedToParseTransferAmount),
+            28 => Ok(ErrorCode::InvalidDeployInsufficientTransferAmount),
+            29 => Ok(ErrorCode::InvalidDeployExcessiveApprovals),
+            30 => Ok(ErrorCode::InvalidDeployUnableToCalculateGasLimit),
+            31 => Ok(ErrorCode::InvalidDeployUnableToCalculateGasCost),
+            32 => Ok(ErrorCode::InvalidDeployUnspecified),
+            33 => Ok(ErrorCode::InvalidTransactionChainName),
+            34 => Ok(ErrorCode::InvalidTransactionExcessiveSize),
+            35 => Ok(ErrorCode::InvalidTransactionExcessiveTimeToLive),
+            36 => Ok(ErrorCode::InvalidTransactionTimestampInFuture),
+            37 => Ok(ErrorCode::InvalidTransactionBodyHash),
+            38 => Ok(ErrorCode::InvalidTransactionHash),
+            39 => Ok(ErrorCode::InvalidTransactionEmptyApprovals),
+            40 => Ok(ErrorCode::InvalidTransactionInvalidApproval),
+            41 => Ok(ErrorCode::InvalidTransactionExcessiveArgsLength),
+            42 => Ok(ErrorCode::InvalidTransactionExcessiveApprovals),
+            43 => Ok(ErrorCode::InvalidTransactionExceedsBlockGasLimit),
+            44 => Ok(ErrorCode::InvalidTransactionMissingArg),
+            45 => Ok(ErrorCode::InvalidTransactionUnexpectedArgType),
+            46 => Ok(ErrorCode::InvalidTransactionInvalidArg),
+            47 => Ok(ErrorCode::InvalidTransactionInsufficientTransferAmount),
+            48 => Ok(ErrorCode::InvalidTransactionEntryPointCannotBeCustom),
+            49 => Ok(ErrorCode::InvalidTransactionEntryPointMustBeCustom),
+            50 => Ok(ErrorCode::InvalidTransactionEmptyModuleBytes),
+            51 => Ok(ErrorCode::InvalidTransactionGasPriceConversion),
+            52 => Ok(ErrorCode::InvalidTransactionUnableToCalculateGasLimit),
+            53 => Ok(ErrorCode::InvalidTransactionUnableToCalculateGasCost),
+            54 => Ok(ErrorCode::InvalidTransactionPricingMode),
+            55 => Ok(ErrorCode::InvalidTransactionUnspecified),
+            56 => Ok(ErrorCode::InvalidTransactionOrDeployUnspecified),
+            57 => Ok(ErrorCode::SwitchBlockNotFound),
+            58 => Ok(ErrorCode::SwitchBlockParentNotFound),
+            59 => Ok(ErrorCode::UnsupportedRewardsV1Request),
+            60 => Ok(ErrorCode::CommandHeaderVersionMismatch),
+            61 => Ok(ErrorCode::EmptyBlockchain),
+            62 => Ok(ErrorCode::ExpectedDeploy),
+            63 => Ok(ErrorCode::ExpectedTransaction),
+            64 => Ok(ErrorCode::TransactionExpired),
+            65 => Ok(ErrorCode::MissingOrIncorrectParameters),
+            66 => Ok(ErrorCode::NoSuchAddressableEntity),
+            67 => Ok(ErrorCode::NoSuchContractAtHash),
+            68 => Ok(ErrorCode::NoSuchEntryPoint),
+            69 => Ok(ErrorCode::NoSuchPackageAtHash),
+            70 => Ok(ErrorCode::InvalidEntityAtVersion),
+            71 => Ok(ErrorCode::DisabledEntityAtVersion),
+            72 => Ok(ErrorCode::MissingEntityAtVersion),
+            73 => Ok(ErrorCode::InvalidAssociatedKeys),
+            74 => Ok(ErrorCode::InsufficientSignatureWeight),
+            75 => Ok(ErrorCode::InsufficientBalance),
+            76 => Ok(ErrorCode::UnknownBalance),
+            77 => Ok(ErrorCode::DeployInvalidPaymentVariant),
+            78 => Ok(ErrorCode::DeployMissingPaymentAmount),
+            79 => Ok(ErrorCode::DeployFailedToParsePaymentAmount),
+            80 => Ok(ErrorCode::DeployMissingTransferTarget),
+            81 => Ok(ErrorCode::DeployMissingModuleBytes),
+            82 => Ok(ErrorCode::InvalidTransactionEntryPointCannotBeCall),
+            83 => Ok(ErrorCode::InvalidTransactionInvalidTransactionLane),
+            84 => Ok(ErrorCode::GasPriceToleranceTooLow),
+            85 => Ok(ErrorCode::ReceivedV1Transaction),
+            86 => Ok(ErrorCode::PurseNotFound),
+            87 => Ok(ErrorCode::RequestThrottled),
+            88 => Ok(ErrorCode::ExpectedNamedArguments),
+            89 => Ok(ErrorCode::InvalidTransactionRuntime),
+            90 => Ok(ErrorCode::TransferRecordMalformedKey),
+            91 => Ok(ErrorCode::MalformedInformationRequest),
+            92 => Ok(ErrorCode::TooLittleBytesForRequestHeaderVersion),
+            93 => Ok(ErrorCode::MalformedCommandHeaderVersion),
+            94 => Ok(ErrorCode::MalformedCommandHeader),
+            95 => Ok(ErrorCode::MalformedCommand),
+            96 => Ok(ErrorCode::InvalidTransactionNoWasmLaneMatches),
+            97 => Ok(ErrorCode::InvalidTransactionEntryPointMustBeCall),
+            98 => Ok(ErrorCode::InvalidTransactionCannotDeserializeField),
+            99 => Ok(ErrorCode::InvalidTransactionCannotCalculateFieldsHash),
+            100 => Ok(ErrorCode::InvalidTransactionUnexpectedFields),
+            101 => Ok(ErrorCode::InvalidTransactionExpectedBytesArguments),
+            102 => Ok(ErrorCode::InvalidTransactionMissingSeed),
+            103 => Ok(ErrorCode::PricingModeNotSupported),
+            104 => Ok(ErrorCode::InvalidDeployGasLimitNotSupported),
+            105 => Ok(ErrorCode::InvalidDeployInvalidRuntime),
             _ => Err(UnknownErrorCode),
         }
     }

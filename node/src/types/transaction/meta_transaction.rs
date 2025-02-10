@@ -113,6 +113,26 @@ impl MetaTransaction {
         }
     }
 
+    /// Should this transaction use custom payment processing?
+    pub fn is_custom_payment(&self) -> bool {
+        match self {
+            MetaTransaction::Deploy(meta_deploy) => !meta_deploy
+                .deploy()
+                .payment()
+                .is_standard_payment(Phase::Payment),
+            MetaTransaction::V1(v1) => {
+                if let PricingMode::PaymentLimited {
+                    standard_payment, ..
+                } = v1.pricing_mode()
+                {
+                    !*standard_payment
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
     /// Authorization keys.
     pub fn authorization_keys(&self) -> BTreeSet<AccountHash> {
         match self {
@@ -337,6 +357,13 @@ impl MetaTransaction {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().serialized_length(),
             MetaTransaction::V1(v1) => v1.serialized_length(),
+        }
+    }
+
+    pub fn is_v1_wasm(&self) -> bool {
+        match self {
+            MetaTransaction::Deploy(_) => true,
+            MetaTransaction::V1(v1) => v1.is_v1_wasm(),
         }
     }
 

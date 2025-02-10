@@ -8,19 +8,19 @@ use std::{
 
 use casper_binary_port::{
     AccountInformation, AddressableEntityInformation, BalanceResponse, BinaryMessage,
-    BinaryMessageCodec, BinaryRequest, BinaryRequestHeader, BinaryResponse,
-    BinaryResponseAndRequest, ConsensusStatus, ConsensusValidatorChanges, ContractInformation,
-    DictionaryItemIdentifier, DictionaryQueryResult, EntityIdentifier, EraIdentifier, ErrorCode,
-    GetRequest, GetTrieFullResult, GlobalStateEntityQualifier, GlobalStateQueryResult,
-    GlobalStateRequest, InformationRequest, InformationRequestTag, KeyPrefix, LastProgress,
-    NetworkName, NodeStatus, PackageIdentifier, PurseIdentifier, ReactorStateName, RecordId,
-    ResponseType, RewardResponse, Uptime, ValueWithProof,
+    BinaryMessageCodec, BinaryResponse, BinaryResponseAndRequest, Command, CommandHeader,
+    ConsensusStatus, ConsensusValidatorChanges, ContractInformation, DictionaryItemIdentifier,
+    DictionaryQueryResult, EntityIdentifier, EraIdentifier, ErrorCode, GetRequest,
+    GetTrieFullResult, GlobalStateEntityQualifier, GlobalStateQueryResult, GlobalStateRequest,
+    InformationRequest, InformationRequestTag, KeyPrefix, LastProgress, NetworkName, NodeStatus,
+    PackageIdentifier, PurseIdentifier, ReactorStateName, RecordId, ResponseType, RewardResponse,
+    Uptime, ValueWithProof,
 };
 use casper_storage::global_state::state::CommitProvider;
 use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionThresholds, AssociatedKeys, NamedKeyAddr, NamedKeyValue},
-    bytesrepr::{FromBytes, ToBytes},
+    bytesrepr::{Bytes, FromBytes, ToBytes},
     contracts::{ContractHash, ContractPackage, ContractPackageHash},
     execution::{Effects, TransformKindV2, TransformV2},
     system::auction::DelegatorKind,
@@ -355,7 +355,7 @@ struct TestEffects {
 
 struct TestCase {
     name: &'static str,
-    request: BinaryRequest,
+    request: Command,
     asserter: Box<dyn Fn(&BinaryResponse) -> bool>,
 }
 
@@ -502,23 +502,13 @@ async fn binary_port_component_handles_all_requests() {
         },
     ) in test_cases.iter().enumerate()
     {
-        let header = BinaryRequestHeader::new(
-            ProtocolVersion::from_parts(2, 0, 0),
-            request.tag(),
-            index as u16,
-        );
-        let header_bytes = ToBytes::to_bytes(&header).expect("should serialize");
+        let original_request_bytes = {
+            let header = CommandHeader::new(request.tag(), index as u16);
+            let header_bytes = ToBytes::to_bytes(&header).expect("should serialize");
+            let request_bytes = ToBytes::to_bytes(&request).expect("should serialize");
 
-        let original_request_id = header.id();
-        let original_request_bytes = header_bytes
-            .iter()
-            .chain(
-                ToBytes::to_bytes(&request)
-                    .expect("should serialize")
-                    .iter(),
-            )
-            .cloned()
-            .collect::<Vec<_>>();
+            [header_bytes, request_bytes].concat()
+        };
 
         client
             .send(BinaryMessage::new(original_request_bytes.clone()))
@@ -533,16 +523,11 @@ async fn binary_port_component_handles_all_requests() {
         let (binary_response_and_request, _): (BinaryResponseAndRequest, _) =
             FromBytes::from_bytes(response.payload()).expect("should deserialize response");
 
-        let mirrored_request_bytes = binary_response_and_request.original_request_bytes();
-        assert_eq!(
-            mirrored_request_bytes,
-            original_request_bytes.as_slice(),
-            "{}",
-            name
-        );
+        let bytes_sent_via_tcp = Bytes::from(original_request_bytes).to_bytes().unwrap();
+        let mirrored_request_bytes = binary_response_and_request.request();
+        assert_eq!(mirrored_request_bytes, bytes_sent_via_tcp, "{}", name);
 
-        let mirrored_request_id = binary_response_and_request.original_request_id();
-        assert_eq!(mirrored_request_id, original_request_id, "{}", name);
+        binary_response_and_request.request();
 
         assert!(asserter(binary_response_and_request.response()), "{}", name);
     }
@@ -555,7 +540,7 @@ async fn binary_port_component_handles_all_requests() {
 fn block_header_info(hash: BlockHash) -> TestCase {
     TestCase {
         name: "block_header_info",
-        request: BinaryRequest::Get(
+        request: Command::Get(
             InformationRequest::BlockHeader(Some(BlockIdentifier::Hash(hash)))
                 .try_into()
                 .expect("should convert"),
@@ -571,7 +556,7 @@ fn block_header_info(hash: BlockHash) -> TestCase {
 fn block_with_signatures_info(hash: BlockHash) -> TestCase {
     TestCase {
         name: "block_with_signatures_info",
-        request: BinaryRequest::Get(
+        request: Command::Get(
             InformationRequest::BlockWithSignatures(Some(BlockIdentifier::Hash(hash)))
                 .try_into()
                 .expect("should convert"),
@@ -589,7 +574,7 @@ fn block_with_signatures_info(hash: BlockHash) -> TestCase {
 fn peers() -> TestCase {
     TestCase {
         name: "peers",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::Peers.into(),
             key: vec![],
         }),
@@ -604,7 +589,7 @@ fn peers() -> TestCase {
 fn uptime() -> TestCase {
     TestCase {
         name: "uptime",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::Uptime.into(),
             key: vec![],
         }),
@@ -619,7 +604,7 @@ fn uptime() -> TestCase {
 fn last_progress() -> TestCase {
     TestCase {
         name: "last_progress",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::LastProgress.into(),
             key: vec![],
         }),
@@ -636,7 +621,7 @@ fn last_progress() -> TestCase {
 fn reactor_state() -> TestCase {
     TestCase {
         name: "reactor_state",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::ReactorState.into(),
             key: vec![],
         }),
@@ -653,7 +638,7 @@ fn reactor_state() -> TestCase {
 fn network_name() -> TestCase {
     TestCase {
         name: "network_name",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::NetworkName.into(),
             key: vec![],
         }),
@@ -670,7 +655,7 @@ fn network_name() -> TestCase {
 fn consensus_validator_changes() -> TestCase {
     TestCase {
         name: "consensus_validator_changes",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::ConsensusValidatorChanges.into(),
             key: vec![],
         }),
@@ -687,7 +672,7 @@ fn consensus_validator_changes() -> TestCase {
 fn block_synchronizer_status() -> TestCase {
     TestCase {
         name: "block_synchronizer_status",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::BlockSynchronizerStatus.into(),
             key: vec![],
         }),
@@ -704,7 +689,7 @@ fn block_synchronizer_status() -> TestCase {
 fn available_block_range(expected_height: u64) -> TestCase {
     TestCase {
         name: "available_block_range",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::AvailableBlockRange.into(),
             key: vec![],
         }),
@@ -721,7 +706,7 @@ fn available_block_range(expected_height: u64) -> TestCase {
 fn next_upgrade() -> TestCase {
     TestCase {
         name: "next_upgrade",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::NextUpgrade.into(),
             key: vec![],
         }),
@@ -732,7 +717,7 @@ fn next_upgrade() -> TestCase {
 fn consensus_status() -> TestCase {
     TestCase {
         name: "consensus_status",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::ConsensusStatus.into(),
             key: vec![],
         }),
@@ -749,7 +734,7 @@ fn consensus_status() -> TestCase {
 fn chainspec_raw_bytes(network_chainspec_raw_bytes: ChainspecRawBytes) -> TestCase {
     TestCase {
         name: "chainspec_raw_bytes",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::ChainspecRawBytes.into(),
             key: vec![],
         }),
@@ -766,7 +751,7 @@ fn chainspec_raw_bytes(network_chainspec_raw_bytes: ChainspecRawBytes) -> TestCa
 fn latest_switch_block_header() -> TestCase {
     TestCase {
         name: "latest_switch_block_header",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::LatestSwitchBlockHeader.into(),
             key: vec![],
         }),
@@ -781,7 +766,7 @@ fn latest_switch_block_header() -> TestCase {
 fn node_status(expected_version: ProtocolVersion) -> TestCase {
     TestCase {
         name: "node_status",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: InformationRequestTag::NodeStatus.into(),
             key: vec![],
         }),
@@ -808,7 +793,7 @@ fn node_status(expected_version: ProtocolVersion) -> TestCase {
 fn get_block_header(expected: BlockHeader) -> TestCase {
     TestCase {
         name: "get_block_header",
-        request: BinaryRequest::Get(GetRequest::Record {
+        request: Command::Get(GetRequest::Record {
             record_type_tag: RecordId::BlockHeader.into(),
             key: expected.block_hash().to_bytes().unwrap(),
         }),
@@ -823,7 +808,7 @@ fn get_block_header(expected: BlockHeader) -> TestCase {
 fn get_block_transfers(expected: BlockHeader) -> TestCase {
     TestCase {
         name: "get_block_transfers",
-        request: BinaryRequest::Get(GetRequest::Record {
+        request: Command::Get(GetRequest::Record {
             record_type_tag: RecordId::Transfer.into(),
             key: expected.block_hash().to_bytes().unwrap(),
         }),
@@ -837,7 +822,7 @@ fn get_block_transfers(expected: BlockHeader) -> TestCase {
 fn get_era_summary(state_root_hash: Digest) -> TestCase {
     TestCase {
         name: "get_era_summary",
-        request: BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+        request: Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
             Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
             GlobalStateEntityQualifier::Item {
                 base_key: Key::EraSummary,
@@ -860,7 +845,7 @@ fn get_era_summary(state_root_hash: Digest) -> TestCase {
 fn get_all_bids(state_root_hash: Digest) -> TestCase {
     TestCase {
         name: "get_all_bids",
-        request: BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+        request: Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
             Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
             GlobalStateEntityQualifier::AllItems {
                 key_tag: KeyTag::Bid,
@@ -879,7 +864,7 @@ fn get_all_bids(state_root_hash: Digest) -> TestCase {
 fn get_trie(digest: Digest) -> TestCase {
     TestCase {
         name: "get_trie",
-        request: BinaryRequest::Get(GetRequest::Trie { trie_key: digest }),
+        request: Command::Get(GetRequest::Trie { trie_key: digest }),
         asserter: Box::new(|response| {
             assert_response::<GetTrieFullResult, _>(
                 response,
@@ -893,7 +878,7 @@ fn get_trie(digest: Digest) -> TestCase {
 fn get_dictionary_item_by_addr(state_root_hash: Digest, addr: DictionaryAddr) -> TestCase {
     TestCase {
         name: "get_dictionary_item_by_addr",
-        request: BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+        request: Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
             Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
             GlobalStateEntityQualifier::DictionaryItem {
                 identifier: DictionaryItemIdentifier::DictionaryItem(addr),
@@ -921,7 +906,7 @@ fn get_dictionary_item_by_seed_uref(
 ) -> TestCase {
     TestCase {
         name: "get_dictionary_item_by_seed_uref",
-        request: BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+        request: Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
             Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
             GlobalStateEntityQualifier::DictionaryItem {
                 identifier: DictionaryItemIdentifier::URef {
@@ -954,7 +939,7 @@ fn get_dictionary_item_by_legacy_named_key(
 ) -> TestCase {
     TestCase {
         name: "get_dictionary_item_by_legacy_named_key",
-        request: BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+        request: Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
             Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
             GlobalStateEntityQualifier::DictionaryItem {
                 identifier: DictionaryItemIdentifier::AccountNamedKey {
@@ -982,7 +967,7 @@ fn get_dictionary_item_by_named_key(
 ) -> TestCase {
     TestCase {
         name: "get_dictionary_item_by_named_key",
-        request: BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+        request: Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
             Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
             GlobalStateEntityQualifier::DictionaryItem {
                 identifier: DictionaryItemIdentifier::EntityNamedKey {
@@ -1005,7 +990,7 @@ fn get_dictionary_item_by_named_key(
 fn get_balance(state_root_hash: Digest, account_hash: AccountHash) -> TestCase {
     TestCase {
         name: "get_balance",
-        request: BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+        request: Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
             Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
             GlobalStateEntityQualifier::Balance {
                 purse_identifier: PurseIdentifier::Account(account_hash),
@@ -1024,7 +1009,7 @@ fn get_balance(state_root_hash: Digest, account_hash: AccountHash) -> TestCase {
 fn get_balance_account_not_found(state_root_hash: Digest) -> TestCase {
     TestCase {
         name: "get_balance_account_not_found",
-        request: BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+        request: Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
             Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
             GlobalStateEntityQualifier::Balance {
                 purse_identifier: PurseIdentifier::Account(AccountHash([9; 32])),
@@ -1037,7 +1022,7 @@ fn get_balance_account_not_found(state_root_hash: Digest) -> TestCase {
 fn get_balance_purse_uref_not_found(state_root_hash: Digest) -> TestCase {
     TestCase {
         name: "get_balance_purse_uref_not_found",
-        request: BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+        request: Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
             Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
             GlobalStateEntityQualifier::Balance {
                 purse_identifier: PurseIdentifier::Purse(URef::new([9; 32], Default::default())),
@@ -1050,7 +1035,7 @@ fn get_balance_purse_uref_not_found(state_root_hash: Digest) -> TestCase {
 fn get_named_keys_by_prefix(state_root_hash: Digest, entity_addr: EntityAddr) -> TestCase {
     TestCase {
         name: "get_named_keys_by_prefix",
-        request: BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+        request: Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
             Some(GlobalStateIdentifier::StateRootHash(state_root_hash)),
             GlobalStateEntityQualifier::ItemsByPrefix {
                 key_prefix: KeyPrefix::NamedKeysByEntity(entity_addr),
@@ -1079,7 +1064,7 @@ fn get_reward(
 
     TestCase {
         name: "get_reward",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: key.to_bytes().expect("should serialize key"),
         }),
@@ -1097,7 +1082,7 @@ fn get_protocol_version(expected: ProtocolVersion) -> TestCase {
 
     TestCase {
         name: "get_protocol_version",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: vec![],
         }),
@@ -1120,7 +1105,7 @@ fn get_entity(state_root_hash: Digest, entity_addr: EntityAddr) -> TestCase {
 
     TestCase {
         name: "get_entity",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: key.to_bytes().expect("should serialize key"),
         }),
@@ -1143,7 +1128,7 @@ fn get_entity_without_bytecode(state_root_hash: Digest, entity_addr: EntityAddr)
 
     TestCase {
         name: "get_entity_without_bytecode",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: key.to_bytes().expect("should serialize key"),
         }),
@@ -1169,7 +1154,7 @@ fn get_entity_pre_migration_account(
 
     TestCase {
         name: "get_entity_pre_migration_account",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: key.to_bytes().expect("should serialize key"),
         }),
@@ -1195,7 +1180,7 @@ fn get_entity_post_migration_account(
 
     TestCase {
         name: "get_entity_post_migration_account",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: key.to_bytes().expect("should serialize key"),
         }),
@@ -1221,7 +1206,7 @@ fn get_entity_pre_migration_contract(
 
     TestCase {
         name: "get_entity_pre_migration_contract",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: key.to_bytes().expect("should serialize key"),
         }),
@@ -1247,7 +1232,7 @@ fn get_entity_post_migration_contract(
 
     TestCase {
         name: "get_entity_post_migration_contract",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: key.to_bytes().expect("should serialize key"),
         }),
@@ -1269,7 +1254,7 @@ fn get_package(state_root_hash: Digest, package_addr: PackageAddr) -> TestCase {
 
     TestCase {
         name: "get_package",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: key.to_bytes().expect("should serialize key"),
         }),
@@ -1294,7 +1279,7 @@ fn get_package_pre_migration(
 
     TestCase {
         name: "get_package_pre_migration",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: key.to_bytes().expect("should serialize key"),
         }),
@@ -1319,7 +1304,7 @@ fn get_package_post_migration(
 
     TestCase {
         name: "get_package_post_migration",
-        request: BinaryRequest::Get(GetRequest::Information {
+        request: Command::Get(GetRequest::Information {
             info_type_tag: key.tag().into(),
             key: key.to_bytes().expect("should serialize key"),
         }),
@@ -1347,7 +1332,7 @@ fn try_accept_transaction(key: &SecretKey) -> TestCase {
     );
     TestCase {
         name: "try_accept_transaction",
-        request: BinaryRequest::TryAcceptTransaction { transaction },
+        request: Command::TryAcceptTransaction { transaction },
         asserter: Box::new(|response| response.error_code() == ErrorCode::NoError as u16),
     }
 }
@@ -1356,7 +1341,7 @@ fn try_accept_transaction_invalid(rng: &mut TestRng) -> TestCase {
     let transaction = Transaction::V1(TransactionV1Builder::new_random(rng).build().unwrap());
     TestCase {
         name: "try_accept_transaction_invalid",
-        request: BinaryRequest::TryAcceptTransaction { transaction },
+        request: Command::TryAcceptTransaction { transaction },
         asserter: Box::new(|response| ErrorCode::try_from(response.error_code()).is_ok()),
     }
 }
@@ -1365,7 +1350,7 @@ fn try_spec_exec_invalid(rng: &mut TestRng) -> TestCase {
     let transaction = Transaction::V1(TransactionV1Builder::new_random(rng).build().unwrap());
     TestCase {
         name: "try_spec_exec_invalid",
-        request: BinaryRequest::TrySpeculativeExec { transaction },
+        request: Command::TrySpeculativeExec { transaction },
         asserter: Box::new(|response| ErrorCode::try_from(response.error_code()).is_ok()),
     }
 }
@@ -1376,13 +1361,12 @@ async fn binary_port_component_rejects_requests_with_invalid_header_version() {
 
     let (mut client, (finish_cranking, _)) = setup().await;
 
-    let request = BinaryRequest::Get(GetRequest::Information {
+    let request = Command::Get(GetRequest::Information {
         info_type_tag: InformationRequestTag::Uptime.into(),
         key: vec![],
     });
 
-    let mut header =
-        BinaryRequestHeader::new(ProtocolVersion::from_parts(2, 0, 0), request.tag(), 0);
+    let mut header = CommandHeader::new(request.tag(), 0);
 
     // Make the binary protocol version incompatible.
     header.set_binary_request_version(header.version() + 1);
@@ -1411,105 +1395,7 @@ async fn binary_port_component_rejects_requests_with_invalid_header_version() {
 
     assert_eq!(
         binary_response_and_request.response().error_code(),
-        ErrorCode::BinaryProtocolVersionMismatch as u16
-    );
-
-    let (_net, _rng) = timeout(Duration::from_secs(10), finish_cranking)
-        .await
-        .unwrap_or_else(|_| panic!("should finish cranking without timeout"));
-}
-
-#[tokio::test]
-async fn binary_port_component_rejects_requests_with_incompatible_protocol_version() {
-    testing::init_logging();
-
-    let (mut client, (finish_cranking, _)) = setup().await;
-
-    let request = BinaryRequest::Get(GetRequest::Information {
-        info_type_tag: InformationRequestTag::Uptime.into(),
-        key: vec![],
-    });
-
-    let mut header =
-        BinaryRequestHeader::new(ProtocolVersion::from_parts(2, 0, 0), request.tag(), 0);
-
-    // Make the protocol version incompatible.
-    header.set_chain_protocol_version(ProtocolVersion::from_parts(u32::MAX, u32::MAX, u32::MAX));
-
-    let header_bytes = ToBytes::to_bytes(&header).expect("should serialize");
-    let original_request_bytes = header_bytes
-        .iter()
-        .chain(
-            ToBytes::to_bytes(&request)
-                .expect("should serialize")
-                .iter(),
-        )
-        .cloned()
-        .collect::<Vec<_>>();
-    client
-        .send(BinaryMessage::new(original_request_bytes.clone()))
-        .await
-        .expect("should send message");
-    let response = timeout(Duration::from_secs(10), client.next())
-        .await
-        .unwrap_or_else(|_| panic!("should complete without timeout"))
-        .unwrap_or_else(|| panic!("should have bytes"))
-        .unwrap_or_else(|_| panic!("should have ok response"));
-    let (binary_response_and_request, _): (BinaryResponseAndRequest, _) =
-        FromBytes::from_bytes(response.payload()).expect("should deserialize response");
-
-    assert_eq!(
-        binary_response_and_request.response().error_code(),
-        ErrorCode::UnsupportedProtocolVersion as u16
-    );
-
-    let (_net, _rng) = timeout(Duration::from_secs(10), finish_cranking)
-        .await
-        .unwrap_or_else(|_| panic!("should finish cranking without timeout"));
-}
-
-#[tokio::test]
-async fn binary_port_component_accepts_requests_with_compatible_but_different_protocol_version() {
-    testing::init_logging();
-
-    let (mut client, (finish_cranking, _)) = setup().await;
-
-    let request = BinaryRequest::Get(GetRequest::Information {
-        info_type_tag: InformationRequestTag::Uptime.into(),
-        key: vec![],
-    });
-
-    let mut header =
-        BinaryRequestHeader::new(ProtocolVersion::from_parts(2, 0, 0), request.tag(), 0);
-
-    // Make the protocol different but compatible.
-    header.set_chain_protocol_version(ProtocolVersion::from_parts(2, u32::MAX, u32::MAX));
-
-    let header_bytes = ToBytes::to_bytes(&header).expect("should serialize");
-    let original_request_bytes = header_bytes
-        .iter()
-        .chain(
-            ToBytes::to_bytes(&request)
-                .expect("should serialize")
-                .iter(),
-        )
-        .cloned()
-        .collect::<Vec<_>>();
-    client
-        .send(BinaryMessage::new(original_request_bytes.clone()))
-        .await
-        .expect("should send message");
-    let response = timeout(Duration::from_secs(10), client.next())
-        .await
-        .unwrap_or_else(|_| panic!("should complete without timeout"))
-        .unwrap_or_else(|| panic!("should have bytes"))
-        .unwrap_or_else(|_| panic!("should have ok response"));
-    let (binary_response_and_request, _): (BinaryResponseAndRequest, _) =
-        FromBytes::from_bytes(response.payload()).expect("should deserialize response");
-
-    assert_eq!(
-        binary_response_and_request.response().error_code(),
-        ErrorCode::NoError as u16
+        ErrorCode::CommandHeaderVersionMismatch as u16
     );
 
     let (_net, _rng) = timeout(Duration::from_secs(10), finish_cranking)

@@ -637,7 +637,7 @@ impl TransactionAcceptor {
                     is_payment,
                     entry_point_name,
                     addressable_entity,
-                    entry_point_exists: entry_point_result.is_some(),
+                    entry_point_exists: entry_point_result.is_success(),
                 }),
 
             None => {

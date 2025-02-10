@@ -12,10 +12,10 @@ use crate::EraId;
 #[cfg(doc)]
 use crate::Signature;
 
-/// An error which can result from validating a [`SignedBlockHeader`].
+/// An error which can result from validating a [`BlockHeaderWithSignatures`].
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 #[non_exhaustive]
-pub enum SignedBlockHeaderValidationError {
+pub enum BlockHeaderWithSignaturesValidationError {
     /// Mismatch between block hash in [`BlockHeader`] and [`BlockSignatures`].
     BlockHashMismatch {
         /// The block hash in the `BlockHeader`.
@@ -32,27 +32,25 @@ pub enum SignedBlockHeaderValidationError {
     },
 }
 
-impl Display for SignedBlockHeaderValidationError {
+impl Display for BlockHeaderWithSignaturesValidationError {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         match self {
-            SignedBlockHeaderValidationError::BlockHashMismatch {
+            BlockHeaderWithSignaturesValidationError::BlockHashMismatch {
                 block_hash_in_header: expected,
                 block_hash_in_signatures: actual,
             } => {
                 write!(
                     formatter,
-                    "block hash mismatch - header: {}, signatures: {}",
-                    expected, actual
+                    "block hash mismatch - header: {expected}, signatures: {actual}",
                 )
             }
-            SignedBlockHeaderValidationError::EraIdMismatch {
+            BlockHeaderWithSignaturesValidationError::EraIdMismatch {
                 era_id_in_header: expected,
                 era_id_in_signatures: actual,
             } => {
                 write!(
                     formatter,
-                    "era id mismatch - header: {}, signatures: {}",
-                    expected, actual
+                    "era id mismatch - header: {expected}, signatures: {actual}",
                 )
             }
         }
@@ -60,21 +58,21 @@ impl Display for SignedBlockHeaderValidationError {
 }
 
 #[cfg(feature = "std")]
-impl StdError for SignedBlockHeaderValidationError {}
+impl StdError for BlockHeaderWithSignaturesValidationError {}
 
 /// A block header and collection of signatures of a given block.
 #[derive(Clone, Eq, PartialEq, Debug)]
 #[cfg_attr(any(feature = "std", test), derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
-pub struct SignedBlockHeader {
+pub struct BlockHeaderWithSignatures {
     block_header: BlockHeader,
     block_signatures: BlockSignatures,
 }
 
-impl SignedBlockHeader {
-    /// Returns a new `SignedBlockHeader`.
+impl BlockHeaderWithSignatures {
+    /// Returns a new `BlockHeaderWithSignatures`.
     pub fn new(block_header: BlockHeader, block_signatures: BlockSignatures) -> Self {
-        SignedBlockHeader {
+        BlockHeaderWithSignatures {
             block_header,
             block_signatures,
         }
@@ -95,15 +93,17 @@ impl SignedBlockHeader {
     ///
     /// Note that no cryptographic verification of the contained signatures is performed.  For this,
     /// see [`BlockSignatures::is_verified`].
-    pub fn is_valid(&self) -> Result<(), SignedBlockHeaderValidationError> {
+    pub fn is_valid(&self) -> Result<(), BlockHeaderWithSignaturesValidationError> {
         if self.block_header.block_hash() != *self.block_signatures.block_hash() {
-            return Err(SignedBlockHeaderValidationError::BlockHashMismatch {
-                block_hash_in_header: self.block_header.block_hash(),
-                block_hash_in_signatures: *self.block_signatures.block_hash(),
-            });
+            return Err(
+                BlockHeaderWithSignaturesValidationError::BlockHashMismatch {
+                    block_hash_in_header: self.block_header.block_hash(),
+                    block_hash_in_signatures: *self.block_signatures.block_hash(),
+                },
+            );
         }
         if self.block_header.era_id() != self.block_signatures.era_id() {
-            return Err(SignedBlockHeaderValidationError::EraIdMismatch {
+            return Err(BlockHeaderWithSignaturesValidationError::EraIdMismatch {
                 era_id_in_header: self.block_header.era_id(),
                 era_id_in_signatures: self.block_signatures.era_id(),
             });
@@ -112,8 +112,8 @@ impl SignedBlockHeader {
     }
 
     /// Sets the era ID contained in `block_signatures` to its max value, rendering it and hence
-    /// `self` invalid (assuming the relevant era ID for this `SignedBlockHeader` wasn't already
-    /// the max value).
+    /// `self` invalid (assuming the relevant era ID for this `BlockHeaderWithSignatures` wasn't
+    /// already the max value).
     #[cfg(any(feature = "testing", test))]
     pub fn invalidate_era(&mut self) {
         self.block_signatures.invalidate_era()
@@ -131,7 +131,7 @@ impl SignedBlockHeader {
     }
 }
 
-impl Display for SignedBlockHeader {
+impl Display for BlockHeaderWithSignatures {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}, and {}", self.block_header, self.block_signatures)
     }

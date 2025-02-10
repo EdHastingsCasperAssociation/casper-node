@@ -12,8 +12,8 @@ use std::{
 };
 
 use casper_binary_port::{
-    BinaryMessage, BinaryMessageCodec, BinaryRequest, BinaryRequestHeader,
-    BinaryResponseAndRequest, InformationRequest, Uptime,
+    BinaryMessage, BinaryMessageCodec, BinaryResponseAndRequest, Command, CommandHeader,
+    InformationRequest, Uptime,
 };
 use either::Either;
 use futures::{SinkExt, StreamExt};
@@ -1442,13 +1442,12 @@ async fn should_start_in_isolation() {
         setup_network_and_get_binary_port_handle(initial_stakes, spec_override).await;
 
     let uptime_request_bytes = {
-        let request = BinaryRequest::Get(
+        let request = Command::Get(
             InformationRequest::Uptime
                 .try_into()
                 .expect("should convert"),
         );
-        let header =
-            BinaryRequestHeader::new(ProtocolVersion::from_parts(2, 0, 0), request.tag(), 1_u16);
+        let header = CommandHeader::new(request.tag(), 1_u16);
         let header_bytes = ToBytes::to_bytes(&header).expect("should serialize");
         header_bytes
             .iter()
@@ -1494,13 +1493,12 @@ async fn should_be_peerless_in_isolation() {
         setup_network_and_get_binary_port_handle(initial_stakes, spec_override).await;
 
     let peers_request_bytes = {
-        let request = BinaryRequest::Get(
+        let request = Command::Get(
             InformationRequest::Peers
                 .try_into()
                 .expect("should convert"),
         );
-        let header =
-            BinaryRequestHeader::new(ProtocolVersion::from_parts(2, 0, 0), request.tag(), 1_u16);
+        let header = CommandHeader::new(request.tag(), 1_u16);
         let header_bytes = ToBytes::to_bytes(&header).expect("should serialize");
         header_bytes
             .iter()

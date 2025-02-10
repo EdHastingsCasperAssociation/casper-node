@@ -20,7 +20,7 @@ pub(crate) fn make_test_sync_leap(rng: &mut TestRng) -> SyncLeap {
         trusted_ancestor_only: false,
         trusted_block_header: block.clone_header(),
         trusted_ancestor_headers: vec![],
-        signed_block_headers: vec![],
+        block_headers_with_signatures: vec![],
     }
 }
 

@@ -178,7 +178,7 @@ mod tests {
             trusted_ancestor_only: false,
             trusted_block_header,
             trusted_ancestor_headers: vec![],
-            signed_block_headers: vec![],
+            block_headers_with_signatures: vec![],
         }
     }
 

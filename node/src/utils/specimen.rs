@@ -22,11 +22,11 @@ use casper_types::{
     bytesrepr::Bytes,
     crypto::{sign, PublicKey, Signature},
     AccessRights, Approval, ApprovalsHash, AsymmetricType, Block, BlockHash, BlockHeader,
-    BlockHeaderV1, BlockHeaderV2, BlockSignatures, BlockSignaturesV2, BlockV2, ChainNameDigest,
-    ChunkWithProof, Deploy, DeployHash, DeployId, Digest, EraEndV1, EraEndV2, EraId, EraReport,
-    ExecutableDeployItem, FinalitySignature, FinalitySignatureId, FinalitySignatureV2, PackageHash,
-    ProtocolVersion, RewardedSignatures, RuntimeArgs, SecretKey, SemVer, SignedBlockHeader,
-    SingleBlockRewardedSignatures, TimeDiff, Timestamp, Transaction, TransactionHash,
+    BlockHeaderV1, BlockHeaderV2, BlockHeaderWithSignatures, BlockSignatures, BlockSignaturesV2,
+    BlockV2, ChainNameDigest, ChunkWithProof, Deploy, DeployHash, DeployId, Digest, EraEndV1,
+    EraEndV2, EraId, EraReport, ExecutableDeployItem, FinalitySignature, FinalitySignatureId,
+    FinalitySignatureV2, PackageHash, ProtocolVersion, RewardedSignatures, RuntimeArgs, SecretKey,
+    SemVer, SingleBlockRewardedSignatures, TimeDiff, Timestamp, Transaction, TransactionHash,
     TransactionId, TransactionRuntimeParams, TransactionV1, TransactionV1Hash, URef,
     AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID, KEY_HASH_LENGTH, MINT_LANE_ID, U512,
 };
@@ -664,9 +664,9 @@ impl LargestSpecimen for InternalEraReport {
     }
 }
 
-impl LargestSpecimen for SignedBlockHeader {
+impl LargestSpecimen for BlockHeaderWithSignatures {
     fn largest_specimen<E: SizeEstimator>(estimator: &E, cache: &mut Cache) -> Self {
-        SignedBlockHeader::new(
+        BlockHeaderWithSignatures::new(
             LargestSpecimen::largest_specimen(estimator, cache),
             LargestSpecimen::largest_specimen(estimator, cache),
         )

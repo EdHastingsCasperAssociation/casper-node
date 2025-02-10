@@ -78,7 +78,7 @@ pub enum ForcedUndelegateResult {
     RootNotFound,
     /// Forced undelegation failed.
     Failure(ForcedUndelegateError),
-    /// Forced undelgation succeeded.
+    /// Forced undelegation succeeded.
     Success {
         /// State hash after distribution outcome is committed to the global state.
         post_state_hash: Digest,

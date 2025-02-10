@@ -256,8 +256,8 @@ impl TransactionBuffer {
     /// Update buffer considering new stored transaction.
     fn register_transaction(&mut self, transaction: Transaction) {
         let transaction_hash = transaction.hash();
-        if transaction.verify().is_err() {
-            error!(%transaction_hash, "TransactionBuffer: invalid transaction must not be buffered");
+        if let Err(error) = transaction.verify() {
+            error!(%transaction_hash, ?error, "TransactionBuffer: invalid transaction must not be buffered");
             return;
         }
 

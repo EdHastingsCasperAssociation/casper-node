@@ -4,6 +4,7 @@ mod block_global;
 mod block_hash;
 mod block_hash_and_height;
 mod block_header;
+mod block_header_with_signatures;
 mod block_identifier;
 mod block_signatures;
 mod block_sync_status;
@@ -17,7 +18,6 @@ mod finality_signature_id;
 mod json_compatibility;
 mod rewarded_signatures;
 mod rewards;
-mod signed_block_header;
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
 mod test_block_builder;
 
@@ -51,6 +51,9 @@ pub use block_global::{BlockGlobalAddr, BlockGlobalAddrTag};
 pub use block_hash::BlockHash;
 pub use block_hash_and_height::BlockHashAndHeight;
 pub use block_header::{BlockHeader, BlockHeaderV1, BlockHeaderV2};
+pub use block_header_with_signatures::{
+    BlockHeaderWithSignatures, BlockHeaderWithSignaturesValidationError,
+};
 pub use block_identifier::BlockIdentifier;
 pub use block_signatures::{
     BlockSignatures, BlockSignaturesMergeError, BlockSignaturesV1, BlockSignaturesV2,
@@ -67,7 +70,6 @@ pub use finality_signature_id::FinalitySignatureId;
 pub use json_compatibility::JsonBlockWithSignatures;
 pub use rewarded_signatures::{RewardedSignatures, SingleBlockRewardedSignatures};
 pub use rewards::Rewards;
-pub use signed_block_header::{SignedBlockHeader, SignedBlockHeaderValidationError};
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
 pub use test_block_builder::{TestBlockBuilder, TestBlockV1Builder};
 

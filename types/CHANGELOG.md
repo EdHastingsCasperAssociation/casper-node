@@ -53,8 +53,8 @@ All notable changes to this project will be documented in this file. The format 
 - struct SingleBlockRewardedSignatures
 - enum Rewards
 - struct BlockWithSignatures
-- enum SignedBlockHeaderValidationError
-- struct SignedBlockHeader
+- enum BlockHeaderWithSignaturesValidationError
+- struct BlockHeaderWithSignatures
 - enum BlockValidationError (moved from casper-node)
 - enum Block (don't confuse with previous `Block` struct, see `Changed` section for details)
 - enum BlockHeader (don't confuse with previous `BlockHeader` struct, see `Changed` section for details)

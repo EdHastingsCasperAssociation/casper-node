@@ -331,11 +331,33 @@ max_connections = 5
 # The implementation uses a sliding window algorithm.
 qps_limit = 110
 
-# The amount of time between checks of the connection keepalive mechanism
-keepalive_check_interval = '20 seconds'
+# Initial time given to a connection before it expires
+initial_connection_lifetime = '10 seconds'
 
-# The amount of inactivity on a binary port connection which will force a close from the keepalive mechanism
-keepalive_no_activity_timeout = '180 seconds'
+#The amount of time which is given to a connection to extend it's lifetime when a valid
+# [`Command::Get(GetRequest::Record)`] is sent to the node
+get_record_request_termination_delay = '0 seconds'
+
+#The amount of time which is given to a connection to extend it's lifetime when a valid
+#[`Command::Get(GetRequest::Information)`] is sent to the node
+get_information_request_termination_delay = '5 seconds'
+
+#The amount of time which is given to a connection to extend it's lifetime when a valid
+#[`Command::Get(GetRequest::State)`] is sent to the node
+get_state_request_termination_delay = '0 seconds'
+
+#The amount of time which is given to a connection to extend it's lifetime when a valid
+#[`Command::Get(GetRequest::Trie)`] is sent to the node
+get_trie_request_termination_delay = '0 seconds'
+
+#The amount of time which is given to a connection to extend it's lifetime when a valid
+#[`Command::TryAcceptTransaction`] is sent to the node
+accept_transaction_request_termination_delay = '24 seconds'
+
+#The amount of time which is given to a connection to extend it's lifetime when a valid
+#[`Command::TrySpeculativeExec`] is sent to the node
+speculative_exec_request_termination_delay = '0 seconds'
+
 
 # ==============================================
 # Configuration options for the REST HTTP server

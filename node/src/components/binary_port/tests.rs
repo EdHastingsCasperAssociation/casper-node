@@ -6,8 +6,7 @@ use rand::Rng;
 use serde::Serialize;
 
 use casper_binary_port::{
-    BinaryRequest, BinaryResponse, GetRequest, GlobalStateEntityQualifier, GlobalStateRequest,
-    RecordId,
+    BinaryResponse, Command, GetRequest, GlobalStateEntityQualifier, GlobalStateRequest, RecordId,
 };
 
 use casper_types::{
@@ -48,7 +47,7 @@ use crate::{
     utils::Loadable,
 };
 
-use super::BinaryPort;
+use super::{BinaryPort, Metrics as BinaryPortMetrics};
 
 const ENABLED: bool = true;
 const DISABLED: bool = false;
@@ -57,7 +56,7 @@ struct TestCase {
     allow_request_get_all_values: bool,
     allow_request_get_trie: bool,
     allow_request_speculative_exec: bool,
-    request_generator: Either<fn(&mut TestRng) -> BinaryRequest, BinaryRequest>,
+    request_generator: Either<fn(&mut TestRng) -> Command, Command>,
 }
 
 #[tokio::test]
@@ -267,7 +266,8 @@ impl Reactor for MockReactor {
         _event_queue: EventQueueHandle<Self::Event>,
         _rng: &mut NodeRng,
     ) -> Result<(Self, Effects<Self::Event>), Self::Error> {
-        let mut binary_port = BinaryPort::new(config, chainspec, registry).unwrap();
+        let binary_port_metrics = BinaryPortMetrics::new(registry).unwrap();
+        let mut binary_port = BinaryPort::new(config, chainspec, binary_port_metrics);
         <BinaryPort as InitializedComponent<Event>>::start_initialization(&mut binary_port);
 
         let reactor = MockReactor { binary_port };
@@ -417,9 +417,9 @@ impl ReactorEvent for Event {
     }
 }
 
-fn all_values_request() -> BinaryRequest {
+fn all_values_request() -> Command {
     let state_identifier = GlobalStateIdentifier::StateRootHash(Digest::hash([1u8; 32]));
-    BinaryRequest::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
+    Command::Get(GetRequest::State(Box::new(GlobalStateRequest::new(
         Some(state_identifier),
         GlobalStateEntityQualifier::AllItems {
             key_tag: KeyTag::Account,
@@ -428,10 +428,10 @@ fn all_values_request() -> BinaryRequest {
 }
 
 #[cfg(test)]
-fn record_requests_with_empty_keys() -> Vec<BinaryRequest> {
+fn record_requests_with_empty_keys() -> Vec<Command> {
     let mut data = Vec::new();
     for record_id in RecordId::all() {
-        data.push(BinaryRequest::Get(GetRequest::Record {
+        data.push(Command::Get(GetRequest::Record {
             record_type_tag: record_id.into(),
             key: vec![],
         }))
@@ -439,14 +439,14 @@ fn record_requests_with_empty_keys() -> Vec<BinaryRequest> {
     data
 }
 
-fn trie_request() -> BinaryRequest {
-    BinaryRequest::Get(GetRequest::Trie {
+fn trie_request() -> Command {
+    Command::Get(GetRequest::Trie {
         trie_key: Digest::hash([1u8; 32]),
     })
 }
 
-fn try_speculative_exec_request(rng: &mut TestRng) -> BinaryRequest {
-    BinaryRequest::TrySpeculativeExec {
+fn try_speculative_exec_request(rng: &mut TestRng) -> Command {
+    Command::TrySpeculativeExec {
         transaction: Transaction::V1(TransactionV1::random(rng)),
     }
 }
