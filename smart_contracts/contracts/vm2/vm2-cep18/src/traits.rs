@@ -1,11 +1,11 @@
 use casper_macros::casper;
 use casper_sdk::{
     collections::Map,
-    host::{self, Entity},
+    host::{self, emit_message, Entity},
     log,
 };
 
-use crate::{error::Cep18Error, security_badge::SecurityBadge};
+use crate::{error::Cep18Error, messages::Transfer, security_badge::SecurityBadge};
 
 #[derive(Debug)]
 #[casper]
@@ -156,6 +156,17 @@ pub trait CEP18 {
         }
         self.state_mut()
             .transfer_balance(&sender, &recipient, amount)?;
+
+        // NOTE: This is operation is fallible, although it's not expected to fail under any
+        // circumstances (number of topics per contract, payload size, topic size, number of
+        // messages etc. are all under control).
+        emit_message(Transfer {
+            from: sender,
+            to: recipient,
+            amount,
+        })
+        .expect("failed to emit message");
+
         Ok(())
     }
 

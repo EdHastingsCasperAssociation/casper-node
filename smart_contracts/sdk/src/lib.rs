@@ -26,6 +26,9 @@ pub use casper_sdk_sys as sys;
 use host::{CallResult, Entity};
 use types::{Address, CallError};
 
+#[cfg(target_arch = "wasm32")]
+pub use wasm_bindgen;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "std")] {
         #[inline]
@@ -342,33 +345,13 @@ impl<'a, T: ContractRef> ContractBuilder<'a, T> {
 
 /// Trait for converting a message data to a string.
 pub trait Message: BorshSerialize {
-    /// Returns the topic of the message.
-    fn topic(&self) -> &str;
+    const TOPIC: &'static str;
     /// Converts the message data to a string.
     fn payload(&self) -> Vec<u8>;
 }
 
 #[cfg(test)]
 mod tests {
-    // impl ToCallData for DoSomethingArg {
-    //     const SELECTOR: Selector = Selector::new(1);
-    //     type Return<'a> = ();
-    //     fn input_data(&self) -> Option<Vec<u8>> {
-    //         Some(borsh::to_vec(self).expect("Serialization should work"))
-    //     }
-    // }
-
-    // impl MyContract {
-    //     #[allow(dead_code)]
-    //     fn do_something(&mut self, foo: u64) -> impl ToCallData {
-    //         DoSomethingArg { foo }
-    //     }
-    // }
-
     #[test]
-    fn test_call_builder() {
-        // let contract = MyContract;
-        // let do_something = CallBuilder::<MyContract>::new([0;
-        // 32]).with_value(5).call(|my_contract| my_contract.do_something(43));
-    }
+    fn test_call_builder() {}
 }

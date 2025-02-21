@@ -88,8 +88,13 @@ pub type Result2 = Result<(), CustomError>;
 
 #[casper]
 impl Harness {
+    // #[casper(event)]
+    // type TestMessage;
+
     #[casper(constructor)]
     pub fn constructor_with_args(who: String) -> Self {
+        // Event::register();
+
         log!("👋 Hello from constructor with args: {who}");
 
         assert_eq!(

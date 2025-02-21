@@ -64,6 +64,7 @@ macro_rules! for_each_host_function {
             pub fn casper_env_block_time() -> u64;
 
             pub fn casper_transfer(entity_addr_ptr: *const u8, entity_addr_len: usize, amount: *const core::ffi::c_void,) -> u32;
+            pub fn casper_emit_message(topic_ptr: *const u8, topic_size: usize, payload_ptr: *const u8, payload_size: usize,) -> i32;
         }
     };
 }

@@ -146,6 +146,38 @@ fn process_casper_message_for_struct(item_struct: ItemStruct) -> TokenStream {
 
     let maybe_derive_abi = get_maybe_derive_abi();
 
+    let maybe_abi_collectors;
+    let maybe_entrypoint_defs;
+
+    #[cfg(feature = "__abi_generator")]
+    {
+        maybe_abi_collectors = quote! {
+                const _: () = {
+                    #[casper_sdk::linkme::distributed_slice(casper_sdk::abi_generator::ABI_COLLECTORS)]
+                    #[linkme(crate = casper_sdk::linkme)]
+                    static COLLECTOR: fn(&mut casper_sdk::abi::Definitions) = |defs| {
+                        defs.populate_one::<#struct_name>();
+                    };
+                };
+        };
+
+        maybe_entrypoint_defs = quote! {
+            const _: () = {
+                #[casper_sdk::linkme::distributed_slice(casper_sdk::abi_generator::MESSAGES)]
+                #[linkme(crate = casper_sdk::linkme)]
+                static MESSAGE: casper_sdk::abi_generator::Message = casper_sdk::abi_generator::Message {
+                    name: <#struct_name as casper_sdk::Message>::TOPIC,
+                    decl: concat!(module_path!(), "::", stringify!(#struct_name)),
+                 };
+            };
+        }
+    }
+    #[cfg(not(feature = "__abi_generator"))]
+    {
+        maybe_abi_collectors = quote! {};
+        maybe_entrypoint_defs = quote! {};
+    }
+
     quote! {
         #[derive(casper_sdk::serializers::borsh::BorshSerialize)]
         #[borsh(crate = "casper_sdk::serializers::borsh")]
@@ -153,16 +185,17 @@ fn process_casper_message_for_struct(item_struct: ItemStruct) -> TokenStream {
         #item_struct
 
         impl casper_sdk::Message for #struct_name {
-            #[inline]
-            fn topic(&self) -> &str {
-                stringify!(#struct_name)
-            }
+            const TOPIC: &'static str = stringify!(#struct_name);
 
             #[inline]
             fn payload(&self) -> Vec<u8> {
                 casper_sdk::serializers::borsh::to_vec(self).unwrap()
             }
         }
+
+        #maybe_abi_collectors
+        #maybe_entrypoint_defs
+
     }
     .into()
 }
@@ -657,7 +690,6 @@ fn generate_impl_for_contract(
         {
             let bits = flag_value.bits();
 
-            let schema_selector = 0u32; // TODO: Probably wise to remove this from schema for now.
             let result = match &func.sig.output {
                 syn::ReturnType::Default => {
                     populate_definitions.push(quote! {
@@ -693,7 +725,6 @@ fn generate_impl_for_contract(
                 fn #linkme_schema_entry_point_ident() -> casper_sdk::schema::SchemaEntryPoint {
                     casper_sdk::schema::SchemaEntryPoint {
                         name: stringify!(#func_name).into(),
-                        selector: Some(#schema_selector),
                         arguments: vec![ #(#args,)* ],
                         result: #result,
                         flags: casper_sdk::casper_executor_wasm_common::flags::EntryPointFlags::from_bits(#bits).unwrap(),
@@ -1366,7 +1397,8 @@ pub fn derive_casper_abi(input: TokenStream) -> TokenStream {
                 }
 
                 fn declaration() -> casper_sdk::abi::Declaration {
-                    format!("{}::{}", module_path!(), stringify!(#name))
+                    const DECL: &str = concat!(module_path!(), "::", stringify!(#name));
+                    DECL.into()
                 }
 
                 fn definition() -> casper_sdk::abi::Definition {
@@ -1523,7 +1555,8 @@ pub fn derive_casper_abi(input: TokenStream) -> TokenStream {
                 }
 
                 fn declaration() -> casper_sdk::abi::Declaration {
-                    format!("{}::{}", module_path!(), stringify!(#name))
+                    const DECL: &str = concat!(module_path!(), "::", stringify!(#name));
+                    DECL.into()
                 }
 
                 fn definition() -> casper_sdk::abi::Definition {

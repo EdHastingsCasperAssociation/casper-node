@@ -491,8 +491,24 @@ pub fn get_block_time() -> u64 {
 }
 
 /// Emit a message to the host.
-pub fn emit(message: impl Message) {
-    let _topic = message.topic();
-    let _payload = message.payload();
+pub fn emit_message<M>(message: M) -> Result<(), Error>
+where
+    M: Message,
+{
+    let topic = M::TOPIC;
+    let payload = message.payload();
     // Emit the message to the topic
+    let ret = unsafe {
+        casper_sdk_sys::casper_emit_message(
+            topic.as_ptr(),
+            topic.len(),
+            payload.as_ptr(),
+            payload.len(),
+        )
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(Error::from(ret))
+    }
 }
