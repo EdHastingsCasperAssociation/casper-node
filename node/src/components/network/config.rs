@@ -54,6 +54,7 @@ impl Default for Config {
             blocklist_retain_min_duration: TimeDiff::from_seconds(600),
             blocklist_retain_max_duration: TimeDiff::from_seconds(1600),
             identity: None,
+            flakiness: None,
         }
     }
 }
@@ -123,6 +124,11 @@ pub struct Config {
     /// An identity will be automatically generated when starting up a node if this option is
     /// unspecified.
     pub identity: Option<IdentityConfig>,
+
+    /// Configuration that enables random disconnect functionality for this node.
+    /// This should be used ONLY for testing purposes to see how the network behaves
+    /// if nodes randomly drop connections to their peers.
+    pub flakiness: Option<NetworkFlakinessConfig>,
 }
 
 #[cfg(test)]
@@ -162,6 +168,27 @@ impl Config {
             ],
             gossip_interval: DEFAULT_TEST_GOSSIP_INTERVAL,
             ..Default::default()
+        }
+    }
+}
+
+#[derive(DataSize, Debug, Clone, Deserialize, Serialize)]
+// Disallow unknown fields to ensure config files and command-line overrides contain valid keys.
+#[serde(deny_unknown_fields)]
+pub struct NetworkFlakinessConfig {
+    pub drop_peer_after_min: TimeDiff,
+    pub drop_peer_after_max: TimeDiff,
+    pub block_peer_after_drop_min: TimeDiff,
+    pub block_peer_after_drop_max: TimeDiff,
+}
+
+impl Default for NetworkFlakinessConfig {
+    fn default() -> Self {
+        Self {
+            drop_peer_after_min: TimeDiff::from_seconds(600),
+            drop_peer_after_max: TimeDiff::from_seconds(1600),
+            block_peer_after_drop_min: TimeDiff::from_seconds(30),
+            block_peer_after_drop_max: TimeDiff::from_seconds(120),
         }
     }
 }
