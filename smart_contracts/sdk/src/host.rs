@@ -490,6 +490,19 @@ pub fn get_block_time() -> u64 {
     unsafe { casper_sdk_sys::casper_env_block_time() }
 }
 
+#[doc(hidden)]
+pub fn emit_raw_message(topic: &str, payload: &[u8]) -> Result<(), Error> {
+    let ret = unsafe {
+        casper_sdk_sys::casper_emit_message(
+            topic.as_ptr(),
+            topic.len(),
+            payload.as_ptr(),
+            payload.len(),
+        )
+    };
+    result_from_code(ret)
+}
+
 /// Emit a message to the host.
 pub fn emit_message<M>(message: M) -> Result<(), Error>
 where

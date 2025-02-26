@@ -1,3 +1,4 @@
+use core::panic;
 use std::{borrow::Cow, cmp, num::NonZeroU32, sync::Arc};
 
 use crate::system::{self, MintArgs, MintTransferArgs};
@@ -11,9 +12,10 @@ use casper_executor_wasm_common::{
         ENTRY_POINT_PAYMENT_SELF_ONWARD,
     },
     error::{
-        HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT, HOST_ERROR_MESSAGE_PAYLOAD_TOO_LONG,
-        HOST_ERROR_NOT_FOUND, HOST_ERROR_SUCCEED, HOST_ERROR_TOO_MANY_TOPICS,
-        HOST_ERROR_TOPIC_TOO_LONG,
+        HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT,
+        HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED, HOST_ERROR_MESSAGE_TOPIC_FULL,
+        HOST_ERROR_NOT_FOUND, HOST_ERROR_PAYLOAD_TOO_LONG, HOST_ERROR_SUCCEED,
+        HOST_ERROR_TOO_MANY_TOPICS, HOST_ERROR_TOPIC_TOO_LONG,
     },
     flags::ReturnFlags,
     keyspace::{Keyspace, KeyspaceTag},
@@ -1371,7 +1373,7 @@ pub fn casper_emit_message<S: GlobalStateReader, E: Executor>(
     }
     if payload_size > 1024 {
         // TODO: limits.max_message_size
-        return Ok(HOST_ERROR_MESSAGE_PAYLOAD_TOO_LONG);
+        return Ok(HOST_ERROR_PAYLOAD_TOO_LONG);
     }
 
     let topic_name = {
@@ -1471,37 +1473,38 @@ pub fn casper_emit_message<S: GlobalStateReader, E: Executor>(
         prev_topic_summary.message_count()
     };
 
+    type MessageCountPair = (BlockTime, u64);
+
     let block_message_index: u64 = match caller
         .context_mut()
         .tracking_copy
         .read(&Key::BlockGlobal(BlockGlobalAddr::MessageCount))
-        .unwrap()
     {
-        Some(StoredValue::CLValue(value_pair)) => {
-            let (prev_block_time, prev_count): (BlockTime, u64) =
-                CLValue::into_t(value_pair).expect("should be (BlockTime, u64)");
-
+        Ok(Some(StoredValue::CLValue(value_pair))) => {
+            let (prev_block_time, prev_count): MessageCountPair =
+                CLValue::into_t(value_pair).expect("Tuple");
             if prev_block_time == current_block_time {
                 prev_count
             } else {
                 0
             }
         }
-        Some(other) => panic!("Unexpected stored value: {:?}", other),
-        None => {
+        Ok(Some(other)) => panic!("Unexpected stored value: {:?}", other),
+        Ok(None) => {
             // No messages in current block yet
             0
+        }
+        Err(error) => {
+            panic!("Error while reading from storage; aborting error={error:?}")
         }
     };
 
     let Some(topic_message_count) = topic_message_index.checked_add(1) else {
-        // return Ok(Err(ApiError::MessageTopicFull));
-        todo!()
+        return Ok(HOST_ERROR_MESSAGE_TOPIC_FULL);
     };
 
     let Some(block_message_count) = block_message_index.checked_add(1) else {
-        // return Ok(Err(ApiError::MaxMessagesPerBlockExceeded));
-        todo!()
+        return Ok(HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED);
     };
 
     // Under v2 runtime messages are only limited to bytes.
@@ -1523,9 +1526,9 @@ pub fn casper_emit_message<S: GlobalStateReader, E: Executor>(
 
     let message_key = message.message_key();
     let message_value = StoredValue::Message(message.checksum().expect("Checksum"));
+    let message_count_pair: MessageCountPair = (current_block_time, block_message_count);
     let block_message_count_value = StoredValue::CLValue(
-        CLValue::from_t((current_block_time, block_message_count))
-            .expect("Serialize block message pair"),
+        CLValue::from_t(message_count_pair).expect("Serialize block message pair"),
     );
 
     caller.context_mut().tracking_copy.emit_message(

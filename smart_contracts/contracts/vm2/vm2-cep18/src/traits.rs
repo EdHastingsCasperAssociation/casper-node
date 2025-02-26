@@ -127,7 +127,8 @@ pub trait CEP18 {
             owner,
             spender,
             amount,
-        }).expect("failed to emit message");
+        })
+        .expect("failed to emit message");
         Ok(())
     }
 
@@ -247,7 +248,8 @@ pub trait Mintable: CEP18 {
             from: None,
             to: owner,
             amount,
-        }).expect("failed to emit message");
+        })
+        .expect("failed to emit message");
 
         Ok(())
     }
