@@ -60,7 +60,7 @@ use crate::{
 };
 
 #[cfg(any(feature = "std", test))]
-use crate::{chainspec::PricingHandling, Chainspec, LARGE_WASM_LANE_ID};
+use crate::{chainspec::PricingHandling, Chainspec};
 #[cfg(any(feature = "std", test))]
 use crate::{system::auction::ARG_AMOUNT, transaction::GasLimited, Gas, Motes, U512};
 pub use deploy_hash::DeployHash;
@@ -1387,7 +1387,7 @@ impl GasLimited for Deploy {
                 let computation_limit = if self.is_transfer() {
                     costs.mint_costs().transfer as u64
                 } else {
-                    chainspec.get_max_gas_limit_by_category(LARGE_WASM_LANE_ID)
+                    chainspec.get_max_payment_limit_for_wasm()
                 };
                 Gas::new(computation_limit)
             } // legacy deploys do not support prepaid

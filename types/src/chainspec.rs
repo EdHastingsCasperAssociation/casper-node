@@ -257,6 +257,13 @@ impl Chainspec {
             .transaction_v1_config
             .get_max_transaction_count(lane)
     }
+
+    /// Returns the max payment defined by the wasm lanes.
+    pub fn get_max_payment_limit_for_wasm(&self) -> u64 {
+        self.transaction_config
+            .transaction_v1_config
+            .get_max_payment_limit_for_wasm()
+    }
 }
 
 #[cfg(any(feature = "testing", test))]
