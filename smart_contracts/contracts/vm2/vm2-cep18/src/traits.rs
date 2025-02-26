@@ -7,7 +7,7 @@ use casper_sdk::{
 
 use crate::{
     error::Cep18Error,
-    messages::{Mint, Transfer},
+    messages::{Approve, Transfer},
     security_badge::SecurityBadge,
 };
 
@@ -123,6 +123,11 @@ pub trait CEP18 {
         }
         let lookup_key = (owner, spender);
         self.state_mut().allowances.insert(&lookup_key, &amount);
+        emit_message(Approve {
+            owner,
+            spender,
+            amount,
+        }).expect("failed to emit message");
         Ok(())
     }
 
@@ -165,7 +170,7 @@ pub trait CEP18 {
         // circumstances (number of topics per contract, payload size, topic size, number of
         // messages etc. are all under control).
         emit_message(Transfer {
-            from: sender,
+            from: Some(sender),
             to: recipient,
             amount,
         })
@@ -206,6 +211,13 @@ pub trait CEP18 {
             .allowances
             .insert(&(owner, spender), &new_spender_allowance);
 
+        emit_message(Transfer {
+            from: Some(owner),
+            to: recipient,
+            amount,
+        })
+        .expect("failed to emit message");
+
         Ok(())
     }
 }
@@ -231,7 +243,11 @@ pub trait Mintable: CEP18 {
             .checked_add(amount)
             .ok_or(Cep18Error::Overflow)?;
 
-        emit_message(Mint { owner, amount }).expect("failed to emit message");
+        emit_message(Transfer {
+            from: None,
+            to: owner,
+            amount,
+        }).expect("failed to emit message");
 
         Ok(())
     }
