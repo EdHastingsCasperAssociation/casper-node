@@ -214,10 +214,12 @@ impl PricingMode {
     ) -> Result<Motes, PricingModeError> {
         let gas_limit = self.gas_limit(chainspec, entry_point, lane_id)?;
         let motes = match self {
-            PricingMode::PaymentLimited { .. } | PricingMode::Fixed { .. } => {
-                Motes::from_gas(gas_limit, gas_price)
+            PricingMode::PaymentLimited { payment_amount, .. } => {
+                Motes::from_gas(Gas::from(*payment_amount), gas_price)
                     .ok_or(PricingModeError::UnableToCalculateGasCost)?
             }
+            PricingMode::Fixed { .. } => Motes::from_gas(gas_limit, gas_price)
+                .ok_or(PricingModeError::UnableToCalculateGasCost)?,
             PricingMode::Prepaid { .. } => {
                 Motes::zero() // prepaid
             }
