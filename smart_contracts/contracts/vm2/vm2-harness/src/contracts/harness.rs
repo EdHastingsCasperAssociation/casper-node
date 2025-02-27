@@ -5,6 +5,7 @@ use std::{
 
 use casper_macros::casper;
 use casper_sdk::{
+    casper::{self, Entity},
     casper_executor_wasm_common::{
         entry_point::{
             ENTRY_POINT_PAYMENT_CALLER, ENTRY_POINT_PAYMENT_DIRECT_INVOCATION_ONLY,
@@ -14,7 +15,6 @@ use casper_sdk::{
         keyspace::Keyspace,
     },
     collections::Map,
-    host::{self, Entity},
     log, revert,
     types::CallError,
     ContractHandle,
@@ -98,7 +98,7 @@ impl Harness {
         log!("👋 Hello from constructor with args: {who}");
 
         assert_eq!(
-            host::casper_write(Keyspace::PaymentInfo("this does not exists"), &[0]),
+            casper::write(Keyspace::PaymentInfo("this does not exists"), &[0]),
             Err(Error::NotFound)
         );
 
@@ -108,11 +108,11 @@ impl Harness {
                 ENTRY_POINT_PAYMENT_DIRECT_INVOCATION_ONLY,
                 ENTRY_POINT_PAYMENT_SELF_ONWARD,
             ] {
-                host::casper_write(Keyspace::PaymentInfo("counter"), &[payment_info]).unwrap();
+                casper::write(Keyspace::PaymentInfo("counter"), &[payment_info]).unwrap();
 
                 let mut buffer = [255; 1];
                 assert_eq!(
-                    host::casper_read(Keyspace::PaymentInfo("counter"), |size| {
+                    casper::read(Keyspace::PaymentInfo("counter"), |size| {
                         assert_eq!(size, 1, "Size should be 1");
                         NonNull::new(&mut buffer[0])
                     }),
@@ -122,7 +122,7 @@ impl Harness {
             }
 
             assert_eq!(
-                host::casper_write(Keyspace::PaymentInfo("counter"), &[255, 255]),
+                casper::write(Keyspace::PaymentInfo("counter"), &[255, 255]),
                 Err(Error::InvalidInput)
             );
         }
@@ -130,9 +130,9 @@ impl Harness {
         Self {
             counter: 0,
             greeting: format!("Hello, {who}!"),
-            address_inside_constructor: Some(host::get_caller()),
+            address_inside_constructor: Some(casper::get_caller()),
             balances: Map::new(BALANCES_PREFIX),
-            block_time: host::get_block_time(),
+            block_time: casper::get_block_time(),
         }
     }
 
@@ -156,9 +156,9 @@ impl Harness {
         Self {
             counter: 0,
             greeting: INITIAL_GREETING.to_string(),
-            address_inside_constructor: Some(host::get_caller()),
+            address_inside_constructor: Some(casper::get_caller()),
             balances: Map::new(BALANCES_PREFIX),
-            block_time: host::get_block_time(),
+            block_time: casper::get_block_time(),
         }
     }
 
@@ -166,14 +166,14 @@ impl Harness {
     pub fn payable_constructor() -> Self {
         log!(
             "👋 Hello from payable constructor value={}",
-            host::get_value()
+            casper::transferred_value()
         );
         Self {
             counter: 0,
             greeting: INITIAL_GREETING.to_string(),
-            address_inside_constructor: Some(host::get_caller()),
+            address_inside_constructor: Some(casper::get_caller()),
             balances: Map::new(BALANCES_PREFIX),
-            block_time: host::get_block_time(),
+            block_time: casper::get_block_time(),
         }
     }
 
@@ -181,7 +181,7 @@ impl Harness {
     pub fn payable_failing_constructor() -> Self {
         log!(
             "👋 Hello from payable failign constructor value={}",
-            host::get_value()
+            casper::transferred_value()
         );
         revert!();
     }
@@ -190,7 +190,7 @@ impl Harness {
     pub fn payable_trapping_constructor() -> Self {
         log!(
             "👋 Hello from payable trapping constructor value={}",
-            host::get_value()
+            casper::transferred_value()
         );
         panic!("This will revert the execution of this constructor and won't create a new package")
     }
@@ -287,7 +287,10 @@ impl Harness {
 
     #[casper(payable)]
     pub fn payable_entrypoint(&mut self) -> Result<(), CustomError> {
-        log!("This is a payable entrypoint value={}", host::get_value());
+        log!(
+            "This is a payable entrypoint value={}",
+            casper::transferred_value()
+        );
         Ok(())
     }
 
@@ -314,9 +317,9 @@ impl Harness {
     pub fn payable_failing_entrypoint(&self) -> Result<(), CustomError> {
         log!(
             "This is a payable entrypoint with value={}",
-            host::get_value()
+            casper::transferred_value()
         );
-        if host::get_value() == 123 {
+        if casper::transferred_value() == 123 {
             Err(CustomError::Foo)
         } else {
             Ok(())
@@ -325,8 +328,8 @@ impl Harness {
 
     #[casper(payable, revert_on_error)]
     pub fn perform_token_deposit(&mut self, balance_before: u128) -> Result<(), CustomError> {
-        let caller = host::get_caller();
-        let value = host::get_value();
+        let caller = casper::get_caller();
+        let value = casper::transferred_value();
 
         if value == 0 {
             return Err(CustomError::WithBody(
@@ -338,7 +341,7 @@ impl Harness {
             balance_before
                 .checked_sub(value)
                 .unwrap_or_else(|| panic!("Balance before should be larger or equal to the value (caller={caller:?}, value={value})")),
-            host::get_balance_of(&caller),
+            casper::get_balance_of(&caller),
             "Balance mismatch; token transfer should happen before a contract call"
         );
 
@@ -350,7 +353,7 @@ impl Harness {
 
     #[casper(revert_on_error)]
     pub fn withdraw(&mut self, balance_before: u128, amount: u128) -> Result<(), CustomError> {
-        let caller = host::get_caller();
+        let caller = casper::get_caller();
         log!("Withdrawing {amount} into {caller:?}");
         let current_balance = self.balances.get(&caller).unwrap_or(0);
         if current_balance < amount {
@@ -360,7 +363,7 @@ impl Harness {
         match caller {
             Entity::Account(account) => {
                 // if this fails, the transfer will be reverted and the state will be rolled back
-                match host::casper_transfer(&account, amount) {
+                match casper::casper_transfer(&account, amount) {
                     Ok(()) => {}
                     Err(call_error) => {
                         log!("Unable to perform a transfer: {call_error:?}");
@@ -401,7 +404,7 @@ impl Harness {
         let balance_after = balance_before + amount;
 
         assert_eq!(
-            host::get_balance_of(&caller),
+            casper::get_balance_of(&caller),
             balance_after,
             "Balance should be updated after withdrawal"
         );
@@ -411,10 +414,10 @@ impl Harness {
     }
 
     pub fn balance(&self) -> u128 {
-        if host::get_value() != 0 {
+        if casper::transferred_value() != 0 {
             panic!("This function is not payable");
         }
-        let caller = host::get_caller();
+        let caller = casper::get_caller();
         self.balances.get(&caller).unwrap_or(0)
     }
 

@@ -10,7 +10,7 @@ mod tests {
 
     use casper_macros::selector;
     use casper_sdk::{
-        host::native::{self, dispatch, ExportKind},
+        casper::native::{self, dispatch, ExportKind},
         schema::CasperSchema,
     };
     use vm_common::{flags::EntryPointFlags, selector::Selector};

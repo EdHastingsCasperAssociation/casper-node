@@ -11,7 +11,7 @@ use syn::{
     LitStr, Type,
 };
 
-use casper_sdk::casper_executor_wasm_common::flags::EntryPointFlags;
+use casper_executor_wasm_common::flags::EntryPointFlags;
 const CASPER_RESERVED_FALLBACK_EXPORT: &str = "__casper_fallback";
 
 #[derive(Debug, FromAttributes)]
@@ -238,7 +238,7 @@ fn generate_export_function(func: ItemFn) -> TokenStream {
             struct Arguments {
                 #(#args_attrs,)*
             }
-            let input = casper_sdk::host::casper_copy_input();
+            let input = casper_sdk::prelude::casper::copy_input();
             let args: Arguments = casper_sdk::serializers::borsh::from_slice(&input).unwrap();
             let _ret = #func_name(#(args.#arg_names,)*);
         }
@@ -248,10 +248,10 @@ fn generate_export_function(func: ItemFn) -> TokenStream {
 
         #[cfg(not(target_arch = "wasm32"))]
         const _: () = {
-            #[casper_sdk::linkme::distributed_slice(casper_sdk::host::native::private_exports::EXPORTS)]
+            #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::private_exports::EXPORTS)]
             #[linkme(crate = casper_sdk::linkme)]
-            pub static EXPORTS: casper_sdk::host::native::Export = casper_sdk::host::native::Export {
-                kind: casper_sdk::host::native::ExportKind::Function { name: stringify!(#func_name) },
+            pub static EXPORTS: casper_sdk::casper::native::Export = casper_sdk::casper::native::Export {
+                kind: casper_sdk::casper::native::ExportKind::Function { name: stringify!(#func_name) },
                 fptr: || { #exported_func_name(); },
                 module_path: module_path!(),
                 file: file!(),
@@ -373,7 +373,7 @@ fn generate_impl_for_contract(
                         if !never_returns && receiver.reference.is_some() {
                             // &mut self does write updated state
                             Some(quote! {
-                                casper_sdk::host::write_state(&instance).unwrap();
+                                casper_sdk::casper::write_state(&instance).unwrap();
                             })
                         } else {
                             // mut self does not write updated state as the
@@ -394,7 +394,7 @@ fn generate_impl_for_contract(
                     Some(_) | None => {
                         if !never_returns && method_attribute.constructor {
                             Some(quote! {
-                                casper_sdk::host::write_state(&_ret).unwrap();
+                                casper_sdk::casper::write_state(&_ret).unwrap();
                             })
                         } else {
                             None
@@ -439,7 +439,7 @@ fn generate_impl_for_contract(
                             // There is a return value so call casper_return.
                             Some(quote! {
                                 let ret_bytes = casper_sdk::serializers::borsh::to_vec(&_ret).unwrap();
-                                casper_sdk::host::casper_return(flags, Some(&ret_bytes));
+                                casper_sdk::casper::ret(flags, Some(&ret_bytes));
                             })
                         }
                     }
@@ -457,13 +457,13 @@ fn generate_impl_for_contract(
                     }
 
 
-                    let input = casper_sdk::host::casper_copy_input();
+                    let input = casper_sdk::prelude::casper::copy_input();
                     let args: Arguments = casper_sdk::serializers::borsh::from_slice(&input).unwrap();
                 });
 
                 if method_attribute.constructor {
                     prelude.push(quote! {
-                        if casper_sdk::host::has_state().unwrap() {
+                        if casper_sdk::casper::has_state().unwrap() {
                             panic!("State of the contract is already present; unable to proceed with the constructor");
                         }
                     });
@@ -474,7 +474,7 @@ fn generate_impl_for_contract(
                         r#"Entry point "{func_name}" is not payable and does not accept tokens"#
                     );
                     prelude.push(quote! {
-                        if casper_sdk::host::get_value() != 0 {
+                        if casper_sdk::casper::transferred_value() != 0 {
                             // TODO: Be precise and unambigious about the error
                             panic!(#panic_msg);
                         }
@@ -499,7 +499,7 @@ fn generate_impl_for_contract(
 
                 let handle_call = if entry_point_requires_state {
                     quote! {
-                        let mut instance: #struct_name = casper_sdk::host::read_state().unwrap();
+                        let mut instance: #struct_name = casper_sdk::casper::read_state().unwrap();
                         let _ret = instance.#func_name(#(args.#arg_names,)*);
                     }
                 } else if method_attribute.constructor {
@@ -548,10 +548,10 @@ fn generate_impl_for_contract(
 
                     #[cfg(not(target_arch = "wasm32"))]
                     const _: () = {
-                        #[casper_sdk::linkme::distributed_slice(casper_sdk::host::native::private_exports::EXPORTS)]
+                        #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::private_exports::EXPORTS)]
                         #[linkme(crate = casper_sdk::linkme)]
-                        pub static EXPORTS: casper_sdk::host::native::Export = casper_sdk::host::native::Export {
-                            kind: casper_sdk::host::native::ExportKind::SmartContract { name: stringify!(#export_name), struct_name: stringify!(#struct_name) },
+                        pub static EXPORTS: casper_sdk::casper::native::Export = casper_sdk::casper::native::Export {
+                            kind: casper_sdk::casper::native::ExportKind::SmartContract { name: stringify!(#export_name), struct_name: stringify!(#struct_name) },
                             fptr: || -> () { #extern_func_name(); },
                             module_path: module_path!(),
                             file: file!(),
@@ -861,10 +861,10 @@ fn generate_impl_trait_for_contract(
 
                             #[cfg(not(target_arch = "wasm32"))]
                             const _: () = {
-                                #[casper_sdk::linkme::distributed_slice(casper_sdk::host::native::private_exports::EXPORTS)]
+                                #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::private_exports::EXPORTS)]
                                 #[linkme(crate = casper_sdk::linkme)]
-                                pub static EXPORTS: casper_sdk::host::native::Export = casper_sdk::host::native::Export {
-                                    kind: casper_sdk::host::native::ExportKind::TraitImpl { trait_name: stringify!(#trait_name), impl_name: stringify!(#self_ty), name: stringify!($export_name) },
+                                pub static EXPORTS: casper_sdk::casper::native::Export = casper_sdk::casper::native::Export {
+                                    kind: casper_sdk::casper::native::ExportKind::TraitImpl { trait_name: stringify!(#trait_name), impl_name: stringify!(#self_ty), name: stringify!($export_name) },
                                     fptr: || -> () { $name(); },
                                     module_path: module_path!(),
                                     file: file!(),
@@ -1029,16 +1029,16 @@ fn casper_trait_definition(
                                 }
 
                                 let mut flags = casper_sdk::casper_executor_wasm_common::flags::ReturnFlags::empty();
-                                let mut instance: T = casper_sdk::host::read_state().unwrap();
-                                let input = casper_sdk::host::casper_copy_input();
+                                let mut instance: T = casper_sdk::casper::read_state().unwrap();
+                                let input = casper_sdk::prelude::casper::copy_input();
                                 let args: Arguments = casper_sdk::serializers::borsh::from_slice(&input).unwrap();
 
                                 let ret = instance.#func_name(#(args.#arg_names,)*);
 
-                                casper_sdk::host::write_state(&instance).unwrap();
+                                casper_sdk::casper::write_state(&instance).unwrap();
 
                                 let ret_bytes = casper_sdk::serializers::borsh::to_vec(&ret).unwrap();
-                                casper_sdk::host::casper_return(flags, Some(&ret_bytes));
+                                casper_sdk::casper::ret(flags, Some(&ret_bytes));
                             }
                         }
                     }
@@ -1057,7 +1057,7 @@ fn casper_trait_definition(
                                 }
 
 
-                                let input = casper_sdk::host::casper_copy_input();
+                                let input = casper_sdk::prelude::casper::copy_input();
                                 let args: Arguments = casper_sdk::serializers::borsh::from_slice(&input).unwrap();
 
 

@@ -847,7 +847,7 @@ name = "casper-macros"
 version = "0.1.0"
 dependencies = [
  "blake2-rfc",
- "casper-sdk",
+ "casper-executor-wasm-common",
  "casper-sdk-sys",
  "darling",
  "paste",
@@ -961,6 +961,7 @@ dependencies = [
  "borsh",
  "bytes",
  "casper-executor-wasm-common",
+ "casper-macros",
  "casper-sdk-sys",
  "cfg-if 1.0.0",
  "clap 4.5.27",
@@ -6619,7 +6620,6 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vm2-cep18"
 version = "0.1.0"
 dependencies = [
- "casper-macros",
  "casper-sdk",
  "casper-sdk-codegen",
  "serde_json",
@@ -6639,7 +6639,6 @@ dependencies = [
 name = "vm2-flipper"
 version = "0.1.0"
 dependencies = [
- "casper-macros",
  "casper-sdk",
 ]
 

@@ -1,5 +1,5 @@
 use casper_macros::casper;
-use casper_sdk::host;
+use casper_sdk::casper;
 
 /// A contract that can't receive tokens through a plain `fallback` method.
 #[derive(Default)]
@@ -14,7 +14,7 @@ impl NoFallback {
     #[casper(constructor)]
     pub fn no_fallback_initialize() -> Self {
         Self {
-            initial_balance: host::get_value(),
+            initial_balance: casper::transferred_value(),
             received_balance: 0,
         }
     }
@@ -25,7 +25,7 @@ impl NoFallback {
 
     #[casper(payable)]
     pub fn receive_funds(&mut self) {
-        let value = host::get_value();
+        let value = casper::transferred_value();
         self.received_balance += value;
     }
 }

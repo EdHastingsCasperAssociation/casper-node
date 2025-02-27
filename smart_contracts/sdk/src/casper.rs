@@ -1,5 +1,6 @@
 #[cfg(all(not(target_arch = "wasm32"), feature = "std"))]
 pub mod native;
+
 use crate::{
     prelude::{
         ffi::c_void,
@@ -25,7 +26,9 @@ use crate::{
     ToCallData,
 };
 
-pub fn casper_print(msg: &str) {
+/// Print a message.
+#[inline]
+pub fn print(msg: &str) {
     unsafe { casper_sdk_sys::casper_print(msg.as_ptr(), msg.len()) };
 }
 
@@ -57,7 +60,8 @@ pub fn copy_input_into<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
     NonNull::<u8>::new(ret)
 }
 
-pub fn casper_copy_input() -> Vec<u8> {
+/// Copy input data into a vector.
+pub fn copy_input() -> Vec<u8> {
     let mut vec = Vec::new();
     let last_ptr = copy_input_into(Some(|size| reserve_vec_space(&mut vec, size)));
     match last_ptr {
@@ -70,7 +74,8 @@ pub fn casper_copy_input() -> Vec<u8> {
     }
 }
 
-pub fn copy_input_dest(dest: &mut [u8]) -> Option<&[u8]> {
+/// Provided callback should ensure that it can provide a pointer that can store `size` bytes.
+pub fn copy_input_to(dest: &mut [u8]) -> Option<&[u8]> {
     let last_ptr = copy_input_into(Some(|size| {
         if size > dest.len() {
             None
@@ -87,7 +92,8 @@ pub fn copy_input_dest(dest: &mut [u8]) -> Option<&[u8]> {
     Some(&dest[..length])
 }
 
-pub fn casper_return(flags: ReturnFlags, data: Option<&[u8]>) {
+/// Return from the contract.
+pub fn ret(flags: ReturnFlags, data: Option<&[u8]>) {
     let (data_ptr, data_len) = match data {
         Some(data) => (data.as_ptr(), data.len()),
         None => (ptr::null(), 0),
@@ -97,7 +103,8 @@ pub fn casper_return(flags: ReturnFlags, data: Option<&[u8]>) {
     unreachable!()
 }
 
-pub fn casper_read<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
+/// Read from the global state.
+pub fn read<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
     key: Keyspace,
     f: F,
 ) -> Result<Option<()>, Error> {
@@ -138,17 +145,15 @@ pub fn casper_read<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
         )
     };
 
-    if ret == 0 {
-        Ok(Some(()))
-    } else {
-        match Error::from(ret) {
-            Error::NotFound => Ok(None),
-            other => Err(other),
-        }
+    match result_from_code(ret) {
+        Ok(()) => Ok(Some(())),
+        Err(Error::NotFound) => Ok(None),
+        Err(err) => Err(err),
     }
 }
 
-pub fn casper_write(key: Keyspace, value: &[u8]) -> Result<(), Error> {
+/// Write to the global state.
+pub fn write(key: Keyspace, value: &[u8]) -> Result<(), Error> {
     let (key_space, key_bytes) = match key {
         Keyspace::State => (KeyspaceTag::State as u64, &[][..]),
         Keyspace::Context(key_bytes) => (KeyspaceTag::Context as u64, key_bytes),
@@ -164,14 +169,11 @@ pub fn casper_write(key: Keyspace, value: &[u8]) -> Result<(), Error> {
             value.len(),
         )
     };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(Error::from(ret))
-    }
+    result_from_code(ret)
 }
 
-pub fn casper_create(
+/// Create a new contract instance.
+pub fn create(
     code: Option<&[u8]>,
     transferred_value: u128,
     constructor: Option<&str>,
@@ -242,6 +244,7 @@ fn call_result_from_code(result_code: u32) -> Result<(), CallError> {
     }
 }
 
+/// Call a contract.
 pub fn casper_call(
     address: &Address,
     transferred_value: u128,
@@ -265,7 +268,8 @@ pub fn casper_call(
     (output, result_code)
 }
 
-pub fn casper_upgrade(
+/// Upgrade the contract.
+pub fn upgrade(
     code: &[u8],
     entry_point: Option<&str>,
     input_data: Option<&[u8]>,
@@ -293,34 +297,38 @@ pub fn casper_upgrade(
     }
 }
 
+/// Read from the global state into a vector.
 pub fn read_into_vec(key: Keyspace) -> Option<Vec<u8>> {
     let mut vec = Vec::new();
-    let out = casper_read(key, |size| reserve_vec_space(&mut vec, size)).unwrap();
+    let out = read(key, |size| reserve_vec_space(&mut vec, size)).unwrap();
     out.map(|_input| vec)
 }
 
+/// Read from the global state into a vector.
 pub fn has_state() -> Result<bool, Error> {
     // TODO: Host side optimized `casper_exists` to check if given entry exists in the global state.
     let mut vec = Vec::new();
-    let read_info = casper_read(Keyspace::State, |size| reserve_vec_space(&mut vec, size))?;
+    let read_info = read(Keyspace::State, |size| reserve_vec_space(&mut vec, size))?;
     match read_info {
-        Some(_input) => Ok(true),
+        Some(()) => Ok(true),
         None => Ok(false),
     }
 }
 
+/// Read state from the global state.
 pub fn read_state<T: Default + BorshDeserialize>() -> Result<T, Error> {
     let mut vec = Vec::new();
-    let read_info = casper_read(Keyspace::State, |size| reserve_vec_space(&mut vec, size))?;
+    let read_info = read(Keyspace::State, |size| reserve_vec_space(&mut vec, size))?;
     match read_info {
-        Some(_input) => Ok(borsh::from_slice(&vec).unwrap()),
+        Some(()) => Ok(borsh::from_slice(&vec).unwrap()),
         None => Ok(T::default()),
     }
 }
 
+/// Write state to the global state.
 pub fn write_state<T: BorshSerialize>(state: &T) -> Result<(), Error> {
     let new_state = borsh::to_vec(state).unwrap();
-    casper_write(Keyspace::State, &new_state)?;
+    write(Keyspace::State, &new_state)?;
     Ok(())
 }
 
@@ -350,6 +358,7 @@ impl<T: ToCallData> CallResult<T> {
     }
 }
 
+/// Call a contract.
 pub fn call<T: ToCallData>(
     contract_address: &Address,
     transferred_value: u128,
@@ -373,6 +382,7 @@ pub fn call<T: ToCallData>(
     }
 }
 
+/// Get the caller.
 pub fn get_caller() -> Entity {
     let mut addr = MaybeUninit::<Address>::uninit();
     let _dest = unsafe { NonNull::new_unchecked(addr.as_mut_ptr() as *mut u8) };
@@ -468,8 +478,8 @@ pub fn get_balance_of(entity_kind: &Entity) -> u128 {
     }
 }
 
-/// Get the value passed to the contract.
-pub fn get_value() -> u128 {
+/// Get the transferred token value passed to the contract.
+pub fn transferred_value() -> u128 {
     let mut value = MaybeUninit::<u128>::uninit();
     unsafe { casper_sdk_sys::casper_env_transferred_value(value.as_mut_ptr() as *mut _) };
     unsafe { value.assume_init() }
@@ -503,8 +513,8 @@ pub fn emit_raw_message(topic: &str, payload: &[u8]) -> Result<(), Error> {
     result_from_code(ret)
 }
 
-/// Emit a message to the host.
-pub fn emit_message<M>(message: M) -> Result<(), Error>
+/// Emit a message.
+pub fn emit<M>(message: M) -> Result<(), Error>
 where
     M: Message,
 {

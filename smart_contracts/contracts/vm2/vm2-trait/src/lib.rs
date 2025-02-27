@@ -3,8 +3,8 @@
 
 use casper_macros::casper;
 use casper_sdk::{
+    casper::{self, Entity},
     collections::{sorted_vector::SortedVector, Map},
-    host::{self, Entity},
     log,
     prelude::*,
     types::Address,
@@ -17,7 +17,7 @@ pub const GREET_RETURN_VALUE: u64 = 123456789;
 pub trait HasFallback {
     #[casper(fallback)]
     fn this_is_fallback_method(&self) {
-        log!("Fallback called with value={}", host::get_value());
+        log!("Fallback called with value={}", casper::transferred_value());
     }
 }
 
@@ -74,7 +74,7 @@ pub struct OwnableState {
 impl Default for OwnableState {
     fn default() -> Self {
         Self {
-            owner: Some(casper_sdk::host::get_caller()),
+            owner: Some(casper_sdk::casper::get_caller()),
         }
     }
 }
@@ -93,7 +93,7 @@ pub trait Ownable {
     fn state_mut(&mut self) -> &mut OwnableState;
 
     fn only_owner(&self) -> Result<(), OwnableError> {
-        let caller = casper_sdk::host::get_caller();
+        let caller = casper_sdk::casper::get_caller();
         match self.state().owner {
             Some(owner) if caller != owner => {
                 return Err(OwnableError::NotAuthorized);
@@ -335,7 +335,7 @@ mod tests {
     use casper_macros::selector;
     use casper_sdk::{
         abi::StructField,
-        host::{
+        casper::{
             self,
             native::{dispatch_with, Environment},
         },
@@ -353,7 +353,7 @@ mod tests {
 
             // TODO: native impl currently is panicking, fix error handling in it
             {
-                let _ret = host::casper_call(
+                let _ret = casper::casper_call(
                     &has_traits_handle.contract_address(),
                     0,
                     selector!("counter_state"),
@@ -371,7 +371,7 @@ mod tests {
 
             // TODO: native impl currently is panicking, fix error handling in it
             {
-                let _ret = host::casper_call(
+                let _ret = casper::casper_call(
                     &has_traits_handle.contract_address(),
                     0,
                     selector!("counter_state_mut"),
@@ -521,7 +521,7 @@ mod tests {
 
             let has_traits_handle = HasTraits::create(0, constructor).expect("Constructor works");
 
-            let value = host::call(
+            let value = casper::casper_call(
                 &has_traits_handle.contract_address(),
                 0,
                 super::CounterRef::new().get_counter_value(),

@@ -86,7 +86,7 @@ where
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use crate::host::native::dispatch;
+    use crate::casper::native::dispatch;
 
     use super::*;
 

@@ -1,5 +1,4 @@
-use casper_macros::casper;
-use casper_sdk::host::Entity;
+use casper_sdk::prelude::*;
 
 #[casper(message)]
 pub struct Transfer {
