@@ -29,10 +29,9 @@ use casper_storage::{
     AddressGenerator, KeyPrefix,
 };
 use casper_types::{
-    account::AccountHash, contract_messages::MessageTopicSummary, BlockHash, ChainspecRegistry,
-    Digest, GenesisAccount, GenesisConfig, Key, Motes, Phase, ProtocolVersion, PublicKey,
-    SecretKey, StorageCosts, StoredValue, StoredValueTag, SystemConfig, Timestamp, TransactionHash,
-    TransactionV1Hash, WasmConfig, U512,
+    account::AccountHash, BlockHash, ChainspecRegistry, Digest, GenesisAccount, GenesisConfig, Key,
+    Motes, Phase, ProtocolVersion, PublicKey, SecretKey, StorageCosts, StoredValue, SystemConfig,
+    Timestamp, TransactionHash, TransactionV1Hash, WasmConfig, U512,
 };
 use fs_extra::dir;
 use itertools::Itertools;
@@ -243,7 +242,7 @@ fn cep18() {
         topics_1
             .sort_by_key(|topic| (topic.topic_name(), topic.blocktime(), topic.message_count()));
 
-        assert_eq!(topics_1[0].topic_name(), "Mint");
+        assert_eq!(topics_1[0].topic_name(), "Transfer");
         assert_eq!(topics_1[0].message_count(), 1);
         assert_eq!(topics_1[0].blocktime(), block_time_1);
     }
@@ -286,7 +285,6 @@ fn cep18() {
         panic!("Expected success")
     };
 
-    assert!(matches!(message_topics.get("Mint"), Some(_)));
     assert!(matches!(message_topics.get("Transfer"), Some(_)));
     assert_ne!(
         message_topics.get("Mint"),
@@ -314,13 +312,11 @@ fn cep18() {
         topics_2
             .sort_by_key(|topic| (topic.topic_name(), topic.blocktime(), topic.message_count()));
 
-        assert_eq!(topics_2[0].topic_name(), "Mint");
-        assert_eq!(topics_2[0].message_count(), 1);
-        assert_eq!(topics_2[0].blocktime(), block_time_2); // NOTE: Session called mint; the topic summary blocktime is refreshed
-
-        assert_eq!(topics_2[1].topic_name(), "Transfer");
-        assert_eq!(topics_2[1].message_count(), 1);
-        assert_eq!(topics_2[1].blocktime(), block_time_2);
+        assert_eq!(topics_2.len(), 1);
+        assert_eq!(topics_2[0].topic_name(), "Transfer");
+        assert_eq!(topics_2[0].message_count(), 2);
+        assert_eq!(topics_2[0].blocktime(), block_time_2); // NOTE: Session called mint; the topic
+                                                           // summary blocktime is refreshed
     }
 
     let mut messages = result_2.messages.iter().collect_vec();
@@ -332,11 +328,12 @@ fn cep18() {
         )
     });
     assert_eq!(messages.len(), 2);
-    assert_eq!(messages[0].topic_name(), "Mint");
+    assert_eq!(messages[0].topic_name(), "Transfer");
     assert_eq!(messages[0].topic_index(), 0);
     assert_eq!(messages[0].block_index(), 0);
+
     assert_eq!(messages[1].topic_name(), "Transfer");
-    assert_eq!(messages[1].topic_index(), 0);
+    assert_eq!(messages[1].topic_index(), 1);
     assert_eq!(messages[1].block_index(), 1);
 }
 

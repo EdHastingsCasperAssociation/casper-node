@@ -1473,6 +1473,7 @@ pub fn casper_emit_message<S: GlobalStateReader, E: Executor>(
         prev_topic_summary.message_count()
     };
 
+    // Data stored in the global state associated with the message block.
     type MessageCountPair = (BlockTime, u64);
 
     let block_message_index: u64 = match caller
