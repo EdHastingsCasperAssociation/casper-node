@@ -12,7 +12,7 @@ use crate::{
 };
 
 use casper_executor_wasm_common::{
-    error::Error,
+    error::{result_from_code, Error},
     flags::ReturnFlags,
     keyspace::{Keyspace, KeyspaceTag},
 };
@@ -506,9 +506,5 @@ where
             payload.len(),
         )
     };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(Error::from(ret))
-    }
+    result_from_code(ret)
 }

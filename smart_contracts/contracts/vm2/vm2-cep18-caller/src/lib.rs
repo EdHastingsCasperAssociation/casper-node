@@ -32,6 +32,11 @@ pub mod exports {
             .call(|contract| contract.name())
             .expect("Should call");
         log!("Name: {name_result:?}");
+        let transfer_result = handle
+            .call(|contract| contract.transfer(Entity::Account([100; 32]), 100))
+            .expect("Should call");
+
+        log!("Transfer: {transfer_result:?}");
 
         log!("Success");
 

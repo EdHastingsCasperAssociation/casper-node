@@ -14,7 +14,11 @@ use casper_executor_wasm_interface::{
     HostError,
 };
 use casper_storage::{
-    data_access_layer::{GenesisRequest, GenesisResult, QueryRequest, QueryResult},
+    data_access_layer::{
+        prefixed_values::{PrefixedValuesRequest, PrefixedValuesResult},
+        GenesisRequest, GenesisResult, MessageTopicsRequest, MessageTopicsResult, QueryRequest,
+        QueryResult,
+    },
     global_state::{
         self,
         state::{lmdb::LmdbGlobalState, CommitProvider, StateProvider},
@@ -22,15 +26,16 @@ use casper_storage::{
         trie_store::lmdb::LmdbTrieStore,
     },
     system::runtime_native::Id,
-    AddressGenerator,
+    AddressGenerator, KeyPrefix,
 };
 use casper_types::{
-    account::AccountHash, BlockHash, ChainspecRegistry, Digest, GenesisAccount, GenesisConfig,
-    HostFunction, HostFunctionCostsV2, Key, Motes, Phase, ProtocolVersion, PublicKey, SecretKey,
-    StorageCosts, StoredValue, SystemConfig, Timestamp, TransactionHash, TransactionV1Hash,
-    WasmConfig, WasmV2Config, U512,
+    account::AccountHash, contract_messages::MessageTopicSummary, BlockHash, ChainspecRegistry,
+    Digest, GenesisAccount, GenesisConfig, Key, Motes, Phase, ProtocolVersion, PublicKey,
+    SecretKey, StorageCosts, StoredValue, StoredValueTag, SystemConfig, Timestamp, TransactionHash,
+    TransactionV1Hash, WasmConfig, U512,
 };
 use fs_extra::dir;
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use tempfile::TempDir;
@@ -174,71 +179,166 @@ pub(crate) fn make_executor() -> ExecutorV2 {
     ExecutorV2::new(executor_config, Arc::new(execution_engine_v1))
 }
 
-// #[test]
-// fn cep18() {
-//     let mut executor = make_executor();
+#[test]
+fn cep18() {
+    let mut executor = make_executor();
 
-//     let (mut global_state, mut state_root_hash, _tempdir) = make_global_state_with_genesis();
+    let (mut global_state, mut state_root_hash, _tempdir) = make_global_state_with_genesis();
 
-//     let address_generator = make_address_generator();
+    let address_generator = make_address_generator();
 
-//     let input_data = borsh::to_vec(&("Foo Token".to_string(),))
-//         .map(Bytes::from)
-//         .unwrap();
+    let input_data = borsh::to_vec(&("Foo Token".to_string(),))
+        .map(Bytes::from)
+        .unwrap();
 
-//     let create_request = InstallContractRequestBuilder::default()
-//         .with_initiator(*DEFAULT_ACCOUNT_HASH)
-//         .with_gas_limit(1_000_000)
-//         .with_transaction_hash(TRANSACTION_HASH)
-//         .with_wasm_bytes(VM2_CEP18.clone())
-//         .with_shared_address_generator(Arc::clone(&address_generator))
-//         .with_transferred_value(0)
-//         .with_entry_point("new".to_string())
-//         .with_input(input_data)
-//         .with_chain_name(DEFAULT_CHAIN_NAME)
-//         .with_block_time(Timestamp::now().into())
-//         .with_state_hash(Digest::from_raw([0; 32])) // TODO: Carry on state root hash
-//         .with_block_height(1) // TODO: Carry on block height
-//         .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on
-// parent block hash         .build()
-//         .expect("should build");
+    let block_time_1 = Timestamp::now().into();
 
-//     let create_result = run_create_contract(
-//         &mut executor,
-//         &mut global_state,
-//         state_root_hash,
-//         create_request,
-//     );
+    let create_request = InstallContractRequestBuilder::default()
+        .with_initiator(*DEFAULT_ACCOUNT_HASH)
+        .with_gas_limit(1_000_000)
+        .with_transaction_hash(TRANSACTION_HASH)
+        .with_wasm_bytes(VM2_CEP18.clone())
+        .with_shared_address_generator(Arc::clone(&address_generator))
+        .with_transferred_value(0)
+        .with_entry_point("new".to_string())
+        .with_input(input_data)
+        .with_chain_name(DEFAULT_CHAIN_NAME)
+        .with_block_time(block_time_1)
+        .with_state_hash(Digest::from_raw([0; 32])) // TODO: Carry on state root hash
+        .with_block_height(1) // TODO: Carry on block height
+        .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on parent block hash
+        .build()
+        .expect("should build");
 
-//     state_root_hash = global_state
-//         .commit_effects(state_root_hash, create_result.effects().clone())
-//         .expect("Should commit");
+    //     let create_result = run_create_contract(
+    //         &mut executor,
+    //         &mut global_state,
+    //         state_root_hash,
+    //         create_request,
+    //     );
 
-//     let execute_request = ExecuteRequestBuilder::default()
-//         .with_initiator(*DEFAULT_ACCOUNT_HASH)
-//         .with_caller_key(Key::Account(*DEFAULT_ACCOUNT_HASH))
-//         .with_gas_limit(DEFAULT_GAS_LIMIT)
-//         .with_transferred_value(1000)
-//         .with_transaction_hash(TRANSACTION_HASH)
-//         .with_target(ExecutionKind::SessionBytes(VM2_CEP18_CALLER))
-//         .with_serialized_input((create_result.smart_contract_addr(),))
-//         .with_transferred_value(0)
-//         .with_shared_address_generator(Arc::clone(&address_generator))
-//         .with_chain_name(DEFAULT_CHAIN_NAME)
-//         .with_block_time(Timestamp::now().into())
-//         .with_state_hash(Digest::from_raw([0; 32])) // TODO: Carry on state root hash
-//         .with_block_height(1) // TODO: Carry on block height
-//         .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on
-// parent block hash         .build()
-//         .expect("should build");
+    let contract_hash = create_result.smart_contract_addr();
 
-//     let _effects_2 = run_wasm_session(
-//         &mut executor,
-//         &mut global_state,
-//         state_root_hash,
-//         execute_request,
-//     );
-// }
+    state_root_hash = global_state
+        .commit_effects(state_root_hash, create_result.effects().clone())
+        .expect("Should commit");
+
+    let msgs = global_state.prefixed_values(PrefixedValuesRequest::new(
+        state_root_hash,
+        KeyPrefix::MessageEntriesByEntity(*contract_hash),
+    ));
+    let PrefixedValuesResult::Success {
+        key_prefix: _,
+        values,
+    } = msgs
+    else {
+        panic!("Expected success")
+    };
+
+    {
+        let mut topics_1 = values
+            .iter()
+            .filter_map(|stored_value| stored_value.as_message_topic_summary())
+            .collect_vec();
+        topics_1
+            .sort_by_key(|topic| (topic.topic_name(), topic.blocktime(), topic.message_count()));
+
+        assert_eq!(topics_1[0].topic_name(), "Mint");
+        assert_eq!(topics_1[0].message_count(), 1);
+        assert_eq!(topics_1[0].blocktime(), block_time_1);
+    }
+
+    let block_time_2 = (block_time_1.value() + 1).into();
+    assert_ne!(block_time_1, block_time_2);
+
+    let execute_request = ExecuteRequestBuilder::default()
+        .with_initiator(*DEFAULT_ACCOUNT_HASH)
+        .with_caller_key(Key::Account(*DEFAULT_ACCOUNT_HASH))
+        .with_gas_limit(DEFAULT_GAS_LIMIT)
+        .with_transferred_value(1000)
+        .with_transaction_hash(TRANSACTION_HASH)
+        .with_target(ExecutionKind::SessionBytes(VM2_CEP18_CALLER))
+        .with_serialized_input((create_result.smart_contract_addr(),))
+        .with_transferred_value(0)
+        .with_shared_address_generator(Arc::clone(&address_generator))
+        .with_chain_name(DEFAULT_CHAIN_NAME)
+        .with_block_time(block_time_2)
+        .with_state_hash(Digest::from_raw([0; 32])) // TODO: Carry on state root hash
+        .with_block_height(2) // TODO: Carry on block height
+        .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on parent block hash
+        .build()
+        .expect("should build");
+
+    let result_2 = run_wasm_session(
+        &mut executor,
+        &mut global_state,
+        state_root_hash,
+        execute_request,
+    );
+
+    state_root_hash = global_state
+        .commit_effects(state_root_hash, result_2.effects().clone())
+        .expect("Should commit");
+
+    let MessageTopicsResult::Success { message_topics } =
+        global_state.message_topics(MessageTopicsRequest::new(state_root_hash, *contract_hash))
+    else {
+        panic!("Expected success")
+    };
+
+    assert!(matches!(message_topics.get("Mint"), Some(_)));
+    assert!(matches!(message_topics.get("Transfer"), Some(_)));
+    assert_ne!(
+        message_topics.get("Mint"),
+        message_topics.get("Transfer"),
+        "Mint and Transfer topics should have different hashes"
+    );
+
+    {
+        let msgs = global_state.prefixed_values(PrefixedValuesRequest::new(
+            state_root_hash,
+            KeyPrefix::MessageEntriesByEntity(*contract_hash),
+        ));
+        let PrefixedValuesResult::Success {
+            key_prefix: _,
+            values,
+        } = msgs
+        else {
+            panic!("Expected success")
+        };
+
+        let mut topics_2 = values
+            .iter()
+            .filter_map(|stored_value| stored_value.as_message_topic_summary())
+            .collect_vec();
+        topics_2
+            .sort_by_key(|topic| (topic.topic_name(), topic.blocktime(), topic.message_count()));
+
+        assert_eq!(topics_2[0].topic_name(), "Mint");
+        assert_eq!(topics_2[0].message_count(), 1);
+        assert_eq!(topics_2[0].blocktime(), block_time_2); // NOTE: Session called mint; the topic summary blocktime is refreshed
+
+        assert_eq!(topics_2[1].topic_name(), "Transfer");
+        assert_eq!(topics_2[1].message_count(), 1);
+        assert_eq!(topics_2[1].blocktime(), block_time_2);
+    }
+
+    let mut messages = result_2.messages.iter().collect_vec();
+    messages.sort_by_key(|message| {
+        (
+            message.topic_name(),
+            message.topic_index(),
+            message.block_index(),
+        )
+    });
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0].topic_name(), "Mint");
+    assert_eq!(messages[0].topic_index(), 0);
+    assert_eq!(messages[0].block_index(), 0);
+    assert_eq!(messages[1].topic_name(), "Transfer");
+    assert_eq!(messages[1].topic_index(), 0);
+    assert_eq!(messages[1].block_index(), 1);
+}
 
 fn make_global_state_with_genesis() -> (LmdbGlobalState, Digest, TempDir) {
     let default_accounts = vec![GenesisAccount::Account {

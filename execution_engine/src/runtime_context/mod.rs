@@ -990,7 +990,7 @@ where
         let topic_value = StoredValue::MessageTopic(MessageTopicSummary::new(
             topic_message_count,
             block_time,
-            message.topic_name().clone(),
+            message.topic_name().to_owned(),
         ));
         let message_key = message.message_key();
         let message_value = StoredValue::Message(message.checksum().map_err(ExecError::BytesRepr)?);

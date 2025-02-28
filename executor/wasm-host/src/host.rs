@@ -10,7 +10,11 @@ use casper_executor_wasm_common::{
         ENTRY_POINT_PAYMENT_CALLER, ENTRY_POINT_PAYMENT_DIRECT_INVOCATION_ONLY,
         ENTRY_POINT_PAYMENT_SELF_ONWARD,
     },
-    error::{HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT, HOST_ERROR_NOT_FOUND},
+    error::{
+        HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT, HOST_ERROR_MESSAGE_PAYLOAD_TOO_LONG,
+        HOST_ERROR_NOT_FOUND, HOST_ERROR_SUCCEED, HOST_ERROR_TOO_MANY_TOPICS,
+        HOST_ERROR_TOPIC_TOO_LONG,
+    },
     flags::ReturnFlags,
     keyspace::{Keyspace, KeyspaceTag},
 };
@@ -22,12 +26,13 @@ use casper_storage::{
 
 use casper_types::{
     account::AccountHash,
-    addressable_entity::{ActionThresholds, AssociatedKeys, NamedKeyAddr},
-    bytesrepr::ToBytes,
-    AddressableEntity, AddressableEntityHash, BlockHash, ByteCode, ByteCodeAddr, ByteCodeHash,
-    ByteCodeKind, CLType, ContractRuntimeTag, Digest, EntityAddr, EntityEntryPoint, EntityKind,
-    EntryPointAccess, EntryPointAddr, EntryPointPayment, EntryPointType, EntryPointValue, Groups,
-    HashAddr, Key, Package, PackageHash, PackageStatus, ProtocolVersion, StoredValue, URef, U512,
+    addressable_entity::{ActionThresholds, AssociatedKeys, MessageTopicError, NamedKeyAddr},
+    contract_messages::{Message, MessageAddr, MessagePayload, MessageTopicSummary},
+    AddressableEntity, AddressableEntityHash, BlockGlobalAddr, BlockHash, BlockTime, ByteCode,
+    ByteCodeAddr, ByteCodeHash, ByteCodeKind, CLType, CLValue, ContractRuntimeTag, Digest,
+    EntityAddr, EntityKind, EntryPoint, EntryPointAccess, EntryPointAddr, EntryPointPayment,
+    EntryPointType, EntryPointValue, Groups, HashAddr, Key, Package, PackageHash, PackageStatus,
+    ProtocolVersion, StoredValue, URef, U512,
 };
 use either::Either;
 use num_derive::FromPrimitive;
@@ -302,16 +307,7 @@ fn keyspace_to_global_state_key<S: GlobalStateReader, E: Executor>(
     context: &Context<S, E>,
     keyspace: Keyspace<'_>,
 ) -> Option<Key> {
-    let entity_addr = match context.callee {
-        Key::Account(account_hash) => EntityAddr::new_account(account_hash.value()),
-        Key::SmartContract(smart_contract_addr) => {
-            EntityAddr::new_smart_contract(smart_contract_addr)
-        }
-        _ => {
-            // This should never happen, as the caller is always an account or a smart contract.
-            panic!("Unexpected callee variant: {:?}", context.callee)
-        }
-    };
+    let entity_addr = context_to_entity_addr(context);
 
     match keyspace {
         Keyspace::State => Some(Key::State(entity_addr)),
@@ -331,6 +327,21 @@ fn keyspace_to_global_state_key<S: GlobalStateReader, E: Executor>(
             let entry_point_addr =
                 EntryPointAddr::new_v1_entry_point_addr(entity_addr, payload).ok()?;
             Some(Key::EntryPoint(entry_point_addr))
+        }
+    }
+}
+
+fn context_to_entity_addr<S: GlobalStateReader, E: Executor>(
+    context: &Context<S, E>,
+) -> EntityAddr {
+    match context.callee {
+        Key::Account(account_hash) => EntityAddr::new_account(account_hash.value()),
+        Key::SmartContract(smart_contract_addr) => {
+            EntityAddr::new_smart_contract(smart_contract_addr)
+        }
+        _ => {
+            // This should never happen, as the caller is always an account or a smart contract.
+            panic!("Unexpected callee variant: {:?}", context.callee)
         }
     }
 }
@@ -614,9 +625,9 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
                     gas_usage,
                     effects,
                     cache,
+                    messages,
                 }) => {
                     // output
-
                     caller.consume_gas(gas_usage.gas_spent());
 
                     if let Some(host_error) = host_error {
@@ -626,7 +637,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
                     caller
                         .context_mut()
                         .tracking_copy
-                        .apply_changes(effects, cache);
+                        .apply_changes(effects, cache, messages);
 
                     output
                 }
@@ -759,6 +770,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
             gas_usage,
             effects,
             cache,
+            messages,
         }) => {
             if let Some(output) = output {
                 let out_ptr: u32 = if cb_alloc != 0 {
@@ -779,7 +791,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
                     caller
                         .context_mut()
                         .tracking_copy
-                        .apply_changes(effects, cache);
+                        .apply_changes(effects, cache, messages);
                     Ok(())
                 }
             };
@@ -1297,6 +1309,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                 gas_usage,
                 effects,
                 cache,
+                messages,
             }) => {
                 // output
 
@@ -1309,7 +1322,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                 caller
                     .context_mut()
                     .tracking_copy
-                    .apply_changes(effects, cache);
+                    .apply_changes(effects, cache, messages);
 
                 if let Some(output) = output {
                     info!(
@@ -1343,4 +1356,186 @@ pub fn casper_env_block_time<S: GlobalStateReader, E: Executor>(
 
     let block_time = caller.context().block_time;
     Ok(block_time.value())
+}
+
+pub fn casper_emit_message<S: GlobalStateReader, E: Executor>(
+    mut caller: impl Caller<Context = Context<S, E>>,
+    topic_ptr: u32,
+    topic_size: u32,
+    payload_ptr: u32,
+    payload_size: u32,
+) -> VMResult<i32> {
+    if topic_size > 256 {
+        // TODO: limits.max_topic_name_size
+        return Ok(HOST_ERROR_TOPIC_TOO_LONG);
+    }
+    if payload_size > 1024 {
+        // TODO: limits.max_message_size
+        return Ok(HOST_ERROR_MESSAGE_PAYLOAD_TOO_LONG);
+    }
+
+    let topic_name = {
+        let topic: Vec<u8> = caller.memory_read(topic_ptr, topic_size as usize)?;
+        let Ok(topic) = String::from_utf8(topic) else {
+            // Not a valid UTF-8 string
+            return Ok(HOST_ERROR_INVALID_DATA);
+        };
+        topic
+    };
+
+    let payload = caller.memory_read(payload_ptr, payload_size as usize)?;
+
+    let entity_addr = context_to_entity_addr(caller.context());
+
+    let mut message_topics = caller
+        .context_mut()
+        .tracking_copy
+        .get_message_topics(entity_addr.value())
+        .unwrap_or_else(|error| {
+            panic!("Error while reading from storage; aborting error={error:?}")
+        });
+
+    if message_topics.len() >= 128 {
+        // TODO: max_topics_per_contract
+        return Ok(HOST_ERROR_TOO_MANY_TOPICS);
+    }
+
+    let topic_name_hash = Digest::hash(&topic_name).value().into();
+
+    match message_topics.add_topic(&topic_name, topic_name_hash) {
+        Ok(()) => {
+            // New topic is created
+        }
+        Err(MessageTopicError::DuplicateTopic) => {
+            // We're lazily creating message topics and this operation is idempotent. Therefore
+            // already existing topic is not an issue.
+        }
+        Err(MessageTopicError::MaxTopicsExceeded) => {
+            // We're validating the size of topics before adding them
+            return Ok(HOST_ERROR_TOO_MANY_TOPICS);
+        }
+        Err(MessageTopicError::TopicNameSizeExceeded) => {
+            // We're validating the length of topic before adding it
+            return Ok(HOST_ERROR_TOPIC_TOO_LONG);
+        }
+        Err(error) => {
+            // These error variants are non_exhaustive, and we should handle them explicitly.
+            unreachable!("Unexpected error while adding a topic: {:?}", error);
+        }
+    };
+
+    let current_block_time = caller.context().block_time;
+    eprintln!("📩 {topic_name}: {payload:?} (at {current_block_time:?})");
+
+    let topic_key = Key::Message(MessageAddr::new_topic_addr(
+        entity_addr.value(),
+        topic_name_hash,
+    ));
+    let prev_topic_summary = match caller.context_mut().tracking_copy.read(&topic_key) {
+        Ok(Some(StoredValue::MessageTopic(message_topic_summary))) => message_topic_summary,
+        Ok(Some(stored_value)) => {
+            panic!("Unexpected stored value: {:?}", stored_value);
+        }
+        Ok(None) => {
+            let message_topic_summary =
+                MessageTopicSummary::new(0, current_block_time, topic_name.clone());
+            let summary = StoredValue::MessageTopic(message_topic_summary.clone());
+            caller.context_mut().tracking_copy.write(topic_key, summary);
+            message_topic_summary
+        }
+        Err(error) => panic!("Error while reading from storage; aborting error={error:?}"),
+    };
+
+    let topic_message_index = if prev_topic_summary.blocktime() != current_block_time {
+        for index in 1..prev_topic_summary.message_count() {
+            let message_key = Key::message(entity_addr.value(), topic_name_hash, index);
+            debug_assert!(
+                {
+                    // NOTE: This assertion is to ensure that the message index is continuous, and
+                    // the previous messages are pruned properly.
+                    caller
+                        .context_mut()
+                        .tracking_copy
+                        .read(&message_key)
+                        .unwrap()
+                        .is_some()
+                },
+                "Message index is not continuous"
+            );
+
+            // Prune the previous messages
+            caller.context_mut().tracking_copy.prune(message_key);
+        }
+        0
+    } else {
+        prev_topic_summary.message_count()
+    };
+
+    let block_message_index: u64 = match caller
+        .context_mut()
+        .tracking_copy
+        .read(&Key::BlockGlobal(BlockGlobalAddr::MessageCount))
+        .unwrap()
+    {
+        Some(StoredValue::CLValue(value_pair)) => {
+            let (prev_block_time, prev_count): (BlockTime, u64) =
+                CLValue::into_t(value_pair).expect("should be (BlockTime, u64)");
+
+            if prev_block_time == current_block_time {
+                prev_count
+            } else {
+                0
+            }
+        }
+        Some(other) => panic!("Unexpected stored value: {:?}", other),
+        None => {
+            // No messages in current block yet
+            0
+        }
+    };
+
+    let Some(topic_message_count) = topic_message_index.checked_add(1) else {
+        // return Ok(Err(ApiError::MessageTopicFull));
+        todo!()
+    };
+
+    let Some(block_message_count) = block_message_index.checked_add(1) else {
+        // return Ok(Err(ApiError::MaxMessagesPerBlockExceeded));
+        todo!()
+    };
+
+    // Under v2 runtime messages are only limited to bytes.
+    let message_payload = MessagePayload::Bytes(payload.into());
+
+    let message = Message::new(
+        entity_addr.value(),
+        message_payload,
+        topic_name,
+        topic_name_hash,
+        topic_message_index,
+        block_message_index,
+    );
+    let topic_value = StoredValue::MessageTopic(MessageTopicSummary::new(
+        topic_message_count,
+        current_block_time,
+        message.topic_name().to_owned(),
+    ));
+
+    let message_key = message.message_key();
+    let message_value = StoredValue::Message(message.checksum().expect("Checksum"));
+    let block_message_count_value = StoredValue::CLValue(
+        CLValue::from_t((current_block_time, block_message_count))
+            .expect("Serialize block message pair"),
+    );
+
+    caller.context_mut().tracking_copy.emit_message(
+        topic_key,
+        topic_value,
+        message_key,
+        message_value,
+        block_message_count_value,
+        message,
+    );
+
+    Ok(HOST_ERROR_SUCCEED)
 }

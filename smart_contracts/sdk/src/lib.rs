@@ -26,9 +26,6 @@ pub use casper_sdk_sys as sys;
 use host::{CallResult, Entity};
 use types::{Address, CallError};
 
-#[cfg(target_arch = "wasm32")]
-pub use wasm_bindgen;
-
 cfg_if::cfg_if! {
     if #[cfg(feature = "std")] {
         #[inline]

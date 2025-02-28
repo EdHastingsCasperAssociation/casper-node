@@ -37,7 +37,10 @@ impl TokenContract {
         instance
             .state
             .security_badges
-            .insert(&host::get_caller(), &SecurityBadge::Admin);
+            .insert(&caller, &SecurityBadge::Admin);
+
+        // Give caller some tokens
+        instance.mint(caller, 1000).expect("Mint");
 
         log!("TokenContract created with state {:?}", &instance.state);
         log!("Admin is {caller:?}");

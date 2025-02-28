@@ -559,12 +559,12 @@ where
 
         for entry_key in &keys {
             if let Some(topic_name_hash) = entry_key.as_message_topic_name_hash() {
-                match self.read(entry_key)? {
+                match self.read(entry_key)?.as_ref() {
                     Some(StoredValue::Message(_)) => {
                         continue;
                     }
                     Some(StoredValue::MessageTopic(summary)) => {
-                        topics.insert(summary.topic_name(), topic_name_hash);
+                        topics.insert(summary.topic_name().to_owned(), topic_name_hash);
                     }
                     Some(other) => {
                         return Err(TrackingCopyError::TypeMismatch(
@@ -579,7 +579,7 @@ where
                             continue;
                         }
                         Some(StoredValue::MessageTopic(summary)) => {
-                            topics.insert(summary.topic_name(), topic_name_hash);
+                            topics.insert(summary.topic_name().to_owned(), topic_name_hash);
                         }
                         Some(_) | None => {
                             return Err(TrackingCopyError::KeyNotFound(*entry_key));

@@ -7,3 +7,9 @@ pub struct Transfer {
     pub to: Entity,
     pub amount: u64,
 }
+
+#[casper(message)]
+pub struct Mint {
+    pub owner: Entity,
+    pub amount: u64,
+}

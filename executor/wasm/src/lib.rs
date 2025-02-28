@@ -288,12 +288,13 @@ impl ExecutorV2 {
                         gas_usage,
                         effects,
                         cache,
+                        messages,
                     }) => {
                         if let Some(host_error) = host_error {
                             return Err(InstallContractError::Constructor { host_error });
                         }
 
-                        tracking_copy.apply_changes(effects, cache);
+                        tracking_copy.apply_changes(effects, cache, messages);
 
                         if let Some(output) = output {
                             warn!(?output, "unexpected output from constructor");
@@ -470,6 +471,7 @@ impl ExecutorV2 {
                                         ),
                                         effects: tracking_copy.effects(),
                                         cache: tracking_copy.cache(),
+                                        messages: tracking_copy.messages(),
                                     });
                                 }
                             }
@@ -574,6 +576,7 @@ impl ExecutorV2 {
                 gas_usage,
                 effects: final_tracking_copy.effects(),
                 cache: final_tracking_copy.cache(),
+                messages: final_tracking_copy.messages(),
             }),
             Err(VMError::Return { flags, data }) => {
                 let host_error = if flags.contains(ReturnFlags::REVERT) {
@@ -581,8 +584,11 @@ impl ExecutorV2 {
                     Some(HostError::CalleeReverted)
                 } else {
                     // Merge the tracking copy parts since the execution has succeeded.
-                    initial_tracking_copy
-                        .apply_changes(final_tracking_copy.effects(), final_tracking_copy.cache());
+                    initial_tracking_copy.apply_changes(
+                        final_tracking_copy.effects(),
+                        final_tracking_copy.cache(),
+                        final_tracking_copy.messages(),
+                    );
 
                     None
                 };
@@ -593,6 +599,7 @@ impl ExecutorV2 {
                     gas_usage,
                     effects: initial_tracking_copy.effects(),
                     cache: initial_tracking_copy.cache(),
+                    messages: initial_tracking_copy.messages(),
                 })
             }
             Err(VMError::OutOfGas) => Ok(ExecuteResult {
@@ -601,6 +608,7 @@ impl ExecutorV2 {
                 gas_usage,
                 effects: final_tracking_copy.effects(),
                 cache: final_tracking_copy.cache(),
+                messages: final_tracking_copy.messages(),
             }),
             Err(VMError::Trap(trap_code)) => Ok(ExecuteResult {
                 host_error: Some(HostError::CalleeTrapped(trap_code)),
@@ -608,6 +616,7 @@ impl ExecutorV2 {
                 gas_usage,
                 effects: initial_tracking_copy.effects(),
                 cache: initial_tracking_copy.cache(),
+                messages: initial_tracking_copy.messages(),
             }),
             Err(VMError::Export(export_error)) => {
                 error!(?export_error, "export error");
@@ -617,6 +626,7 @@ impl ExecutorV2 {
                     gas_usage,
                     effects: initial_tracking_copy.effects(),
                     cache: initial_tracking_copy.cache(),
+                    messages: initial_tracking_copy.messages(),
                 })
             }
         }
@@ -662,9 +672,11 @@ impl ExecutorV2 {
         };
 
         let effects = wasm_v1_result.effects();
+        let messages = wasm_v1_result.messages();
+
         match wasm_v1_result.cache() {
             Some(cache) => {
-                tracking_copy.apply_changes(effects.clone(), cache.clone());
+                tracking_copy.apply_changes(effects.clone(), cache.clone(), messages.clone());
             }
             None => {
                 debug_assert!(
@@ -714,6 +726,7 @@ impl ExecutorV2 {
             gas_usage: GasUsage::new(gas_limit, remaining_points),
             effects: fork2.effects(),
             cache: fork2.cache(),
+            messages: fork2.messages(),
         })
     }
 
@@ -746,6 +759,7 @@ impl ExecutorV2 {
                 gas_usage,
                 effects,
                 cache: _,
+                messages,
             }) => match state_provider.commit_effects(state_root_hash, effects.clone()) {
                 Ok(post_state_hash) => Ok(ExecuteWithProviderResult {
                     host_error,
@@ -753,6 +767,7 @@ impl ExecutorV2 {
                     gas_usage,
                     post_state_hash,
                     effects,
+                    messages,
                 }),
                 Err(error) => Err(error.into()),
             },

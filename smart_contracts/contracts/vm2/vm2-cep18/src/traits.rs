@@ -5,7 +5,11 @@ use casper_sdk::{
     log,
 };
 
-use crate::{error::Cep18Error, messages::Transfer, security_badge::SecurityBadge};
+use crate::{
+    error::Cep18Error,
+    messages::{Mint, Transfer},
+    security_badge::SecurityBadge,
+};
 
 #[derive(Debug)]
 #[casper]
@@ -226,6 +230,9 @@ pub trait Mintable: CEP18 {
             .total_supply
             .checked_add(amount)
             .ok_or(Cep18Error::Overflow)?;
+
+        emit_message(Mint { owner, amount }).expect("failed to emit message");
+
         Ok(())
     }
 }
