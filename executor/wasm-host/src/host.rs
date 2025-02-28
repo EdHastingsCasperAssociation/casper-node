@@ -33,7 +33,7 @@ use casper_types::{
     contract_messages::{Message, MessageAddr, MessagePayload, MessageTopicSummary},
     AddressableEntity, AddressableEntityHash, BlockGlobalAddr, BlockHash, BlockTime, ByteCode,
     ByteCodeAddr, ByteCodeHash, ByteCodeKind, CLType, CLValue, ContractRuntimeTag, Digest,
-    EntityAddr, EntityKind, EntryPoint, EntryPointAccess, EntryPointAddr, EntryPointPayment,
+    EntityAddr, EntityEntryPoint, EntityKind, EntryPointAccess, EntryPointAddr, EntryPointPayment,
     EntryPointType, EntryPointValue, Groups, HashAddr, HostFunction, HostFunctionCost, Key,
     Package, PackageHash, PackageStatus, ProtocolVersion, StoredValue, URef, U512,
 };
