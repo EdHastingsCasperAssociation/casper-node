@@ -29,6 +29,7 @@ use casper_storage::{
 use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionThresholds, AssociatedKeys, MessageTopicError, NamedKeyAddr},
+    bytesrepr::ToBytes,
     contract_messages::{Message, MessageAddr, MessagePayload, MessageTopicSummary},
     AddressableEntity, AddressableEntityHash, BlockGlobalAddr, BlockHash, BlockTime, ByteCode,
     ByteCodeAddr, ByteCodeHash, ByteCodeKind, CLType, CLValue, ContractRuntimeTag, Digest,

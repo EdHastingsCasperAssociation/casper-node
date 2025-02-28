@@ -363,7 +363,7 @@ impl Harness {
         match caller {
             Entity::Account(account) => {
                 // if this fails, the transfer will be reverted and the state will be rolled back
-                match casper::casper_transfer(&account, amount) {
+                match casper::transfer(&account, amount) {
                     Ok(()) => {}
                     Err(call_error) => {
                         log!("Unable to perform a transfer: {call_error:?}");
