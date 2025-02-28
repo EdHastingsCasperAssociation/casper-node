@@ -1368,12 +1368,11 @@ pub fn casper_emit_message<S: GlobalStateReader, E: Executor>(
     payload_ptr: u32,
     payload_size: u32,
 ) -> VMResult<i32> {
-    if topic_size > 256 {
-        // TODO: limits.max_topic_name_size
+    if topic_size > caller.context().message_limits.max_topic_name_size {
         return Ok(HOST_ERROR_TOPIC_TOO_LONG);
     }
-    if payload_size > 1024 {
-        // TODO: limits.max_message_size
+
+    if payload_size > caller.context().message_limits.max_message_size {
         return Ok(HOST_ERROR_PAYLOAD_TOO_LONG);
     }
 
@@ -1398,8 +1397,7 @@ pub fn casper_emit_message<S: GlobalStateReader, E: Executor>(
             panic!("Error while reading from storage; aborting error={error:?}")
         });
 
-    if message_topics.len() >= 128 {
-        // TODO: max_topics_per_contract
+    if message_topics.len() >= caller.context().message_limits.max_topics_per_contract as usize {
         return Ok(HOST_ERROR_TOO_MANY_TOPICS);
     }
 

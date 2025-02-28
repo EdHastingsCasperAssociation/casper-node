@@ -4,7 +4,8 @@ use bytes::Bytes;
 use casper_executor_wasm_interface::executor::Executor;
 use casper_storage::{global_state::GlobalStateReader, AddressGenerator, TrackingCopy};
 use casper_types::{
-    account::AccountHash, BlockTime, Key, StorageCosts, TransactionHash, WasmV2Config,
+    account::AccountHash, BlockTime, Key, MessageLimits, StorageCosts, TransactionHash,
+    WasmV2Config,
 };
 use parking_lot::RwLock;
 
@@ -24,6 +25,7 @@ pub struct Context<S: GlobalStateReader, E: Executor> {
     pub transferred_value: u128,
     pub config: WasmV2Config,
     pub storage_costs: StorageCosts,
+    pub message_limits: MessageLimits,
     pub tracking_copy: TrackingCopy<S>,
     pub executor: E, // TODO: This could be part of the caller
     pub transaction_hash: TransactionHash,

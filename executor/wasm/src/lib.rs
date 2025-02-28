@@ -34,8 +34,8 @@ use casper_types::{
     addressable_entity::{ActionThresholds, AssociatedKeys},
     bytesrepr, AddressableEntity, AddressableEntityHash, ByteCode, ByteCodeAddr, ByteCodeHash,
     ByteCodeKind, ContractRuntimeTag, Digest, EntityAddr, EntityKind, Gas, Groups, InitiatorAddr,
-    Key, Package, PackageHash, PackageStatus, Phase, ProtocolVersion, StorageCosts, StoredValue,
-    TransactionInvocationTarget, URef, WasmV2Config, U512,
+    Key, MessageLimits, Package, PackageHash, PackageStatus, Phase, ProtocolVersion, StorageCosts,
+    StoredValue, TransactionInvocationTarget, URef, WasmV2Config, U512,
 };
 use either::Either;
 use install::{InstallContractError, InstallContractRequest, InstallContractResult};
@@ -61,6 +61,7 @@ pub struct ExecutorConfig {
     executor_kind: ExecutorKind,
     wasm_config: WasmV2Config,
     storage_costs: StorageCosts,
+    message_limits: MessageLimits,
 }
 
 impl ExecutorConfigBuilder {
@@ -75,6 +76,7 @@ pub struct ExecutorConfigBuilder {
     executor_kind: Option<ExecutorKind>,
     wasm_config: Option<WasmV2Config>,
     storage_costs: Option<StorageCosts>,
+    message_limits: Option<MessageLimits>,
 }
 
 impl ExecutorConfigBuilder {
@@ -102,18 +104,26 @@ impl ExecutorConfigBuilder {
         self
     }
 
+    /// Set the message limits.
+    pub fn with_message_limits(mut self, message_limits: MessageLimits) -> Self {
+        self.message_limits = Some(message_limits);
+        self
+    }
+
     /// Build the `ExecutorConfig`.
     pub fn build(self) -> Result<ExecutorConfig, &'static str> {
         let memory_limit = self.memory_limit.ok_or("Memory limit is not set")?;
         let executor_kind = self.executor_kind.ok_or("Executor kind is not set")?;
         let wasm_config = self.wasm_config.ok_or("Wasm config is not set")?;
         let storage_costs = self.storage_costs.ok_or("Storage costs are not set")?;
+        let message_limits = self.message_limits.ok_or("Message limits are not set")?;
 
         Ok(ExecutorConfig {
             memory_limit,
             executor_kind,
             wasm_config,
             storage_costs,
+            message_limits,
         })
     }
 }
@@ -541,6 +551,7 @@ impl ExecutorV2 {
             chain_name,
             input,
             block_time,
+            message_limits: self.config.message_limits,
         };
 
         let wasm_instance_config = ConfigBuilder::new()

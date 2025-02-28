@@ -30,9 +30,9 @@ use casper_storage::{
 };
 use casper_types::{
     account::AccountHash, BlockHash, ChainspecRegistry, Digest, GenesisAccount, GenesisConfig,
-    HostFunction, HostFunctionCostsV2, Key, Motes, Phase, ProtocolVersion, PublicKey, SecretKey,
-    StorageCosts, StoredValue, SystemConfig, Timestamp, TransactionHash, TransactionV1Hash,
-    WasmConfig, WasmV2Config, U512,
+    HostFunction, HostFunctionCostsV2, Key, MessageLimits, Motes, Phase, ProtocolVersion,
+    PublicKey, SecretKey, StorageCosts, StoredValue, SystemConfig, Timestamp, TransactionHash,
+    TransactionV1Hash, WasmConfig, WasmV2Config, U512,
 };
 use fs_extra::dir;
 use itertools::Itertools;
@@ -55,7 +55,7 @@ const VM2_LEGACY_COUNTER_PROXY: Bytes =
     Bytes::from_static(include_bytes!("../vm2_legacy_counter_proxy.wasm"));
 const VM2_CEP18_CALLER: Bytes = Bytes::from_static(include_bytes!("../vm2-cep18-caller.wasm"));
 const VM2_TRAIT: Bytes = Bytes::from_static(include_bytes!("../vm2_trait.wasm"));
-const VM2_FLIPPER: Bytes = Bytes::from_static(include_bytes!("../vm2_flipper.wasm"));
+// const VM2_FLIPPER: Bytes = Bytes::from_static(include_bytes!("../vm2_flipper.wasm"));
 const VM2_UPGRADABLE: Bytes = Bytes::from_static(include_bytes!("../vm2_upgradable.wasm"));
 const VM2_UPGRADABLE_V2: Bytes = Bytes::from_static(include_bytes!("../vm2_upgradable_v2.wasm"));
 
@@ -172,6 +172,7 @@ pub(crate) fn make_executor() -> ExecutorV2 {
         .with_executor_kind(ExecutorKind::Compiled)
         .with_wasm_config(WasmV2Config::default())
         .with_storage_costs(StorageCosts::default())
+        .with_message_limits(MessageLimits::default())
         .build()
         .expect("Should build");
     ExecutorV2::new(executor_config, Arc::new(execution_engine_v1))

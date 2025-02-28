@@ -780,6 +780,7 @@ where
             chain_name: data.context.chain_name.clone(),
             input: data.context.input.clone(),
             block_time: data.context.block_time,
+            message_limits: data.context.message_limits,
         }
     }
 }
