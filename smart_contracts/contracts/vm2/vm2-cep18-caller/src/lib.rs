@@ -1,8 +1,7 @@
 #![cfg_attr(target_family = "wasm", no_main)]
 
 pub mod exports {
-    use casper_macros::casper;
-    use casper_sdk::{log, types::Address, ContractHandle};
+    use casper_sdk::{prelude::*, types::Address, ContractHandle};
 
     use vm2_cep18::{
         contract::TokenContractRef,

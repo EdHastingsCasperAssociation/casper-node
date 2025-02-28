@@ -53,7 +53,7 @@ const VM2_HARNESS: Bytes = Bytes::from_static(include_bytes!("../vm2-harness.was
 const VM2_CEP18: Bytes = Bytes::from_static(include_bytes!("../vm2_cep18.wasm"));
 const VM2_LEGACY_COUNTER_PROXY: Bytes =
     Bytes::from_static(include_bytes!("../vm2_legacy_counter_proxy.wasm"));
-const VM2_CEP18_CALLER: Bytes = Bytes::from_static(include_bytes!("../vm2-cep18-caller.wasm"));
+const VM2_CEP18_CALLER: Bytes = Bytes::from_static(include_bytes!("../vm2_cep18_caller.wasm"));
 const VM2_TRAIT: Bytes = Bytes::from_static(include_bytes!("../vm2_trait.wasm"));
 // const VM2_FLIPPER: Bytes = Bytes::from_static(include_bytes!("../vm2_flipper.wasm"));
 const VM2_UPGRADABLE: Bytes = Bytes::from_static(include_bytes!("../vm2_upgradable.wasm"));
@@ -64,8 +64,7 @@ const VM2_HOST: Bytes = Bytes::from_static(include_bytes!("../vm2_host.wasm"));
 const TRANSACTION_HASH_BYTES: [u8; 32] = [55; 32];
 const TRANSACTION_HASH: TransactionHash =
     TransactionHash::V1(TransactionV1Hash::from_raw(TRANSACTION_HASH_BYTES));
-
-const DEFAULT_GAS_LIMIT: u64 = 100_000_000_000_000;
+const DEFAULT_GAS_LIMIT: u64 = 1_000_000 * CSPR;
 const DEFAULT_CHAIN_NAME: &str = "casper-test";
 
 fn make_address_generator() -> Arc<RwLock<AddressGenerator>> {
@@ -93,7 +92,7 @@ fn base_execute_builder() -> ExecuteRequestBuilder {
 fn base_install_request_builder() -> InstallContractRequestBuilder {
     InstallContractRequestBuilder::default()
         .with_initiator(*DEFAULT_ACCOUNT_HASH)
-        .with_gas_limit(1_000_000)
+        .with_gas_limit(DEFAULT_GAS_LIMIT)
         .with_transaction_hash(TRANSACTION_HASH)
         .with_chain_name(DEFAULT_CHAIN_NAME)
         .with_block_time(Timestamp::now().into())
@@ -192,16 +191,14 @@ fn cep18() {
 
     let block_time_1 = Timestamp::now().into();
 
-    let create_request = InstallContractRequestBuilder::default()
+    let create_request = base_install_request_builder()
         .with_initiator(*DEFAULT_ACCOUNT_HASH)
-        .with_gas_limit(1_000_000)
         .with_transaction_hash(TRANSACTION_HASH)
         .with_wasm_bytes(VM2_CEP18.clone())
         .with_shared_address_generator(Arc::clone(&address_generator))
         .with_transferred_value(0)
         .with_entry_point("new".to_string())
         .with_input(input_data)
-        .with_chain_name(DEFAULT_CHAIN_NAME)
         .with_block_time(block_time_1)
         .with_state_hash(Digest::from_raw([0; 32])) // TODO: Carry on state root hash
         .with_block_height(1) // TODO: Carry on block height
@@ -761,6 +758,7 @@ fn call_dummy_host_fn_by_name(
             default_wasm_config.max_memory(),
             default_wasm_config.opcode_costs(),
             HostFunctionCostsV2 {
+                cost_increase_per_message: 1,
                 read: HostFunction::fixed(1),
                 write: HostFunction::fixed(1),
                 copy_input: HostFunction::fixed(1),
@@ -774,6 +772,7 @@ fn call_dummy_host_fn_by_name(
                 upgrade: HostFunction::fixed(1),
                 call: HostFunction::fixed(1),
                 print: HostFunction::fixed(1),
+                emit: HostFunction::fixed(1),
             },
         );
         let executor_config = ExecutorConfigBuilder::default()
@@ -781,6 +780,7 @@ fn call_dummy_host_fn_by_name(
             .with_executor_kind(ExecutorKind::Compiled)
             .with_wasm_config(wasm_config)
             .with_storage_costs(StorageCosts::default())
+            .with_message_limits(MessageLimits::default())
             .build()
             .expect("Should build");
         ExecutorV2::new(executor_config, Arc::new(execution_engine_v1))
@@ -852,6 +852,7 @@ fn write_n_bytes_at_limit(
             default_wasm_config.max_memory(),
             default_wasm_config.opcode_costs(),
             HostFunctionCostsV2 {
+                cost_increase_per_message: 0,
                 read: HostFunction::fixed(0),
                 write: HostFunction::fixed(0),
                 copy_input: HostFunction::fixed(0),
@@ -865,6 +866,7 @@ fn write_n_bytes_at_limit(
                 upgrade: HostFunction::fixed(0),
                 call: HostFunction::fixed(0),
                 print: HostFunction::fixed(0),
+                emit: HostFunction::fixed(0),
             },
         );
         let executor_config = ExecutorConfigBuilder::default()
@@ -872,6 +874,7 @@ fn write_n_bytes_at_limit(
             .with_executor_kind(ExecutorKind::Compiled)
             .with_wasm_config(wasm_config)
             .with_storage_costs(StorageCosts::new(1))
+            .with_message_limits(MessageLimits::default())
             .build()
             .expect("Should build");
         ExecutorV2::new(executor_config, Arc::new(execution_engine_v1))

@@ -33,4 +33,6 @@ pub struct Context<S: GlobalStateReader, E: Executor> {
     pub chain_name: Arc<str>,
     pub input: Bytes,
     pub block_time: BlockTime,
+    /// The cost of emitting a message.
+    pub emit_message_cost: u32,
 }

@@ -827,7 +827,7 @@ mod symbols {
     }
 
     #[no_mangle]
-    pub extern "C" fn casper_emit_message(
+    pub extern "C" fn casper_emit(
         _topic_ptr: *const u8,
         _topic_size: usize,
         _data_ptr: *const u8,

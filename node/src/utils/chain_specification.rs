@@ -304,6 +304,7 @@ mod tests {
         });
     static EXPECTED_GENESIS_HOST_FUNCTION_COSTS_V2: Lazy<HostFunctionCostsV2> =
         Lazy::new(|| HostFunctionCostsV2 {
+            cost_increase_per_message: 50,
             read: HostFunction::new(100, [0, 1, 2, 3, 4, 5]),
             write: HostFunction::new(101, [0, 1, 2, 3, 4]),
             copy_input: HostFunction::new(102, [0, 1]),
@@ -317,6 +318,7 @@ mod tests {
             upgrade: HostFunction::new(110, [0, 1, 2, 3, 4, 5]),
             call: HostFunction::new(111, [0, 1, 2, 3, 4, 5, 6, 7, 8]),
             print: HostFunction::new(112, [0, 1]),
+            emit: HostFunction::new(113, [0, 1, 2, 3]),
         });
     static EXPECTED_GENESIS_WASM_COSTS: Lazy<WasmConfig> = Lazy::new(|| {
         let wasm_v1_config = WasmV1Config::new(

@@ -501,14 +501,9 @@ pub fn get_block_time() -> u64 {
 }
 
 #[doc(hidden)]
-pub fn emit_raw_message(topic: &str, payload: &[u8]) -> Result<(), Error> {
+pub fn emit_raw(topic: &str, payload: &[u8]) -> Result<(), Error> {
     let ret = unsafe {
-        casper_sdk_sys::casper_emit_message(
-            topic.as_ptr(),
-            topic.len(),
-            payload.as_ptr(),
-            payload.len(),
-        )
+        casper_sdk_sys::casper_emit(topic.as_ptr(), topic.len(), payload.as_ptr(), payload.len())
     };
     result_from_code(ret)
 }
@@ -520,14 +515,5 @@ where
 {
     let topic = M::TOPIC;
     let payload = message.payload();
-    // Emit the message to the topic
-    let ret = unsafe {
-        casper_sdk_sys::casper_emit_message(
-            topic.as_ptr(),
-            topic.len(),
-            payload.as_ptr(),
-            payload.len(),
-        )
-    };
-    result_from_code(ret)
+    emit_raw(topic, &payload)
 }

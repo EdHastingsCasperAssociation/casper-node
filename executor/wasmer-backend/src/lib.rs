@@ -14,7 +14,6 @@ use casper_executor_wasm_interface::{
     WasmPreparationError,
 };
 use casper_storage::global_state::GlobalStateReader;
-use casper_types::{HostFunction, HostFunctionCost};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use wasmer::{
@@ -192,41 +191,31 @@ impl<S: GlobalStateReader + 'static, E: Executor + 'static> Caller for WasmerCal
     }
 
     /// Returns the amount of gas used.
+    #[inline]
     fn gas_consumed(&mut self) -> MeteringPoints {
         self.get_remaining_points()
     }
 
     /// Set the amount of gas used.
-    fn consume_gas(&mut self, amount: u64) -> MeteringPoints {
+    ///
+    /// This method will cause the VM engine to stop in case remaining gas points are depleted.
+    fn consume_gas(&mut self, amount: u64) -> VMResult<()> {
         let gas_consumed = self.gas_consumed();
         match gas_consumed {
-            MeteringPoints::Remaining(remaining_points) if remaining_points >= amount => {
-                let remaining_points = remaining_points - amount;
+            MeteringPoints::Remaining(remaining_points) => {
+                let remaining_points = remaining_points
+                    .checked_sub(amount)
+                    .ok_or(VMError::OutOfGas)?;
                 self.set_remaining_points(remaining_points);
-                MeteringPoints::Remaining(remaining_points)
+                Ok(())
             }
-            MeteringPoints::Remaining(_remaining_points) => MeteringPoints::Exhausted,
-            MeteringPoints::Exhausted => MeteringPoints::Exhausted,
+            MeteringPoints::Exhausted => Err(VMError::OutOfGas),
         }
     }
 
+    #[inline]
     fn has_export(&self, name: &str) -> bool {
         self.with_instance(|instance| instance.exports.contains(name))
-    }
-
-    fn charge_host_function_call<T>(
-        &mut self,
-        host_function: &HostFunction<T>,
-        weights: T,
-    ) -> MeteringPoints
-    where
-        T: AsRef<[HostFunctionCost]> + Copy,
-    {
-        let Some(cost) = host_function.calculate_gas_cost(weights) else {
-            return MeteringPoints::Exhausted; // Overflowing gas calculation means gas limit was
-                                              // exceeded
-        };
-        self.consume_gas(cost.value().as_u64())
     }
 }
 
@@ -644,7 +633,7 @@ where
 
             imports.define(
                 "env",
-                "casper_emit_message",
+                "casper_emit",
                 Function::new_typed_with_env(
                     &mut store,
                     &function_env,
@@ -654,7 +643,7 @@ where
                      payload_ptr,
                      payload_size| {
                         let wasmer_caller = WasmerCaller { env };
-                        host::casper_emit_message(
+                        host::casper_emit(
                             wasmer_caller,
                             topic_ptr,
                             topic_size,
@@ -781,6 +770,7 @@ where
             input: data.context.input.clone(),
             block_time: data.context.block_time,
             message_limits: data.context.message_limits,
+            emit_message_cost: data.context.emit_message_cost,
         }
     }
 }
