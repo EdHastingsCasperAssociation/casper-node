@@ -24,6 +24,7 @@ use crate::serializers::borsh::{BorshDeserialize, BorshSerialize};
 use casper::{CallResult, Entity};
 pub use casper_executor_wasm_common;
 pub use casper_sdk_sys as sys;
+pub use casper_macros as macros;
 use types::{Address, CallError};
 
 cfg_if::cfg_if! {

@@ -36,4 +36,4 @@ default = ["std"]
 std = []
 
 cli = ["clap", "thiserror"]
-__abi_generator = []
+__abi_generator = ["casper-macros/__abi_generator"]

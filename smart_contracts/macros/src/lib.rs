@@ -1197,7 +1197,7 @@ fn get_maybe_derive_abi() -> impl ToTokens {
     #[cfg(feature = "__abi_generator")]
     {
         quote! {
-            #[derive(casper_macros::CasperABI)]
+            #[derive(casper_sdk::macros::CasperABI)]
         }
     }
 

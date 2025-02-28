@@ -81,7 +81,6 @@ fn main() -> anyhow::Result<()> {
 
             let extra_features = [
                 "casper-sdk/__abi_generator".to_string(),
-                "casper-macros/__abi_generator".to_string(),
             ];
             features.features.extend(extra_features);
 
