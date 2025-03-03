@@ -79,9 +79,7 @@ fn main() -> anyhow::Result<()> {
 
             let package_name = workspace.package.first().expect("no package");
 
-            let extra_features = [
-                "casper-sdk/__abi_generator".to_string(),
-            ];
+            let extra_features = ["casper-sdk/__abi_generator".to_string()];
             features.features.extend(extra_features);
 
             let features_str = features.features.join(",");

@@ -14,7 +14,7 @@ use casper_executor_wasm_interface::{
     HostError,
 };
 use casper_storage::{
-data_access_layer::{
+    data_access_layer::{
         prefixed_values::{PrefixedValuesRequest, PrefixedValuesResult},
         GenesisRequest, GenesisResult, MessageTopicsRequest, MessageTopicsResult, QueryRequest,
         QueryResult,

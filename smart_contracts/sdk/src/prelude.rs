@@ -34,9 +34,10 @@ pub use self::{
 
 pub use crate::{
     casper::{self, Entity},
-    log, revert,
+    log,
+    macros::{self, casper},
+    revert,
 };
-pub use crate::macros::{self, casper};
 
 #[cfg(test)]
 mod tests {
