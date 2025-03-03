@@ -1060,10 +1060,7 @@ where
         routes: &HashMap<NodeId, SocketAddr>,
         addr: SocketAddr,
     ) -> Option<NodeId> {
-        routes
-            .iter()
-            .find(|(_, v)| (**v) == addr)
-            .map(|el| el.0.clone())
+        routes.iter().find(|(_, v)| (**v) == addr).map(|el| *el.0)
     }
 }
 

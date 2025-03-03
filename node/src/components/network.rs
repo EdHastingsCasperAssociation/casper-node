@@ -1239,7 +1239,9 @@ where
                     BlocklistJustification::FlakyNetworkForcedMode,
                     drop_for,
                 );
-                maybe_requests.map(|r| requests.push(r));
+                if let Some(r) = maybe_requests {
+                    requests.push(r)
+                }
             }
         }
         self.peer_drop_handles
@@ -1272,16 +1274,14 @@ where
                     peer_id,
                     sleep_for.as_secs()
                 );
-                results.extend(
-                    effect_builder
-                        .set_timeout(sleep_for.into())
-                        .event(move |_| Event::TimedPeerDrop {
-                            peer_id: Box::new(peer_id),
-                            drop_on,
-                            public_addr: Box::new(public_addr),
-                            peer_addr: Box::new(peer_addr),
-                        }),
-                );
+                results.extend(effect_builder.set_timeout(sleep_for).event(move |_| {
+                    Event::TimedPeerDrop {
+                        peer_id: Box::new(peer_id),
+                        drop_on,
+                        public_addr: Box::new(public_addr),
+                        peer_addr: Box::new(peer_addr),
+                    }
+                }));
                 self.peer_drop_handles.insert(
                     peer_id,
                     PeerDropData::IncomingOnly {
@@ -1322,16 +1322,14 @@ where
                     sleep_for.as_secs()
                 );
 
-                results.extend(
-                    effect_builder
-                        .set_timeout(sleep_for.into())
-                        .event(move |_| Event::TimedPeerDrop {
-                            peer_id: Box::new(peer_id),
-                            peer_addr: Box::new(peer_addr),
-                            public_addr: Box::new(public_addr),
-                            drop_on,
-                        }),
-                );
+                results.extend(effect_builder.set_timeout(sleep_for).event(move |_| {
+                    Event::TimedPeerDrop {
+                        peer_id: Box::new(peer_id),
+                        peer_addr: Box::new(peer_addr),
+                        public_addr: Box::new(public_addr),
+                        drop_on,
+                    }
+                }));
                 self.peer_drop_handles.insert(
                     peer_id,
                     PeerDropData::OutgoingOnly {
