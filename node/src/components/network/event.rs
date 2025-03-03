@@ -23,7 +23,7 @@ use crate::{
     protocol::Message as ProtocolMessage,
 };
 
-const_assert!(size_of::<Event<ProtocolMessage>>() < 81);
+const_assert!(size_of::<Event<ProtocolMessage>>() < 65);
 
 /// A network event.
 #[derive(Debug, From, Serialize)]
@@ -98,8 +98,8 @@ pub(crate) enum Event<P> {
     /// Timed peer drop
     TimedPeerDrop {
         peer_id: Box<NodeId>,
-        public_addr: SocketAddr,
-        peer_addr: SocketAddr,
+        public_addr: Box<SocketAddr>,
+        peer_addr: Box<SocketAddr>,
         drop_on: Timestamp,
     },
 }

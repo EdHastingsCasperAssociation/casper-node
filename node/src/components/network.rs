@@ -1278,8 +1278,8 @@ where
                         .event(move |_| Event::TimedPeerDrop {
                             peer_id: Box::new(peer_id),
                             drop_on,
-                            public_addr,
-                            peer_addr,
+                            public_addr: Box::new(public_addr),
+                            peer_addr: Box::new(peer_addr),
                         }),
                 );
                 self.peer_drop_handles.insert(
@@ -1327,8 +1327,8 @@ where
                         .set_timeout(sleep_for.into())
                         .event(move |_| Event::TimedPeerDrop {
                             peer_id: Box::new(peer_id),
-                            peer_addr,
-                            public_addr,
+                            peer_addr: Box::new(peer_addr),
+                            public_addr: Box::new(public_addr),
                             drop_on,
                         }),
                 );
