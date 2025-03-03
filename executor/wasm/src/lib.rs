@@ -537,7 +537,7 @@ impl ExecutorV2 {
             ExecutionKind::SessionBytes(_wasm_bytes) => Key::Account(initiator),
         };
 
-        // Here we don't carry the cost from callee. Each execution g
+        // Here we don't carry the cost from callee. Each execution restarts the counter.
         let emit_message_cost = self.config.wasm_config.host_function_costs().emit.cost();
 
         let context = Context {
