@@ -421,7 +421,10 @@ impl MetaTransactionV1 {
         let pricing_mode = &self.pricing_mode;
 
         match pricing_mode {
-            PricingMode::PaymentLimited { .. } => {
+            PricingMode::PaymentLimited { payment_amount, .. } => {
+                if *payment_amount == 0u64 {
+                    return Err(InvalidTransactionV1::InvalidPaymentAmount);
+                }
                 if let PricingHandling::PaymentLimited = price_handling {
                 } else {
                     return Err(InvalidTransactionV1::InvalidPricingMode {
