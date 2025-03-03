@@ -316,15 +316,6 @@ where
     state: ComponentState,
 
     peer_drop_handles: BTreeMap<NodeId, PeerDropData>,
-
-    /// We need a separate rng generator to generate random numbers used by
-    /// the flaky network tests - firstly because we don't want to interrupt
-    /// the flow of the "regular" random numbers generator, secondly - we don't
-    /// actually want multiple instances of flaky nodes to generate the same values.
-    /// This should be used ONLY to randomly generate drops and timeouts in the flaky
-    /// network testing scenario.
-    #[data_size(skip)]
-    local_rng: NodeRng,
 }
 
 struct ChannelManagement {
@@ -426,7 +417,6 @@ where
             active_era: EraId::new(0),
             state: ComponentState::Uninitialized,
             peer_drop_handles: BTreeMap::new(),
-            local_rng: crate::new_rng(),
         };
 
         Ok(component)
@@ -642,6 +632,7 @@ where
         effect_builder: EffectBuilder<REv>,
         incoming: Box<IncomingConnection<P>>,
         span: Span,
+        rng: &mut NodeRng,
     ) -> Effects<Event<P>> {
         span.clone().in_scope(|| match *incoming {
             IncomingConnection::FailedEarly {
@@ -742,6 +733,7 @@ where
                     close_this_reader_sender,
                     public_addr,
                     peer_addr,
+                    rng,
                 ));
 
                 effects.extend(
@@ -940,6 +932,7 @@ where
                     close_outgoing_connection_sender,
                     peer_addr,
                     peer_addr,
+                    rng,
                 ));
 
                 effects.extend(
@@ -1256,6 +1249,7 @@ where
         close_this_reader_sender: watch::Sender<()>,
         public_addr: SocketAddr,
         peer_addr: SocketAddr,
+        rng: &mut NodeRng,
     ) -> Effects<Event<P>> {
         if let Some(flakiness_config) = &self.cfg.flakiness {
             let mut results = Effects::new();
@@ -1265,7 +1259,7 @@ where
             } else {
                 let min: Duration = flakiness_config.drop_peer_after_min.into();
                 let max: Duration = flakiness_config.drop_peer_after_max.into();
-                let sleep_for: Duration = self.local_rng.gen_range(min..=max);
+                let sleep_for: Duration = rng.gen_range(min..=max);
                 let now = Timestamp::now();
                 let drop_on = now + TimeDiff::from_millis(sleep_for.as_millis() as u64);
                 debug!(
@@ -1303,6 +1297,7 @@ where
         cancel_callback: watch::Sender<()>,
         peer_addr: SocketAddr,
         public_addr: SocketAddr,
+        rng: &mut NodeRng,
     ) -> Effects<Event<P>> {
         if let Some(flakiness_config) = &self.cfg.flakiness {
             let mut results = Effects::new();
@@ -1312,7 +1307,7 @@ where
             } else {
                 let min: Duration = flakiness_config.drop_peer_after_min.into();
                 let max: Duration = flakiness_config.drop_peer_after_max.into();
-                let sleep_for: Duration = self.local_rng.gen_range(min..=max);
+                let sleep_for: Duration = rng.gen_range(min..=max);
                 let now = Timestamp::now();
                 let drop_on = now + TimeDiff::from_millis(sleep_for.as_millis() as u64);
                 debug!(
@@ -1511,7 +1506,7 @@ where
                     Effects::new()
                 }
                 Event::IncomingConnection { incoming, span } => {
-                    self.handle_incoming_connection(effect_builder, incoming, span)
+                    self.handle_incoming_connection(effect_builder, incoming, span, rng)
                 }
                 Event::IncomingMessage { peer_id, msg, span } => {
                     self.handle_incoming_message(effect_builder, *peer_id, *msg, span)
@@ -1619,7 +1614,7 @@ where
                         if let Some(flakiness_config) = &self.cfg.flakiness {
                             let min: Duration = flakiness_config.block_peer_after_drop_min.into();
                             let max: Duration = flakiness_config.block_peer_after_drop_max.into();
-                            let block_for: Duration = self.local_rng.gen_range(min..=max);
+                            let block_for: Duration = rng.gen_range(min..=max);
 
                             debug!(
                                 %public_addr,
