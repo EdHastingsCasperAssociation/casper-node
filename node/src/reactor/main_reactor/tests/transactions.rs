@@ -814,7 +814,7 @@ async fn add_bid_with_classic_pricing_no_fee_no_refund() {
     let initial_stakes = InitialStakes::FromVec(vec![u128::MAX, 1]);
 
     let config = SingleTransactionTestCase::default_test_config()
-        .with_pricing_handling(PricingHandling::Classic)
+        .with_pricing_handling(PricingHandling::PaymentLimited)
         .with_refund_handling(RefundHandling::NoRefund)
         .with_fee_handling(FeeHandling::NoFee);
 

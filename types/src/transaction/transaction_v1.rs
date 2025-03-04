@@ -435,7 +435,7 @@ impl TransactionV1 {
 
     /// Returns `Ok` if and only if:
     ///   * the transaction hash is correct (see [`TransactionV1::has_valid_hash`] for details)
-    ///   * approvals are non empty, and
+    ///   * approvals are non-empty, and
     ///   * all approvals are valid signatures of the signed hash
     pub fn verify(&self) -> Result<(), InvalidTransactionV1> {
         #[cfg(any(feature = "once_cell", test))]
