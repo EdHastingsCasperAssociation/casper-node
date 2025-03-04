@@ -676,7 +676,7 @@ where
                             .unwrap_or_default();
 
                         if incoming_count >= self.cfg.max_incoming_peer_connections as usize {
-                            debug!(%public_addr,
+                            info!(%public_addr,
                                   %peer_id,
                                   count=incoming_count,
                                   limit=self.cfg.max_incoming_peer_connections,
