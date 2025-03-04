@@ -257,8 +257,8 @@ blocklist_retain_min_duration = '2 minutes'
 blocklist_retain_max_duration = '10 minutes'
 
 [network.flakiness]
-drop_peer_after_min = '1 minutes'
-drop_peer_after_max = '2 minutes'
+drop_peer_after_min = '3 minutes'
+drop_peer_after_max = '10 minutes'
 block_peer_after_drop_min = '10 seconds'
 block_peer_after_drop_max = '20 seconds'
 
