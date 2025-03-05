@@ -1160,7 +1160,7 @@ pub trait StateProvider: Send + Sync + Sized {
                     //There is a chance that, when looking for systemic data, we could be using a
                     // state root hash from before the AddressableEntity
                     // migration boundary. In such a case, we should attempt to look up the data
-                    // under the Account/Contract model instead; e.g Key::Hash instead of
+                    // under the Account/Contract model instead; e.g. Key::Hash instead of
                     // Key::AddressableEntity
                     match get_snapshot_data(self, &scr, state_hash, false) {
                         SeigniorageRecipientsResult::ValueNotFound(_) => not_found,
@@ -1404,10 +1404,15 @@ pub trait StateProvider: Send + Sync + Sized {
                 }),
         };
 
+        let transfers = runtime.into_transfers();
         let effects = tc.borrow_mut().effects();
 
         match result {
-            Ok(ret) => BiddingResult::Success { ret, effects },
+            Ok(ret) => BiddingResult::Success {
+                ret,
+                effects,
+                transfers,
+            },
             Err(tce) => BiddingResult::Failure(tce),
         }
     }
@@ -1657,9 +1662,14 @@ pub trait StateProvider: Send + Sync + Sized {
         };
 
         let effects = tc.borrow_mut().effects();
+        let transfers = runtime.into_transfers();
 
         match result {
-            Ok(amount) => HandleRefundResult::Success { effects, amount },
+            Ok(amount) => HandleRefundResult::Success {
+                transfers,
+                effects,
+                amount,
+            },
             Err(tce) => HandleRefundResult::Failure(tce),
         }
     }
@@ -1754,9 +1764,10 @@ pub trait StateProvider: Send + Sync + Sized {
         };
 
         let effects = tc.borrow_mut().effects();
+        let transfers = runtime.into_transfers();
 
         match result {
-            Ok(_) => HandleFeeResult::Success { effects },
+            Ok(_) => HandleFeeResult::Success { transfers, effects },
             Err(tce) => HandleFeeResult::Failure(tce),
         }
     }
@@ -1991,7 +2002,7 @@ pub trait StateProvider: Send + Sync + Sized {
         }
     }
 
-    /// Gets an contract value.
+    /// Gets a contract value.
     fn contract(&self, request: ContractRequest) -> ContractResult {
         let query_request = QueryRequest::new(request.state_hash(), request.key(), vec![]);
 
@@ -2039,7 +2050,7 @@ pub trait StateProvider: Send + Sync + Sized {
                     //There is a chance that, when looking for systemic data, we could be using a
                     // state root hash from before the AddressableEntity
                     // migration boundary. In such a case, we should attempt to look up the data
-                    // under the Account/Contract model instead; e.g Key::Hash instead of
+                    // under the Account/Contract model instead; e.g. Key::Hash instead of
                     // Key::AddressableEntity
                     match get_total_supply_data(self, &scr, state_hash, false) {
                         TotalSupplyResult::ValueNotFound(_) => not_found,
@@ -2077,7 +2088,7 @@ pub trait StateProvider: Send + Sync + Sized {
                     //There is a chance that, when looking for systemic data, we could be using a
                     // state root hash from before the AddressableEntity
                     // migration boundary. In such a case, we should attempt to look up the data
-                    // under the Account/Contract model instead; e.g Key::Hash instead of
+                    // under the Account/Contract model instead; e.g. Key::Hash instead of
                     // Key::AddressableEntity
                     match get_round_seigniorage_rate_data(self, &scr, state_hash, false) {
                         RoundSeigniorageRateResult::ValueNotFound(_) => not_found,
@@ -2178,7 +2189,7 @@ pub trait StateProvider: Send + Sync + Sized {
         // This behavior is not used on public networks.
         if transfer_config.enforce_transfer_restrictions(&source_account_hash) {
             // if the source is an admin, enforce_transfer_restrictions == false
-            // if the source is not an admin, enforce_transfer_restrictions == true
+            // if the source is not an admin, enforce_transfer_restrictions == true,
             // and we must check to see if the target is an admin.
             // if the target is also not an admin, this transfer is not permitted.
             match transfer_target_mode.target_account_hash() {

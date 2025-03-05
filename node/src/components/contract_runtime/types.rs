@@ -197,7 +197,13 @@ impl ExecutionArtifactBuilder {
         if let HandleRefundResult::RootNotFound = handle_refund_result {
             return Err(true);
         }
-        self.with_appended_effects(handle_refund_result.effects());
+        if let HandleRefundResult::Success {
+            effects, transfers, ..
+        } = handle_refund_result
+        {
+            self.with_appended_transfers(&mut transfers.clone())
+                .with_appended_effects(effects.clone());
+        }
         if let (None, HandleRefundResult::Failure(_)) = (&self.error_message, handle_refund_result)
         {
             self.error_message = handle_refund_result.error_message();
@@ -213,7 +219,13 @@ impl ExecutionArtifactBuilder {
         if let HandleRefundResult::RootNotFound = handle_refund_result {
             return Err(true);
         }
-        self.with_appended_effects(handle_refund_result.effects());
+        if let HandleRefundResult::Success {
+            effects, transfers, ..
+        } = handle_refund_result
+        {
+            self.with_appended_transfers(&mut transfers.clone())
+                .with_appended_effects(effects.clone());
+        }
         if let (None, HandleRefundResult::Failure(_)) = (&self.error_message, handle_refund_result)
         {
             self.error_message = handle_refund_result.error_message();
@@ -229,12 +241,18 @@ impl ExecutionArtifactBuilder {
         if let HandleRefundResult::RootNotFound = handle_refund_result {
             return Err(());
         }
+        if let HandleRefundResult::Success {
+            effects, transfers, ..
+        } = handle_refund_result
+        {
+            self.with_appended_transfers(&mut transfers.clone())
+                .with_appended_effects(effects.clone());
+        }
         if let (None, HandleRefundResult::Failure(_)) = (&self.error_message, handle_refund_result)
         {
             self.error_message = handle_refund_result.error_message();
             return Ok(self);
         }
-        self.with_appended_effects(handle_refund_result.effects());
         Ok(self)
     }
 
@@ -319,12 +337,12 @@ impl ExecutionArtifactBuilder {
             self.error_message = Some(format!("{}", err));
         }
         if let TransferResult::Success {
-            mut transfers,
             effects,
+            transfers,
             cache: _,
         } = transfer_result
         {
-            self.with_appended_transfers(&mut transfers)
+            self.with_appended_transfers(&mut transfers.clone())
                 .with_appended_effects(effects);
         }
         Ok(self)
@@ -337,8 +355,12 @@ impl ExecutionArtifactBuilder {
         if let (None, BiddingResult::Failure(err)) = (&self.error_message, &bidding_result) {
             self.error_message = Some(format!("{}", err));
         }
-        if let BiddingResult::Success { effects, .. } = bidding_result {
-            self.with_appended_effects(effects);
+        if let BiddingResult::Success {
+            effects, transfers, ..
+        } = bidding_result
+        {
+            self.with_appended_transfers(&mut transfers.clone())
+                .with_appended_effects(effects);
         }
         Ok(self)
     }
