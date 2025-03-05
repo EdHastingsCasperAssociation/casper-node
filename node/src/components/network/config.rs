@@ -173,12 +173,18 @@ impl Config {
 }
 
 #[derive(DataSize, Debug, Clone, Deserialize, Serialize)]
-// Disallow unknown fields to ensure config files and command-line overrides contain valid keys.
 #[serde(deny_unknown_fields)]
+/// Configuration which specifies what is the schedule of this particular node to drop connections.
+/// This should be used ONLY in test networks since it can only degrade the network. There is no requirement to apply this config to all the nodes in the network.
+/// PLEASE NOTE - it is possible to specify values that (when applied to enough portion of the network) WILL make it not able to produce new blocks
 pub struct NetworkFlakinessConfig {
+    /// Minimum time before a peer connection is dropped.
     pub drop_peer_after_min: TimeDiff,
+    /// Maximum time before a peer connection is dropped.
     pub drop_peer_after_max: TimeDiff,
+    /// After a peer drop happens, this is the minimum time it will remain in "blocked" state (new connections from it won't be accepted)
     pub block_peer_after_drop_min: TimeDiff,
+    /// After a peer drop happens, this is the maximum time it will remain in "blocked" state (new connections from it won't be accepted)
     pub block_peer_after_drop_max: TimeDiff,
 }
 
