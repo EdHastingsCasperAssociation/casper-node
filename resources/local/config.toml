@@ -263,7 +263,8 @@ blocklist_retain_max_duration = '10 minutes'
 # only degrade the network. Please note that there are limited guardrails for this functionality 
 # in the node - it is possible to specify a drop and block schedule which will end up 
 # in a network that will not be able to produce blocks. Also - please note that there is no requirement
-# to apply this to all the nodes in the network
+# to apply this to all the nodes in the network. Before removing this section consider updating 
+# `generate-flaky.sh` script which depends on it's presence
 # [network.flakiness]
 # drop_peer_after_min = '3 minutes'
 # drop_peer_after_max = '10 minutes'

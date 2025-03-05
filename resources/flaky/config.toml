@@ -8,18 +8,15 @@
 
 # Historical sync behavior for this node. Options are:
 #  'genesis'  (node will attempt to acquire all block data back to genesis)
-# note: as time goes on, the time to sync all the way back to genesis takes progressively longer.
 #  'ttl'      (node will attempt to acquire all block data to comply with time to live enforcement)
+#  'nosync'   (node will only acquire blocks moving forward)
+#  'isolated' (node will initialize without peers and will not accept peers)
 # note: ttl is a chainsepc configured behavior on a given network; consult the `max_ttl` chainspec setting
 #       (it is currently ~18 hours by default on production and production-like networks but subject to change).
-#  'nosync'   (node will only acquire blocks moving forward)
 # note: `nosync` is incompatible with validator behavior; a nosync node is prevented from participating
 #        in consensus / switching to validate mode. it is primarily for lightweight nodes that are
 #        only interested in recent activity.
-#  'isolated' (node will initialize without peers and will not accept peers)
-# note: an isolated node will not connect to, sync with, or keep up with the network, but will respond to
-#       binary port, rest server, event server, and diagnostic port connections.
-sync_handling = 'ttl'
+sync_handling = 'genesis'
 
 # Idle time after which the syncing process is considered stalled.
 idle_tolerance = '20 minutes'
@@ -58,7 +55,7 @@ prevent_validator_shutdown = false
 [logging]
 
 # Output format.  Possible values are 'text' or 'json'.
-format = 'json'
+format = 'text'
 
 # Colored output.  Has no effect if format = 'json'.
 color = false
@@ -74,7 +71,7 @@ abbreviate_modules = false
 
 # Path (absolute, or relative to this config.toml) to validator's secret key file used to sign
 # consensus messages.
-secret_key_path = '/etc/casper/validator_keys/secret_key.pem'
+secret_key_path = 'secret_key.pem'
 
 # The maximum number of blocks by which execution is allowed to lag behind finalization.
 # If it is more than that, consensus will pause, and resume once the executor has caught up.
@@ -88,7 +85,7 @@ max_execution_delay = 3
 
 # Request the latest protocol state from a random peer periodically, with this interval.
 # '0 seconds' means it is disabled and we never request the protocol state from a peer.
-sync_state_interval = '1 second'
+sync_state_interval = '50 ms'
 
 # Log inactive or faulty validators periodically, with this interval.
 # '0 seconds' means it is disabled and we never print the log message.
@@ -120,7 +117,7 @@ clock_tolerance = '1 second'
 [consensus.highway]
 
 # The duration for which incoming vertices with missing dependencies should be kept in a queue.
-pending_vertex_timeout = '30 minutes'
+pending_vertex_timeout = '1 minute'
 
 # Request the latest protocol state from a random peer periodically, with this interval.
 # '0 seconds' means it is disabled and we never request the protocol state from a peer.
@@ -128,7 +125,7 @@ request_state_interval = '20 seconds'
 
 # Log inactive or faulty validators periodically, with this interval.
 # '0 seconds' means it is disabled and we never print the log message.
-log_participation_interval = '1 minute'
+log_participation_interval = '15 seconds'
 
 # Log the synchronizer state periodically, with this interval.
 # '0 seconds' means it is disabled and we never print the log message.
@@ -177,11 +174,11 @@ acceleration_ftt = [1, 100]
 #
 # It must be publicly available in order to allow peers to connect to this node.
 # If the port is set to 0, the actual bound port will be substituted.
-public_address = '<IP ADDRESS>:0'
+public_address = '127.0.0.1:0'
 
 # Address to bind to for listening.
 # If port is set to 0, a random port will be used.
-bind_address = '0.0.0.0:35000'
+bind_address = '0.0.0.0:34553'
 
 # Addresses to connect to in order to join the network.
 #
@@ -191,13 +188,13 @@ bind_address = '0.0.0.0:35000'
 #
 # Multiple addresses can be given and the node will attempt to connect to each, requiring at least
 # one connection.
-known_addresses = ['168.119.137.143:35000', '47.251.14.254:35000', '47.242.53.164:35000', '46.101.61.107:35000', '47.88.87.63:35000', '35.152.42.229:35000', '206.189.47.102:35000', '134.209.243.124:35000', '148.251.190.103:35000', '167.172.32.44:35000', '165.22.252.48:35000', '18.219.70.138:35000', '3.225.191.9:35000', '3.221.194.62:35000', '101.36.120.117:35000', '54.151.24.120:35000', '148.251.135.60:35000', '18.188.103.230:35000', '54.215.53.35:35000', '88.99.95.7:35000', '99.81.225.72:35000', '52.207.122.179:35000', '3.135.134.105:35000', '62.171.135.101:35000', '139.162.132.144:35000', '63.33.251.206:35000', '135.181.165.110:35000', '135.181.134.57:35000', '94.130.107.198:35000', '54.180.220.20:35000', '188.40.83.254:35000', '157.90.131.121:35000', '134.209.110.11:35000', '168.119.69.6:35000', '45.76.251.225:35000', '168.119.209.31:35000', '31.7.207.16:35000', '209.145.60.74:35000', '54.252.66.23:35000', '134.209.16.172:35000', '178.238.235.196:35000', '18.217.20.213:35000', '3.14.161.135:35000', '3.12.207.193:35000', '3.12.207.193:35000']
+known_addresses = ['127.0.0.1:34553']
 
 # Minimum number of fully-connected peers to consider network component initialized.
 min_peers_for_initialization = 3
 
 # The interval between each fresh round of gossiping the node's public address.
-gossip_interval = '120 seconds'
+gossip_interval = '30 seconds'
 
 # Initial delay for starting address gossipping after the network starts. This should be slightly
 # more than the expected time required for initial connections to complete.
@@ -217,11 +214,11 @@ max_incoming_peer_connections = 3
 
 # The maximum total of upstream bandwidth in bytes per second allocated to non-validating peers.
 # A value of `0` means unlimited.
-max_outgoing_byte_rate_non_validators = 6553600
+max_outgoing_byte_rate_non_validators = 0
 
 # The maximum allowed total impact of requests from non-validating peers per second answered.
 # A value of `0` means unlimited.
-max_incoming_message_rate_non_validators = 3000
+max_incoming_message_rate_non_validators = 0
 
 # Maximum number of requests for data from a single peer that are allowed be buffered. A value of
 # `0` means unlimited.
@@ -259,13 +256,27 @@ blocklist_retain_min_duration = '2 minutes'
 # <blocklist_retain_min_duration, blocklist_retain_max_duration>.
 blocklist_retain_max_duration = '10 minutes'
 
+# Network flakiness configuration
+#
+# When this section is specified, the node will randomly (but according to the specified values)
+# drop peers to simulate networking issues. This should be used ONLY in test networks  since it can 
+# only degrade the network. Please note that there are limited guardrails for this functionality 
+# in the node - it is possible to specify a drop and block schedule which will end up 
+# in a network that will not be able to produce blocks. Also - please note that there is no requirement
+# to apply this to all the nodes in the network
+[network.flakiness]
+drop_peer_after_min = '3 minutes'
+drop_peer_after_max = '10 minutes'
+block_peer_after_drop_min = '10 seconds'
+block_peer_after_drop_max = '20 seconds'
+
 # Identity of a node
 #
 # When this section is not specified, an identity will be generated when the node process starts with a self-signed certifcate.
 # This option makes sense for some private chains where for security reasons joining new nodes is restricted.
 # [network.identity]
-# tls_certificate = "node_cert.pem"
-# secret_key = "node.pem"
+# tls_certificate = "local_node_cert.pem"
+# secret_key = "local_node.pem"
 # ca_certificate = "ca_cert.pem"
 
 # Weights for impact estimation of incoming messages, used in combination with
@@ -307,7 +318,6 @@ execution_results_responses = 0
 # secret_key = "local_node.pem"
 # ca_certificate = "ca_cert.pem"
 
-
 # ==================================================
 # Configuration options for the BinaryPort server
 # ==================================================
@@ -320,7 +330,8 @@ enable_server = true
 address = '0.0.0.0:7779'
 
 # Flag that enables the `AllValues` get request. Disabled by default, because it can potentially be abused to retrieve huge amounts of data and clog the node.
-allow_request_get_all_values = false
+# We enable it for NCTL testing since we need deeper inspection for the network in tests.
+allow_request_get_all_values = true
 
 # Flag that enables the `Trie` get request. Disabled by default, because it can potentially be abused to retrieve huge amounts of data and clog the node.
 allow_request_get_trie = false
@@ -364,7 +375,6 @@ accept_transaction_request_termination_delay = '24 seconds'
 #The amount of time which is given to a connection to extend it's lifetime when a valid
 #[`Command::TrySpeculativeExec`] is sent to the node
 speculative_exec_request_termination_delay = '0 seconds'
-
 
 # ==============================================
 # Configuration options for the REST HTTP server
@@ -435,28 +445,28 @@ cors_origin = ''
 # If the folder doesn't exist, it and any required parents will be created.
 #
 # If unset, the path must be supplied as an argument via the CLI.
-path = '/var/lib/casper/casper-node'
+path = '../node-storage'
 
 # Maximum size of the database to use for the block store.
 #
 # The size should be a multiple of the OS page size.
 #
-# 483_183_820_800 == 450 GiB.
-max_block_store_size = 483_183_820_800
+# 483_183_820_800 == 18 GiB.
+max_block_store_size = 19_327_352_832
 
 # Maximum size of the database to use for the deploy store.
 #
 # The size should be a multiple of the OS page size.
 #
-# 322_122_547_200 == 300 GiB.
-max_deploy_store_size = 322_122_547_200
+# 322_122_547_200 == 12 GiB.
+max_deploy_store_size = 12_884_901_888
 
 # Maximum size of the database to use for the deploy metadata.
 #
 # The size should be a multiple of the OS page size.
 #
-# 322_122_547_200 == 300 GiB.
-max_deploy_metadata_store_size = 322_122_547_200
+# 322_122_547_200 == 12 GiB.
+max_deploy_metadata_store_size = 12_884_901_888
 
 # Maximum size of the database to use for the state snapshots.
 #
@@ -502,7 +512,7 @@ finished_entry_duration = '1 minute'
 # The timeout duration for a single gossip request, i.e. for a single gossip message
 # sent from this node, it will be considered timed out if the expected response from that peer is
 # not received within this specified duration.
-gossip_request_timeout = '30 seconds'
+gossip_request_timeout = '10 seconds'
 
 # The timeout duration for retrieving the remaining part(s) of newly-discovered data
 # from a peer which gossiped information about that data to this node.
@@ -525,7 +535,7 @@ attempt_execution_threshold = 3
 dead_air_interval = '3 minutes'
 
 # Time after which the block acceptors are considered old and can be purged.
-purge_interval = '1 minute'
+purge_interval = '5 minutes'
 
 
 # ================================================
@@ -582,17 +592,17 @@ get_from_peer_timeout = '10 seconds'
 # If unset, defaults to 805,306,368,000 == 750 GiB.
 #
 # The size should be a multiple of the OS page size.
-max_global_state_size = 2_089_072_132_096
+max_global_state_size = 32_212_254_720
 
 # Optional depth limit to use for global state queries.
 #
 # If unset, defaults to 5.
-#max_query_depth = 5
+max_query_depth = 5
 
 # Enable manual synchronizing to disk.
 #
 # If unset, defaults to true.
-#enable_manual_sync = true
+enable_manual_sync = true
 
 
 # ==================================================
@@ -625,7 +635,7 @@ expiry_check_interval = '1 minute'
 [diagnostics_port]
 
 # If set, the diagnostics port will be available on a UNIX socket.
-enabled = false
+enabled = true
 
 # Filename for the UNIX domain socket the diagnostics port listens on.
 socket_path = "debug.socket"
