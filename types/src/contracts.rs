@@ -37,9 +37,10 @@ use crate::{
     package::PackageStatus,
     serde_helpers::contract_package::HumanReadableContractPackage,
     uref::{self, URef},
-    AddressableEntityHash, CLType, CLTyped, EntityEntryPoint, EntityVersionKey, EntryPointAccess,
-    EntryPointPayment, EntryPointType, EntryPoints as EntityEntryPoints, Group, Groups, HashAddr,
-    Key, Package, PackageHash, Parameter, Parameters, ProtocolVersion, KEY_HASH_LENGTH,
+    AddressableEntityHash, CLType, CLTyped, EntityAddr, EntityEntryPoint, EntityVersionKey,
+    EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints as EntityEntryPoints, Group,
+    Groups, HashAddr, Key, Package, PackageHash, Parameter, Parameters, ProtocolVersion,
+    KEY_HASH_LENGTH,
 };
 
 const CONTRACT_STRING_PREFIX: &str = "contract-";
@@ -950,13 +951,12 @@ impl FromBytes for ContractPackage {
 
 impl From<ContractPackage> for Package {
     fn from(value: ContractPackage) -> Self {
-        let versions: BTreeMap<EntityVersionKey, AddressableEntityHash> = value
+        let versions: BTreeMap<EntityVersionKey, EntityAddr> = value
             .versions
             .into_iter()
             .map(|(version, contract_hash)| {
                 let entity_version = EntityVersionKey::new(2, version.contract_version());
-                let entity_hash: AddressableEntityHash =
-                    AddressableEntityHash::new(contract_hash.value());
+                let entity_hash = EntityAddr::SmartContract(contract_hash.value());
                 (entity_version, entity_hash)
             })
             .collect();

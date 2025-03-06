@@ -13,11 +13,11 @@ use casper_types::{
         Bid, BidKind, Delegator, DelegatorBid, DelegatorKind, EraInfo, SeigniorageAllocation,
         ValidatorBid,
     },
-    AccessRights, AddressableEntityHash, ByteCodeHash, CLTyped, CLValue, ContractRuntimeTag,
-    DeployHash, DeployInfo, EntityVersionKey, EntityVersions, Gas, Group, Groups, InitiatorAddr,
-    Key, Package, PackageHash, PackageStatus, ProtocolVersion, PublicKey, SecretKey,
-    TransactionHash, TransactionV1Hash, TransferAddr, TransferV2, URef, KEY_HASH_LENGTH,
-    TRANSFER_ADDR_LENGTH, U128, U256, U512, UREF_ADDR_LENGTH,
+    AccessRights, ByteCodeHash, CLTyped, CLValue, ContractRuntimeTag, DeployHash, DeployInfo,
+    EntityAddr, EntityVersionKey, EntityVersions, Gas, Group, Groups, InitiatorAddr, Key, Package,
+    PackageHash, PackageStatus, ProtocolVersion, PublicKey, SecretKey, TransactionHash,
+    TransactionV1Hash, TransferAddr, TransferV2, URef, KEY_HASH_LENGTH, TRANSFER_ADDR_LENGTH, U128,
+    U256, U512, UREF_ADDR_LENGTH,
 };
 
 static KB: usize = 1024;
@@ -476,8 +476,8 @@ fn contract_version_key_fn(i: u8) -> EntityVersionKey {
     EntityVersionKey::new(i as u32, i as u32)
 }
 
-fn contract_hash_fn(i: u8) -> AddressableEntityHash {
-    AddressableEntityHash::new([i; KEY_HASH_LENGTH])
+fn contract_hash_fn(i: u8) -> EntityAddr {
+    EntityAddr::SmartContract([i; KEY_HASH_LENGTH])
 }
 
 fn sample_map<K: Ord, V, FK, FV>(key_fn: FK, value_fn: FV, count: u8) -> BTreeMap<K, V>

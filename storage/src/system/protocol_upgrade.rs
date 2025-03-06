@@ -371,7 +371,8 @@ where
             self.retrieve_system_package(entity.package_hash(), system_entity_type)?;
 
         let entity_hash = AddressableEntityHash::new(hash_addr);
-        package.disable_entity_version(entity_hash).map_err(|_| {
+        let entity_addr = EntityAddr::new_system(entity_hash.value());
+        package.disable_entity_version(entity_addr).map_err(|_| {
             ProtocolUpgradeError::FailedToDisablePreviousVersion(entity_name.to_string())
         })?;
 
@@ -397,8 +398,6 @@ where
 
         self.tracking_copy
             .write(entity_key, StoredValue::AddressableEntity(new_entity));
-
-        let entity_addr = EntityAddr::new_system(entity_hash.value());
 
         if let Some(named_keys) = maybe_named_keys {
             for (string, key) in named_keys.into_inner().into_iter() {
@@ -429,7 +428,7 @@ where
 
         package.insert_entity_version(
             self.config.new_protocol_version().value().major,
-            entity_hash,
+            entity_addr,
         );
 
         self.tracking_copy.write(
@@ -685,7 +684,7 @@ where
             );
             package.insert_entity_version(
                 self.config.new_protocol_version().value().major,
-                entity_hash,
+                EntityAddr::Account(entity_hash.value()),
             );
             package
         };

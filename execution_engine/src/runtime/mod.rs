@@ -1620,7 +1620,7 @@ where
                 let entity_hash = AddressableEntityHash::new(contract_hash);
 
                 // Check if provided contract hash is disabled
-                let is_contract_enabled = package.is_entity_enabled(&entity_hash);
+                let is_contract_enabled = package.is_entity_enabled(&entity_addr);
 
                 if !is_calling_system_contract && !is_contract_enabled {
                     return Err(ExecError::DisabledEntity(entity_hash));
@@ -1776,7 +1776,7 @@ where
             .engine_config()
             .administrative_accounts()
             .is_empty()
-            && !package.is_entity_enabled(&entity_hash)
+            && !package.is_entity_enabled(&entity_addr)
             && !self
                 .context
                 .is_system_addressable_entity(&entity_addr.value())?
@@ -2611,7 +2611,7 @@ where
         let protocol_version = self.context.protocol_version();
 
         let insert_entity_version_result =
-            package.insert_entity_version(protocol_version.value().major, hash_addr.into());
+            package.insert_entity_version(protocol_version.value().major, entity_addr);
 
         let byte_code = {
             let module_bytes = self.get_module_from_entry_points(&entry_points)?;
@@ -2747,7 +2747,7 @@ where
         ExecError,
     > {
         if let Some(previous_entity_hash) = package.current_entity_hash() {
-            let previous_entity_key = Key::contract_entity_key(previous_entity_hash);
+            let previous_entity_key = Key::AddressableEntity(previous_entity_hash);
             let (mut previous_entity, requires_purse_creation) =
                 self.context.get_contract_entity(previous_entity_key)?;
 
@@ -2815,7 +2815,7 @@ where
                 previous_named_keys,
                 action_thresholds,
                 associated_keys,
-                Some(EntityAddr::SmartContract(previous_entity_hash.value())),
+                Some(previous_entity_hash),
             ));
         }
 
@@ -2844,7 +2844,9 @@ where
                 return Err(ExecError::LockedEntity(contract_package_hash));
             }
 
-            if let Err(err) = contract_package.disable_entity_version(contract_hash) {
+            if let Err(err) = contract_package
+                .disable_entity_version(EntityAddr::SmartContract(contract_hash.value()))
+            {
                 return Ok(Err(err.into()));
             }
 
@@ -2892,7 +2894,9 @@ where
                 return Err(ExecError::LockedEntity(contract_package_hash));
             }
 
-            if let Err(err) = contract_package.enable_version(contract_hash) {
+            if let Err(err) =
+                contract_package.enable_version(EntityAddr::SmartContract(contract_hash.value()))
+            {
                 return Ok(Err(err.into()));
             }
 
@@ -3439,7 +3443,10 @@ where
                         Groups::default(),
                         PackageStatus::Locked,
                     );
-                    package.insert_entity_version(protocol_version.value().major, entity_hash);
+                    package.insert_entity_version(
+                        protocol_version.value().major,
+                        EntityAddr::Account(target.value()),
+                    );
                     package
                 };
 
@@ -3903,7 +3910,7 @@ where
             for entity_hash in versions.contract_hashes() {
                 let entry_points = {
                     self.context
-                        .get_casper_vm_v1_entry_point(Key::contract_entity_key(*entity_hash))?
+                        .get_casper_vm_v1_entry_point(Key::AddressableEntity(*entity_hash))?
                 };
                 for entry_point in entry_points.take_entry_points() {
                     match entry_point.access() {

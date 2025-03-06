@@ -740,8 +740,8 @@ impl TransactionAcceptor {
         }
 
         match package.lookup_entity_hash(entity_version_key) {
-            Some(&contract_hash) => {
-                let entity_addr = EntityAddr::SmartContract(contract_hash.value());
+            Some(&entity_addr) => {
+                let contract_hash = AddressableEntityHash::new(entity_addr.value());
                 effect_builder
                     .get_addressable_entity(*block_header.state_root_hash(), entity_addr)
                     .event(move |result| Event::GetContractResult {

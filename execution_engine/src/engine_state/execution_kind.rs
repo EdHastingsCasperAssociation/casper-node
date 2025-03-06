@@ -113,11 +113,14 @@ impl<'a> ExecutionKind<'a> {
                     )));
                 }
 
-                *package
-                    .lookup_entity_hash(entity_version_key)
-                    .ok_or(Error::Exec(ExecError::InvalidEntityVersion(
-                        entity_version_key,
-                    )))?
+                let entity_addr =
+                    *package
+                        .lookup_entity_hash(entity_version_key)
+                        .ok_or(Error::Exec(ExecError::InvalidEntityVersion(
+                            entity_version_key,
+                        )))?;
+
+                AddressableEntityHash::new(entity_addr.value())
             }
             TransactionInvocationTarget::ByPackageName {
                 name: alias,
@@ -153,11 +156,14 @@ impl<'a> ExecutionKind<'a> {
                     )));
                 }
 
-                *package
-                    .lookup_entity_hash(entity_version_key)
-                    .ok_or(Error::Exec(ExecError::InvalidEntityVersion(
-                        entity_version_key,
-                    )))?
+                let entity_addr =
+                    *package
+                        .lookup_entity_hash(entity_version_key)
+                        .ok_or(Error::Exec(ExecError::InvalidEntityVersion(
+                            entity_version_key,
+                        )))?;
+
+                AddressableEntityHash::new(entity_addr.value())
             }
         };
         Ok(ExecutionKind::Stored {

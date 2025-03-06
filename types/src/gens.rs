@@ -700,12 +700,8 @@ pub fn contract_versions_arb() -> impl Strategy<Value = ContractVersions> {
 }
 
 pub fn entity_versions_arb() -> impl Strategy<Value = EntityVersions> {
-    collection::btree_map(
-        entity_version_key_arb(),
-        u8_slice_32().prop_map(AddressableEntityHash::new),
-        1..5,
-    )
-    .prop_map(EntityVersions::from)
+    collection::btree_map(entity_version_key_arb(), entity_addr_arb(), 1..5)
+        .prop_map(EntityVersions::from)
 }
 
 pub fn disabled_versions_arb() -> impl Strategy<Value = BTreeSet<EntityVersionKey>> {
