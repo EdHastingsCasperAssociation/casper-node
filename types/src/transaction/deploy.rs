@@ -60,7 +60,7 @@ use crate::{
 };
 
 #[cfg(any(feature = "std", test))]
-use crate::{chainspec::PricingHandling, Chainspec, LARGE_WASM_LANE_ID};
+use crate::{chainspec::PricingHandling, Chainspec};
 #[cfg(any(feature = "std", test))]
 use crate::{system::auction::ARG_AMOUNT, transaction::GasLimited, Gas, Motes, U512};
 pub use deploy_hash::DeployHash;
@@ -469,6 +469,10 @@ impl Deploy {
         }
 
         let gas_limit = self.gas_limit(chainspec)?;
+        if gas_limit == Gas::zero() {
+            return Err(InvalidDeploy::InvalidPaymentAmount);
+        }
+
         let block_gas_limit = Gas::new(config.block_gas_limit);
         if gas_limit > block_gas_limit {
             debug!(
@@ -1364,7 +1368,7 @@ impl GasLimited for Deploy {
         let pricing_handling = chainspec.core_config.pricing_handling;
         let costs = &chainspec.system_costs_config;
         let gas_limit = match pricing_handling {
-            PricingHandling::Classic => {
+            PricingHandling::PaymentLimited => {
                 // in the original implementation, for standard deploys the payment amount
                 // specified by the sender is the gas limit (up to the max block limit).
                 if self.is_transfer() {
@@ -1387,7 +1391,7 @@ impl GasLimited for Deploy {
                 let computation_limit = if self.is_transfer() {
                     costs.mint_costs().transfer as u64
                 } else {
-                    chainspec.get_max_gas_limit_by_category(LARGE_WASM_LANE_ID)
+                    chainspec.get_max_payment_limit_for_wasm()
                 };
                 Gas::new(computation_limit)
             } // legacy deploys do not support prepaid
@@ -2001,7 +2005,7 @@ mod tests {
 
         let mut chainspec = Chainspec::default();
         chainspec.with_chain_name(chain_name.to_string());
-        chainspec.with_pricing_handling(PricingHandling::Classic);
+        chainspec.with_pricing_handling(PricingHandling::PaymentLimited);
         let config = chainspec.transaction_config.clone();
 
         let payment = ExecutableDeployItem::ModuleBytes {
@@ -2048,7 +2052,7 @@ mod tests {
 
         let mut chainspec = Chainspec::default();
         chainspec.with_chain_name(chain_name.to_string());
-        chainspec.with_pricing_handling(PricingHandling::Classic);
+        chainspec.with_pricing_handling(PricingHandling::PaymentLimited);
         let config = chainspec.transaction_config.clone();
 
         let payment = ExecutableDeployItem::ModuleBytes {
@@ -2097,7 +2101,7 @@ mod tests {
 
         let mut chainspec = Chainspec::default();
         chainspec.with_chain_name(chain_name.to_string());
-        chainspec.with_pricing_handling(PricingHandling::Classic);
+        chainspec.with_pricing_handling(PricingHandling::PaymentLimited);
         let config = chainspec.transaction_config.clone();
         let amount = U512::from(config.block_gas_limit + 1);
 
@@ -2361,7 +2365,7 @@ mod tests {
     }
 
     #[test]
-    fn should_use_payment_amount_for_classic_payment() {
+    fn should_use_payment_amount_for_payment_limited_payment() {
         const GAS_PRICE_TOLERANCE: u8 = u8::MAX;
 
         let payment_amount = 500u64;
@@ -2370,7 +2374,7 @@ mod tests {
         let mut chainspec = Chainspec::default();
         chainspec
             .with_chain_name(chain_name.to_string())
-            .with_pricing_handling(PricingHandling::Classic);
+            .with_pricing_handling(PricingHandling::PaymentLimited);
 
         let config = chainspec.transaction_config.clone();
 
@@ -2407,7 +2411,7 @@ mod tests {
         assert_eq!(
             cost,
             U512::from(payment_amount),
-            "in classic pricing, the user selected amount should be the cost if gas price is 1"
+            "in payment limited pricing, the user selected amount should be the cost if gas price is 1"
         );
         gas_price += 1;
         let cost = deploy
@@ -2417,7 +2421,7 @@ mod tests {
         assert_eq!(
             cost,
             U512::from(payment_amount) * gas_price,
-            "in classic pricing, the cost should == user selected amount * gas_price"
+            "in payment limited pricing, the cost should == user selected amount * gas_price"
         );
     }
 
@@ -2431,7 +2435,7 @@ mod tests {
         let mut chainspec = Chainspec::default();
         chainspec
             .with_chain_name(chain_name.to_string())
-            .with_pricing_handling(PricingHandling::Classic);
+            .with_pricing_handling(PricingHandling::PaymentLimited);
 
         let config = chainspec.transaction_config.clone();
 

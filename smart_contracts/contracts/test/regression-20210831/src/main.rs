@@ -15,8 +15,8 @@ use casper_types::{
     contracts::{ContractPackageHash, NamedKeys},
     runtime_args,
     system::auction::{self, DelegationRate},
-    CLType, CLTyped, CLValue, EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType,
-    EntryPoints, Key, Parameter, PublicKey, RuntimeArgs, U512,
+    CLType, CLTyped, CLValue, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
+    EntryPointType, EntryPoints, Key, Parameter, PublicKey, RuntimeArgs, U512,
 };
 
 const METHOD_ADD_BID_PROXY_CALL_1: &str = "add_bid_proxy_call_1";
@@ -173,7 +173,7 @@ pub extern "C" fn activate_bid_proxy_call() {
 pub extern "C" fn call() {
     let mut entry_points = EntryPoints::new();
 
-    let add_bid_proxy_call_1 = EntryPoint::new(
+    let add_bid_proxy_call_1 = EntityEntryPoint::new(
         METHOD_ADD_BID_PROXY_CALL_1,
         vec![
             Parameter::new(auction::ARG_PUBLIC_KEY, PublicKey::cl_type()),
@@ -187,7 +187,7 @@ pub extern "C" fn call() {
     );
     entry_points.add_entry_point(add_bid_proxy_call_1);
 
-    let add_bid_proxy_call = EntryPoint::new(
+    let add_bid_proxy_call = EntityEntryPoint::new(
         METHOD_ADD_BID_PROXY_CALL,
         vec![
             Parameter::new(auction::ARG_PUBLIC_KEY, PublicKey::cl_type()),
@@ -201,7 +201,7 @@ pub extern "C" fn call() {
     );
     entry_points.add_entry_point(add_bid_proxy_call);
 
-    let withdraw_proxy_call_1 = EntryPoint::new(
+    let withdraw_proxy_call_1 = EntityEntryPoint::new(
         METHOD_WITHDRAW_PROXY_CALL_1,
         vec![
             Parameter::new(auction::ARG_PUBLIC_KEY, PublicKey::cl_type()),
@@ -213,7 +213,7 @@ pub extern "C" fn call() {
         EntryPointPayment::Caller,
     );
 
-    let withdraw_proxy_call = EntryPoint::new(
+    let withdraw_proxy_call = EntityEntryPoint::new(
         METHOD_WITHDRAW_PROXY_CALL,
         vec![
             Parameter::new(auction::ARG_PUBLIC_KEY, PublicKey::cl_type()),
@@ -225,7 +225,7 @@ pub extern "C" fn call() {
         EntryPointPayment::Caller,
     );
 
-    let delegate_proxy_call = EntryPoint::new(
+    let delegate_proxy_call = EntityEntryPoint::new(
         METHOD_DELEGATE_PROXY_CALL,
         vec![
             Parameter::new(auction::ARG_DELEGATOR, PublicKey::cl_type()),
@@ -238,7 +238,7 @@ pub extern "C" fn call() {
         EntryPointPayment::Caller,
     );
 
-    let delegate_proxy_call_1 = EntryPoint::new(
+    let delegate_proxy_call_1 = EntityEntryPoint::new(
         METHOD_DELEGATE_PROXY_CALL_1,
         vec![
             Parameter::new(auction::ARG_DELEGATOR, PublicKey::cl_type()),
@@ -251,7 +251,7 @@ pub extern "C" fn call() {
         EntryPointPayment::Caller,
     );
 
-    let undelegate_proxy_call = EntryPoint::new(
+    let undelegate_proxy_call = EntityEntryPoint::new(
         METHOD_UNDELEGATE_PROXY_CALL,
         vec![
             Parameter::new(auction::ARG_DELEGATOR, PublicKey::cl_type()),
@@ -264,7 +264,7 @@ pub extern "C" fn call() {
         EntryPointPayment::Caller,
     );
 
-    let undelegate_proxy_call_1 = EntryPoint::new(
+    let undelegate_proxy_call_1 = EntityEntryPoint::new(
         METHOD_UNDELEGATE_PROXY_CALL_1,
         vec![
             Parameter::new(auction::ARG_DELEGATOR, PublicKey::cl_type()),
@@ -277,7 +277,7 @@ pub extern "C" fn call() {
         EntryPointPayment::Caller,
     );
 
-    let activate_bid_proxy_call = EntryPoint::new(
+    let activate_bid_proxy_call = EntityEntryPoint::new(
         METHOD_ACTIVATE_BID_CALL,
         vec![Parameter::new(auction::ARG_VALIDATOR, CLType::PublicKey)],
         CLType::Unit,
@@ -285,7 +285,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     );
-    let activate_bid_proxy_call_1 = EntryPoint::new(
+    let activate_bid_proxy_call_1 = EntityEntryPoint::new(
         METHOD_ACTIVATE_BID_CALL_1,
         vec![Parameter::new(auction::ARG_VALIDATOR, CLType::PublicKey)],
         CLType::Unit,

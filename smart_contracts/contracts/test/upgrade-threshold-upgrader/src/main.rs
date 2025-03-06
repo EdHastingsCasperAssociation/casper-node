@@ -12,8 +12,8 @@ use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionType, Weight},
     contracts::NamedKeys,
-    CLType, EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints, Key,
-    PackageHash, Parameter,
+    CLType, EntityEntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints,
+    Key, PackageHash, Parameter,
 };
 
 const ARG_ENTITY_ACCOUNT_HASH: &str = "entity_account_hash";
@@ -51,7 +51,7 @@ pub extern "C" fn call() {
     let contract_package: PackageHash = runtime::get_named_arg(ARG_CONTRACT_PACKAGE);
     let entry_points = {
         let mut entrypoints = EntryPoints::new();
-        let add_associated_key_entry_point = EntryPoint::new(
+        let add_associated_key_entry_point = EntityEntryPoint::new(
             ENTRYPOINT_ADD_ASSOCIATED_KEY,
             vec![
                 Parameter::new(ARG_ENTITY_ACCOUNT_HASH, CLType::ByteArray(32)),
@@ -63,7 +63,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entrypoints.add_entry_point(add_associated_key_entry_point);
-        let manage_action_threshold_entrypoint = EntryPoint::new(
+        let manage_action_threshold_entrypoint = EntityEntryPoint::new(
             ENTRYPOINT_MANAGE_ACTION_THRESHOLD,
             vec![Parameter::new(ARG_NEW_UPGRADE_THRESHOLD, CLType::U8)],
             CLType::Unit,
@@ -72,7 +72,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entrypoints.add_entry_point(manage_action_threshold_entrypoint);
-        let remove_associated_key_entry_point = EntryPoint::new(
+        let remove_associated_key_entry_point = EntityEntryPoint::new(
             ENTRYPOINT_REMOVE_ASSOCIATED_KEY,
             vec![Parameter::new(
                 ARG_ENTITY_ACCOUNT_HASH,

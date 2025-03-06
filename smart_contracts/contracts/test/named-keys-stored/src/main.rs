@@ -11,7 +11,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    addressable_entity::Parameters, ApiError, CLType, EntryPoint, EntryPointAccess,
+    addressable_entity::Parameters, ApiError, CLType, EntityEntryPoint, EntryPointAccess,
     EntryPointPayment, EntryPointType, EntryPoints, Key, NamedKeys, PackageHash, RuntimeArgs,
 };
 
@@ -136,7 +136,7 @@ pub extern "C" fn call() {
 
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let contract_entrypoint = EntryPoint::new(
+        let contract_entrypoint = EntityEntryPoint::new(
             ENTRY_POINT_CONTRACT.to_string(),
             Parameters::new(),
             CLType::Unit,
@@ -145,7 +145,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(contract_entrypoint);
-        let session_entrypoint = EntryPoint::new(
+        let session_entrypoint = EntityEntryPoint::new(
             ENTRY_POINT_SESSION.to_string(),
             Parameters::new(),
             CLType::Unit,
@@ -154,7 +154,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(session_entrypoint);
-        let contract_to_contract_entrypoint = EntryPoint::new(
+        let contract_to_contract_entrypoint = EntityEntryPoint::new(
             ENTRY_POINT_CONTRACT_TO_CONTRACT.to_string(),
             Parameters::new(),
             CLType::Unit,
@@ -163,7 +163,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(contract_to_contract_entrypoint);
-        let contract_to_contract_entrypoint = EntryPoint::new(
+        let contract_to_contract_entrypoint = EntityEntryPoint::new(
             ENTRY_POINT_SESSION_TO_SESSION.to_string(),
             Parameters::new(),
             CLType::Unit,

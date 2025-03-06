@@ -121,10 +121,10 @@ validator_credit_cap = [1, 5]
 # Defines how pricing is handled.
 #
 # Valid options are:
-#   'classic': senders of transaction self-specify how much they pay.
+#   'payment_limited': senders of transaction self-specify how much they pay.
 #   'fixed': costs are fixed, per the cost table
 #   'prepaid': prepaid transaction (currently not supported)
-pricing_handling = { type = 'classic' }
+pricing_handling = { type = 'payment_limited' }
 # Does the network allow pre-payment for future
 # execution? Currently not supported.
 #
@@ -157,7 +157,7 @@ administrators = []
 # Flag that triggers a migration of all accounts and contracts present in global state to the addressable
 # entity in lazy manner.
 # If the flag is set to false then no accounts and contracts are migrated during a protocol upgrade;
-# i.e all Account records will be present under Key::Account and Contracts and their associated ContractPackage
+# i.e. all Account records will be present under Key::Account and Contracts and their associated ContractPackage
 # will be written underneath Key::Hash.
 # If the flag is set to true then accounts and contracts are migrated lazily; i.e on first use of the Account
 # and/or Contract as part of the execution of a Transaction. This means the Accounts/Contracts will be migrated
@@ -167,6 +167,9 @@ administrators = []
 # Note: Enabling of the AddressableEntity feature is one-way; i.e once enabled as part of a protocol upgrade
 # the flag cannot be disabled in a future protocol upgrade.
 enable_addressable_entity = false
+# This value is used as the penalty payment amount, the minimum balance amount,
+# and the minimum consumed amount.
+baseline_motes_amount = 2_500_000_000
 
 [highway]
 # Highway dynamically chooses its round length, between minimum_block_time and maximum_round_length.
@@ -342,6 +345,80 @@ cost_increase_per_message = 50
 get_block_info = { cost = 330, arguments = [0, 0] }
 recover_secp256k1 = { cost = 1_300_000, arguments = [0, 120_000, 0, 0, 0, 0] }
 verify_signature = { cost = 1_300_000, arguments = [0, 120_000, 0, 0, 0, 0] }
+
+[wasm.v2]
+# Amount of free memory each contract can use for stack.
+max_memory = 17
+
+[wasm.v2.opcode_costs]
+# Bit operations multiplier.
+bit = 105
+# Arithmetic add operations multiplier.
+add = 105
+# Mul operations multiplier.
+mul = 105
+# Div operations multiplier.
+div = 105
+# Memory load operation multiplier.
+load = 105
+# Memory store operation multiplier.
+store = 105
+# Const store operation multiplier.
+const = 105
+# Local operations multiplier.
+local = 105
+# Global operations multiplier.
+global = 105
+# Integer operations multiplier.
+integer_comparison = 105
+# Conversion operations multiplier.
+conversion = 105
+# Unreachable operation multiplier.
+unreachable = 105
+# Nop operation multiplier.
+nop = 105
+# Get current memory operation multiplier.
+current_memory = 105
+# Grow memory cost, per page (192kb).
+grow_memory = 900
+# Sign extension operations cost
+sign = 105
+
+# Control flow operations multiplier.
+[wasm.v2.opcode_costs.control_flow]
+block = 255
+loop = 255
+if = 105
+else = 105
+end = 105
+br = 1665
+br_if = 510
+return = 105
+select = 105
+call = 225
+call_indirect = 270
+drop = 105
+
+[wasm.v2.opcode_costs.control_flow.br_table]
+# Fixed cost per `br_table` opcode
+cost = 150
+# Size of target labels in the `br_table` opcode will be multiplied by `size_multiplier`
+size_multiplier = 100
+
+[wasm.v2.host_function_costs]
+read = { cost = 0, arguments = [0, 0, 0, 0, 0, 0] }
+write = { cost = 0, arguments = [0, 0, 0, 0, 0] }
+copy_input = { cost = 0, arguments = [0, 0] }
+ret = { cost = 0, arguments = [0, 0] }
+create = { cost = 0, arguments = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }
+env_caller = { cost = 0, arguments = [0, 0, 0] }
+env_block_time = { cost = 0, arguments = [] }
+env_transferred_value = { cost = 0, arguments = [0] }
+transfer = { cost = 0, arguments = [0, 0, 0] }
+env_balance = { cost = 0, arguments = [0, 0, 0, 0] }
+upgrade = { cost = 0, arguments = [0, 0, 0, 0, 0, 0] }
+call = { cost = 0, arguments = [0, 0, 0, 0, 0, 0, 0, 0, 0] }
+print = { cost = 0, arguments = [0, 0] }
 
 [wasm.messages_limits]
 max_topic_name_size = 256

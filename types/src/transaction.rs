@@ -235,7 +235,7 @@ impl Transaction {
     ///
     /// For `Deploy` transactions, it checks if the session is a standard payment
     /// in the payment phase. For `V1` transactions, it returns the value of
-    /// `standard_payment` if the pricing mode is `Classic`, otherwise it returns `true`.
+    /// `standard_payment` if the pricing mode is `PaymentLimited`, otherwise it returns `true`.
     pub fn is_standard_payment(&self) -> bool {
         match self {
             Transaction::Deploy(txn) => txn.session().is_standard_payment(Phase::Payment),

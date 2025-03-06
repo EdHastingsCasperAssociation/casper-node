@@ -253,7 +253,7 @@ where
 #[derive(Add, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[serde(deny_unknown_fields)]
-pub struct HostFunctionCosts {
+pub struct HostFunctionCostsV1 {
     /// Cost increase for successive calls to `casper_emit_message` within an execution.
     pub cost_increase_per_message: u32,
     /// Cost of calling the `read_value` host function.
@@ -362,7 +362,7 @@ pub struct HostFunctionCosts {
     pub verify_signature: HostFunction<[Cost; 6]>,
 }
 
-impl Zero for HostFunctionCosts {
+impl Zero for HostFunctionCostsV1 {
     fn zero() -> Self {
         Self {
             read_value: HostFunction::zero(),
@@ -422,7 +422,7 @@ impl Zero for HostFunctionCosts {
     }
 
     fn is_zero(&self) -> bool {
-        let HostFunctionCosts {
+        let HostFunctionCostsV1 {
             cost_increase_per_message,
             read_value,
             dictionary_get,
@@ -533,7 +533,7 @@ impl Zero for HostFunctionCosts {
     }
 }
 
-impl Default for HostFunctionCosts {
+impl Default for HostFunctionCostsV1 {
     fn default() -> Self {
         Self {
             read_value: HostFunction::new(
@@ -784,7 +784,7 @@ impl Default for HostFunctionCosts {
     }
 }
 
-impl ToBytes for HostFunctionCosts {
+impl ToBytes for HostFunctionCostsV1 {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         let mut ret = bytesrepr::unchecked_allocate_buffer(self);
         ret.append(&mut self.read_value.to_bytes()?);
@@ -902,7 +902,7 @@ impl ToBytes for HostFunctionCosts {
     }
 }
 
-impl FromBytes for HostFunctionCosts {
+impl FromBytes for HostFunctionCostsV1 {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
         let (read_value, rem) = FromBytes::from_bytes(bytes)?;
         let (dictionary_get, rem) = FromBytes::from_bytes(rem)?;
@@ -958,7 +958,7 @@ impl FromBytes for HostFunctionCosts {
         let (recover_secp256k1, rem) = FromBytes::from_bytes(rem)?;
         let (verify_signature, rem) = FromBytes::from_bytes(rem)?;
         Ok((
-            HostFunctionCosts {
+            HostFunctionCostsV1 {
                 read_value,
                 dictionary_get,
                 write,
@@ -1019,9 +1019,9 @@ impl FromBytes for HostFunctionCosts {
 }
 
 #[cfg(any(feature = "testing", test))]
-impl Distribution<HostFunctionCosts> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HostFunctionCosts {
-        HostFunctionCosts {
+impl Distribution<HostFunctionCostsV1> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HostFunctionCostsV1 {
+        HostFunctionCostsV1 {
             read_value: rng.gen(),
             dictionary_get: rng.gen(),
             write: rng.gen(),
@@ -1084,7 +1084,7 @@ impl Distribution<HostFunctionCosts> for Standard {
 pub mod gens {
     use proptest::{num, prelude::*};
 
-    use crate::{HostFunction, HostFunctionCost, HostFunctionCosts};
+    use crate::{HostFunction, HostFunctionCost, HostFunctionCostsV1};
 
     #[allow(unused)]
     pub fn host_function_cost_arb<T: Copy + Arbitrary>() -> impl Strategy<Value = HostFunction<T>> {
@@ -1147,8 +1147,8 @@ pub mod gens {
             generic_hash in host_function_cost_arb(),
             recover_secp256k1 in host_function_cost_arb(),
             verify_signature in host_function_cost_arb(),
-        ) -> HostFunctionCosts {
-            HostFunctionCosts {
+        ) -> HostFunctionCostsV1 {
+            HostFunctionCostsV1 {
                 read_value,
                 dictionary_get,
                 write,

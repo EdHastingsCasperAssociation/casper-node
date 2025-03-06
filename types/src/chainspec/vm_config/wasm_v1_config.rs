@@ -1,6 +1,6 @@
 use crate::{
     bytesrepr::{self, FromBytes, ToBytes},
-    chainspec::vm_config::{HostFunctionCosts, OpcodeCosts},
+    chainspec::vm_config::{HostFunctionCostsV1, OpcodeCosts},
 };
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
@@ -12,9 +12,9 @@ use rand::{
 use serde::{Deserialize, Serialize};
 
 /// Default maximum number of pages of the Wasm memory.
-pub const DEFAULT_V1_WASM_MAX_MEMORY: u32 = 64;
+pub const DEFAULT_WASM_MAX_MEMORY: u32 = 64;
 /// Default maximum stack height.
-pub const DEFAULT_V1_MAX_STACK_HEIGHT: u32 = 500;
+pub const DEFAULT_MAX_STACK_HEIGHT: u32 = 500;
 
 /// Configuration of the Wasm execution environment for V1 execution machine.
 ///
@@ -31,7 +31,7 @@ pub struct WasmV1Config {
     /// Wasm opcode costs table.
     opcode_costs: OpcodeCosts,
     /// Host function costs table.
-    host_function_costs: HostFunctionCosts,
+    host_function_costs: HostFunctionCostsV1,
 }
 
 impl WasmV1Config {
@@ -40,7 +40,7 @@ impl WasmV1Config {
         max_memory: u32,
         max_stack_height: u32,
         opcode_costs: OpcodeCosts,
-        host_function_costs: HostFunctionCosts,
+        host_function_costs: HostFunctionCostsV1,
     ) -> Self {
         WasmV1Config {
             max_memory,
@@ -56,7 +56,7 @@ impl WasmV1Config {
     }
 
     /// Returns host function costs and consumes this object.
-    pub fn take_host_function_costs(self) -> HostFunctionCosts {
+    pub fn take_host_function_costs(self) -> HostFunctionCostsV1 {
         self.host_function_costs
     }
 
@@ -86,10 +86,10 @@ impl WasmV1Config {
 impl Default for WasmV1Config {
     fn default() -> Self {
         Self {
-            max_memory: DEFAULT_V1_WASM_MAX_MEMORY,
-            max_stack_height: DEFAULT_V1_MAX_STACK_HEIGHT,
+            max_memory: DEFAULT_WASM_MAX_MEMORY,
+            max_stack_height: DEFAULT_MAX_STACK_HEIGHT,
             opcode_costs: OpcodeCosts::default(),
-            host_function_costs: HostFunctionCosts::default(),
+            host_function_costs: HostFunctionCostsV1::default(),
         }
     }
 }

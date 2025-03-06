@@ -7,9 +7,9 @@ use casper_engine_test_support::{
 };
 use casper_types::{
     account::AccountHash, runtime_args, system::mint, AddressableEntityHash, EraId, Gas,
-    HostFunction, HostFunctionCost, HostFunctionCosts, Key, MintCosts, Motes,
+    HostFunction, HostFunctionCost, HostFunctionCostsV1, Key, MintCosts, Motes,
     ProtocolUpgradeConfig, ProtocolVersion, PublicKey, SecretKey, WasmConfig, WasmV1Config,
-    DEFAULT_V1_MAX_STACK_HEIGHT, DEFAULT_V1_WASM_MAX_MEMORY, U512,
+    WasmV2Config, DEFAULT_MAX_STACK_HEIGHT, DEFAULT_WASM_MAX_MEMORY, U512,
 };
 
 const TRANSFER_TO_ACCOUNT_CONTRACT: &str = "transfer_to_account.wasm";
@@ -108,7 +108,7 @@ fn gh_2280_transfer_should_always_cost_the_same_gas() {
 
     // Increase "transfer_to_account" host function call exactly by X, so we can assert that
     // transfer cost increased by exactly X without hidden fees.
-    let default_host_function_costs = HostFunctionCosts::default();
+    let default_host_function_costs = HostFunctionCostsV1::default();
 
     let default_transfer_to_account_cost = default_host_function_costs.transfer_to_account.cost();
     let new_transfer_to_account_cost = default_transfer_to_account_cost
@@ -116,7 +116,7 @@ fn gh_2280_transfer_should_always_cost_the_same_gas() {
         .expect("should add without overflow");
     let new_transfer_to_account = HostFunction::fixed(new_transfer_to_account_cost);
 
-    let new_host_function_costs = HostFunctionCosts {
+    let new_host_function_costs = HostFunctionCostsV1 {
         transfer_to_account: new_transfer_to_account,
         ..default_host_function_costs
     };
@@ -229,7 +229,7 @@ fn gh_2280_create_purse_should_always_cost_the_same_gas() {
         .expect("should add without overflow");
     let new_create_purse = HostFunction::fixed(new_create_purse_cost);
 
-    let new_host_function_costs = HostFunctionCosts {
+    let new_host_function_costs = HostFunctionCostsV1 {
         create_purse: new_create_purse,
         ..host_function_costs
     };
@@ -337,7 +337,7 @@ fn gh_2280_transfer_purse_to_account_should_always_cost_the_same_gas() {
 
     // Increase "transfer_to_account" host function call exactly by X, so we can assert that
     // transfer cost increased by exactly X without hidden fees.
-    let default_host_function_costs = HostFunctionCosts::default();
+    let default_host_function_costs = HostFunctionCostsV1::default();
 
     let default_transfer_from_purse_to_account_cost = default_host_function_costs
         .transfer_from_purse_to_account
@@ -348,7 +348,7 @@ fn gh_2280_transfer_purse_to_account_should_always_cost_the_same_gas() {
     let new_transfer_from_purse_to_account =
         HostFunction::fixed(new_transfer_from_purse_to_account_cost);
 
-    let new_host_function_costs = HostFunctionCosts {
+    let new_host_function_costs = HostFunctionCostsV1 {
         transfer_from_purse_to_account: new_transfer_from_purse_to_account,
         ..default_host_function_costs
     };
@@ -453,7 +453,7 @@ fn gh_2280_stored_transfer_to_account_should_always_cost_the_same_gas() {
 
     // Increase "transfer_to_account" host function call exactly by X, so we can assert that
     // transfer cost increased by exactly X without hidden fees.
-    let default_host_function_costs = HostFunctionCosts::default();
+    let default_host_function_costs = HostFunctionCostsV1::default();
 
     let default_transfer_from_purse_to_account_cost = default_host_function_costs
         .transfer_from_purse_to_account
@@ -464,7 +464,7 @@ fn gh_2280_stored_transfer_to_account_should_always_cost_the_same_gas() {
     let new_transfer_from_purse_to_account =
         HostFunction::fixed(new_transfer_from_purse_to_account_cost);
 
-    let new_host_function_costs = HostFunctionCosts {
+    let new_host_function_costs = HostFunctionCostsV1 {
         transfer_from_purse_to_account: new_transfer_from_purse_to_account,
         ..default_host_function_costs
     };
@@ -565,7 +565,7 @@ fn gh_2280_stored_faucet_call_should_cost_the_same() {
 
     // Increase "transfer_to_account" host function call exactly by X, so we can assert that
     // transfer cost increased by exactly X without hidden fees.
-    let default_host_function_costs = HostFunctionCosts::default();
+    let default_host_function_costs = HostFunctionCostsV1::default();
 
     let default_transfer_from_purse_to_account_cost = default_host_function_costs
         .transfer_from_purse_to_account
@@ -576,7 +576,7 @@ fn gh_2280_stored_faucet_call_should_cost_the_same() {
     let new_transfer_from_purse_to_account =
         HostFunction::fixed(new_transfer_from_purse_to_account_cost);
 
-    let new_host_function_costs = HostFunctionCosts {
+    let new_host_function_costs = HostFunctionCostsV1 {
         transfer_from_purse_to_account: new_transfer_from_purse_to_account,
         ..default_host_function_costs
     };
@@ -663,16 +663,21 @@ fn setup() -> (LmdbWasmTestBuilder, TestContext) {
 }
 
 fn make_wasm_config(
-    new_host_function_costs: HostFunctionCosts,
+    new_host_function_costs: HostFunctionCostsV1,
     old_wasm_config: WasmConfig,
 ) -> WasmConfig {
     let wasm_v1_config = WasmV1Config::new(
-        DEFAULT_V1_WASM_MAX_MEMORY,
-        DEFAULT_V1_MAX_STACK_HEIGHT,
+        DEFAULT_WASM_MAX_MEMORY,
+        DEFAULT_MAX_STACK_HEIGHT,
         old_wasm_config.v1().opcode_costs(),
         new_host_function_costs,
     );
-    WasmConfig::new(old_wasm_config.messages_limits(), wasm_v1_config)
+    let wasm_v2_config = WasmV2Config::default();
+    WasmConfig::new(
+        old_wasm_config.messages_limits(),
+        wasm_v1_config,
+        wasm_v2_config,
+    )
 }
 
 fn make_upgrade_request() -> ProtocolUpgradeConfig {

@@ -12,7 +12,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    AddressableEntityHash, CLType, CLValue, EntryPoint, EntryPointAccess, EntryPointPayment,
+    AddressableEntityHash, CLType, CLValue, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
     EntryPointType, EntryPoints, Key, Parameter,
 };
 
@@ -48,7 +48,7 @@ pub extern "C" fn call() {
     let is_locked: bool = runtime::get_named_arg(ARG_IS_LOCKED);
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let add = EntryPoint::new(
+        let add = EntityEntryPoint::new(
             ENTRY_POINT_ADD.to_string(),
             vec![Parameter::new(ARG_PURSE, CLType::String)],
             CLType::Unit,
@@ -57,7 +57,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(add);
-        let version = EntryPoint::new(
+        let version = EntityEntryPoint::new(
             ENTRY_POINT_VERSION.to_string(),
             vec![],
             CLType::String,

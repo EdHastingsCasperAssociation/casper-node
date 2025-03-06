@@ -2,6 +2,7 @@ mod auction_costs;
 mod chainspec_registry;
 mod handle_payment_costs;
 mod host_function_costs;
+mod host_function_costs_v2;
 mod message_limits;
 mod mint_costs;
 mod opcode_costs;
@@ -10,6 +11,7 @@ mod storage_costs;
 mod system_config;
 mod wasm_config;
 mod wasm_v1_config;
+mod wasm_v2_config;
 
 pub use auction_costs::AuctionCosts;
 #[cfg(any(feature = "testing", test))]
@@ -19,8 +21,10 @@ pub use handle_payment_costs::HandlePaymentCosts;
 #[cfg(any(feature = "testing", test))]
 pub use host_function_costs::DEFAULT_NEW_DICTIONARY_COST;
 pub use host_function_costs::{
-    Cost as HostFunctionCost, HostFunction, HostFunctionCosts, DEFAULT_HOST_FUNCTION_NEW_DICTIONARY,
+    Cost as HostFunctionCost, HostFunction, HostFunctionCostsV1,
+    DEFAULT_HOST_FUNCTION_NEW_DICTIONARY,
 };
+pub use host_function_costs_v2::HostFunctionCostsV2;
 pub use message_limits::MessageLimits;
 pub use mint_costs::MintCosts;
 #[cfg(any(feature = "testing", test))]
@@ -46,4 +50,5 @@ pub use system_config::SystemConfig;
 pub use wasm_config::WasmConfig;
 pub use wasm_v1_config::WasmV1Config;
 #[cfg(any(feature = "testing", test))]
-pub use wasm_v1_config::{DEFAULT_V1_MAX_STACK_HEIGHT, DEFAULT_V1_WASM_MAX_MEMORY};
+pub use wasm_v1_config::{DEFAULT_MAX_STACK_HEIGHT, DEFAULT_WASM_MAX_MEMORY};
+pub use wasm_v2_config::WasmV2Config;

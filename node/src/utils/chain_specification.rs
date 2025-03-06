@@ -194,10 +194,11 @@ mod tests {
 
     use casper_types::{
         bytesrepr::FromBytes, ActivationPoint, BrTableCost, ChainspecRawBytes, ControlFlowCosts,
-        CoreConfig, EraId, GlobalStateUpdate, HighwayConfig, HostFunction, HostFunctionCosts,
-        MessageLimits, Motes, OpcodeCosts, ProtocolConfig, ProtocolVersion, StoredValue,
-        TestBlockBuilder, TimeDiff, Timestamp, TransactionConfig, TransactionLaneDefinition,
-        TransactionV1Config, WasmConfig, WasmV1Config, MINT_LANE_ID,
+        CoreConfig, EraId, GlobalStateUpdate, HighwayConfig, HostFunction, HostFunctionCostsV1,
+        HostFunctionCostsV2, MessageLimits, Motes, OpcodeCosts, ProtocolConfig, ProtocolVersion,
+        StoredValue, TestBlockBuilder, TimeDiff, Timestamp, TransactionConfig,
+        TransactionLaneDefinition, TransactionV1Config, WasmConfig, WasmV1Config, WasmV2Config,
+        MINT_LANE_ID,
     };
 
     use super::*;
@@ -242,8 +243,8 @@ mod tests {
         grow_memory: 27,
         sign: 28,
     };
-    static EXPECTED_GENESIS_HOST_FUNCTION_COSTS: Lazy<HostFunctionCosts> =
-        Lazy::new(|| HostFunctionCosts {
+    static EXPECTED_GENESIS_HOST_FUNCTION_COSTS: Lazy<HostFunctionCostsV1> =
+        Lazy::new(|| HostFunctionCostsV1 {
             read_value: HostFunction::new(127, [0, 1, 0]),
             dictionary_get: HostFunction::new(128, [0, 1, 0]),
             write: HostFunction::new(140, [0, 1, 0, 2]),
@@ -301,6 +302,22 @@ mod tests {
             recover_secp256k1: HostFunction::new(331, [0, 1, 2, 3, 4, 5]),
             verify_signature: HostFunction::new(332, [0, 1, 2, 3, 4, 5]),
         });
+    static EXPECTED_GENESIS_HOST_FUNCTION_COSTS_V2: Lazy<HostFunctionCostsV2> =
+        Lazy::new(|| HostFunctionCostsV2 {
+            read: HostFunction::new(100, [0, 1, 2, 3, 4, 5]),
+            write: HostFunction::new(101, [0, 1, 2, 3, 4]),
+            copy_input: HostFunction::new(102, [0, 1]),
+            ret: HostFunction::new(103, [0, 1]),
+            create: HostFunction::new(104, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+            env_caller: HostFunction::new(105, [0, 1, 2]),
+            env_block_time: HostFunction::new(106, []),
+            env_transferred_value: HostFunction::new(107, [0]),
+            transfer: HostFunction::new(108, [0, 1, 2]),
+            env_balance: HostFunction::new(109, [0, 1, 2, 3]),
+            upgrade: HostFunction::new(110, [0, 1, 2, 3, 4, 5]),
+            call: HostFunction::new(111, [0, 1, 2, 3, 4, 5, 6, 7, 8]),
+            print: HostFunction::new(112, [0, 1]),
+        });
     static EXPECTED_GENESIS_WASM_COSTS: Lazy<WasmConfig> = Lazy::new(|| {
         let wasm_v1_config = WasmV1Config::new(
             17, // initial_memory
@@ -308,7 +325,12 @@ mod tests {
             EXPECTED_GENESIS_COSTS,
             *EXPECTED_GENESIS_HOST_FUNCTION_COSTS,
         );
-        WasmConfig::new(MessageLimits::default(), wasm_v1_config)
+        let wasm_v2_config = WasmV2Config::new(
+            17, // initial_memory
+            EXPECTED_GENESIS_COSTS,
+            *EXPECTED_GENESIS_HOST_FUNCTION_COSTS_V2,
+        );
+        WasmConfig::new(MessageLimits::default(), wasm_v1_config, wasm_v2_config)
     });
 
     #[test]

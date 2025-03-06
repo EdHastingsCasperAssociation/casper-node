@@ -42,13 +42,13 @@ pub use accounts_config::{
 };
 pub use activation_point::ActivationPoint;
 pub use chainspec_raw_bytes::ChainspecRawBytes;
-#[cfg(any(feature = "testing", test))]
-pub use core_config::DEFAULT_FEE_HANDLING;
-#[cfg(any(feature = "std", test))]
-pub use core_config::DEFAULT_REFUND_HANDLING;
 pub use core_config::{
     ConsensusProtocolName, CoreConfig, LegacyRequiredFinality, DEFAULT_GAS_HOLD_INTERVAL,
     DEFAULT_MINIMUM_BID_AMOUNT,
+};
+#[cfg(any(feature = "std", test))]
+pub use core_config::{
+    DEFAULT_BASELINE_MOTES_AMOUNT, DEFAULT_FEE_HANDLING, DEFAULT_REFUND_HANDLING,
 };
 pub use fee_handling::FeeHandling;
 #[cfg(any(feature = "std", test))]
@@ -72,9 +72,9 @@ pub use upgrade_config::ProtocolUpgradeConfig;
 pub use vacancy_config::VacancyConfig;
 pub use vm_config::{
     AuctionCosts, BrTableCost, ChainspecRegistry, ControlFlowCosts, HandlePaymentCosts,
-    HostFunction, HostFunctionCost, HostFunctionCosts, MessageLimits, MintCosts, OpcodeCosts,
-    StandardPaymentCosts, StorageCosts, SystemConfig, WasmConfig, WasmV1Config,
-    DEFAULT_HOST_FUNCTION_NEW_DICTIONARY,
+    HostFunction, HostFunctionCost, HostFunctionCostsV1, HostFunctionCostsV2, MessageLimits,
+    MintCosts, OpcodeCosts, StandardPaymentCosts, StorageCosts, SystemConfig, WasmConfig,
+    WasmV1Config, WasmV2Config, DEFAULT_HOST_FUNCTION_NEW_DICTIONARY,
 };
 #[cfg(any(feature = "testing", test))]
 pub use vm_config::{
@@ -88,9 +88,9 @@ pub use vm_config::{
     DEFAULT_CONTROL_FLOW_RETURN_OPCODE, DEFAULT_CONTROL_FLOW_SELECT_OPCODE,
     DEFAULT_CONVERSION_COST, DEFAULT_CURRENT_MEMORY_COST, DEFAULT_DELEGATE_COST, DEFAULT_DIV_COST,
     DEFAULT_GLOBAL_COST, DEFAULT_GROW_MEMORY_COST, DEFAULT_INTEGER_COMPARISON_COST,
-    DEFAULT_LOAD_COST, DEFAULT_LOCAL_COST, DEFAULT_MUL_COST, DEFAULT_NEW_DICTIONARY_COST,
-    DEFAULT_NOP_COST, DEFAULT_STORE_COST, DEFAULT_TRANSFER_COST, DEFAULT_UNREACHABLE_COST,
-    DEFAULT_V1_MAX_STACK_HEIGHT, DEFAULT_V1_WASM_MAX_MEMORY,
+    DEFAULT_LOAD_COST, DEFAULT_LOCAL_COST, DEFAULT_MAX_STACK_HEIGHT, DEFAULT_MUL_COST,
+    DEFAULT_NEW_DICTIONARY_COST, DEFAULT_NOP_COST, DEFAULT_STORE_COST, DEFAULT_TRANSFER_COST,
+    DEFAULT_UNREACHABLE_COST, DEFAULT_WASM_MAX_MEMORY,
 };
 
 /// A collection of configuration settings describing the state of the system at genesis and after
@@ -256,6 +256,13 @@ impl Chainspec {
         self.transaction_config
             .transaction_v1_config
             .get_max_transaction_count(lane)
+    }
+
+    /// Returns the max payment defined by the wasm lanes.
+    pub fn get_max_payment_limit_for_wasm(&self) -> u64 {
+        self.transaction_config
+            .transaction_v1_config
+            .get_max_payment_limit_for_wasm()
     }
 }
 

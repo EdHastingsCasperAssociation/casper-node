@@ -5,8 +5,8 @@ extern crate alloc;
 
 use casper_contract::contract_api::{runtime, storage};
 use casper_types::{
-    addressable_entity::Parameters, AddressableEntityHash, CLType, EntryPoint, EntryPointAccess,
-    EntryPointPayment, EntryPointType, EntryPoints, Key,
+    addressable_entity::Parameters, AddressableEntityHash, CLType, EntityEntryPoint,
+    EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints, Key,
 };
 
 const ENTRY_FUNCTION_NAME: &str = "calculate";
@@ -29,7 +29,7 @@ pub extern "C" fn calculate() -> u64 {
 pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             ENTRY_FUNCTION_NAME,
             Parameters::new(),
             CLType::Unit,

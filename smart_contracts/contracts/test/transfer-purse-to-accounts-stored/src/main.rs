@@ -12,7 +12,9 @@ use casper_contract::{
 
 use casper_types::{
     account::AccountHash,
-    addressable_entity::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints, Parameter},
+    addressable_entity::{
+        EntityEntryPoint, EntryPointAccess, EntryPointType, EntryPoints, Parameter,
+    },
     contracts::NamedKeys,
     AddressableEntityHash, CLType, CLTyped, EntryPointPayment, Key, U512,
 };
@@ -44,7 +46,7 @@ pub extern "C" fn transfer() {
 pub extern "C" fn call() {
     let entry_points = {
         let mut tmp = EntryPoints::new();
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             ENTRY_FUNCTION_NAME.to_string(),
             vec![
                 Parameter::new(ARG_SOURCE, CLType::URef),

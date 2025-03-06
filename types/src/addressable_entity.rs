@@ -50,7 +50,7 @@ pub use self::{
     action_type::ActionType,
     associated_keys::AssociatedKeys,
     entry_points::{
-        EntryPoint, EntryPointAccess, EntryPointAddr, EntryPointPayment, EntryPointType,
+        EntityEntryPoint, EntryPointAccess, EntryPointAddr, EntryPointPayment, EntryPointType,
         EntryPointValue, EntryPoints, Parameter, Parameters, DEFAULT_ENTRY_POINT_NAME,
     },
     error::{FromAccountHashStrError, TryFromIntError, TryFromSliceForAccountHashError},

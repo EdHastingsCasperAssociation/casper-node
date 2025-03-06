@@ -15,7 +15,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    addressable_entity::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
+    addressable_entity::{EntityEntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
     api_error::ApiError,
     contracts::NamedKeys,
     CLType, CLValue, EntryPointPayment, Key, URef,
@@ -61,7 +61,7 @@ pub extern "C" fn call() {
 
     // Create entry points to get the counter value and to increment the counter by 1.
     let mut counter_entry_points = EntryPoints::new();
-    counter_entry_points.add_entry_point(EntryPoint::new(
+    counter_entry_points.add_entry_point(EntityEntryPoint::new(
         COUNTER_INC,
         Vec::new(),
         CLType::Unit,
@@ -69,7 +69,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    counter_entry_points.add_entry_point(EntryPoint::new(
+    counter_entry_points.add_entry_point(EntityEntryPoint::new(
         COUNTER_GET,
         Vec::new(),
         CLType::I32,

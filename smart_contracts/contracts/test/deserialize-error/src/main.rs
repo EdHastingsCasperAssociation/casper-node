@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use casper_contract::{self, contract_api::storage, unwrap_or_revert::UnwrapOrRevert};
 use casper_types::{
     addressable_entity::Parameters, api_error, bytesrepr::ToBytes, contracts::ContractHash, CLType,
-    EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints,
+    EntityEntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints,
 };
 
 #[no_mangle]
@@ -71,7 +71,7 @@ pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             "do_nothing",
             Parameters::default(),
             CLType::Unit,

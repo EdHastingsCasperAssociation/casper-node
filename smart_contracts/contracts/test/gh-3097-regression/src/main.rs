@@ -10,8 +10,8 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    addressable_entity::Parameters, contracts::NamedKeys, CLType, EntryPoint, EntryPointAccess,
-    EntryPointPayment, EntryPointType, EntryPoints, Key,
+    addressable_entity::Parameters, contracts::NamedKeys, CLType, EntityEntryPoint,
+    EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints, Key,
 };
 
 const CONTRACT_PACKAGE_HASH_KEY: &str = "contract_package_hash";
@@ -28,7 +28,7 @@ pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
 
-        let do_something = EntryPoint::new(
+        let do_something = EntityEntryPoint::new(
             "do_something",
             Parameters::new(),
             CLType::Unit,

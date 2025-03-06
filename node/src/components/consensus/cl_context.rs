@@ -49,7 +49,9 @@ impl ValidatorSecret for Keypair {
 
 impl ConsensusValueT for Arc<BlockPayload> {
     fn needs_validation(&self) -> bool {
-        self.all_transactions().next().is_some() || !self.accusations().is_empty()
+        self.all_transactions().next().is_some()
+            || !self.accusations().is_empty()
+            || self.rewarded_signatures().has_some()
     }
 }
 

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 const PRICING_HANDLING_TAG_LENGTH: u8 = 1;
 
-const PRICING_HANDLING_CLASSIC_TAG: u8 = 0;
+const PRICING_HANDLING_PAYMENT_LIMITED_TAG: u8 = 0;
 const PRICING_HANDLING_FIXED_TAG: u8 = 1;
 
 /// Defines what pricing mode a network allows. Correlates to the PricingMode of a
@@ -21,17 +21,16 @@ pub enum PricingHandling {
     #[default]
     /// The transaction sender self-specifies how much token they pay, which becomes their gas
     /// limit.
-    Classic,
+    PaymentLimited,
     /// The costs are fixed, per the cost tables.
-    // in 2.0 the default pricing handling is Fixed
     Fixed,
 }
 
 impl Display for PricingHandling {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            PricingHandling::Classic => {
-                write!(f, "PricingHandling::Classic")
+            PricingHandling::PaymentLimited => {
+                write!(f, "PricingHandling::PaymentLimited")
             }
             PricingHandling::Fixed => {
                 write!(f, "PricingHandling::Fixed")
@@ -45,8 +44,8 @@ impl ToBytes for PricingHandling {
         let mut buffer = bytesrepr::allocate_buffer(self)?;
 
         match self {
-            PricingHandling::Classic => {
-                buffer.push(PRICING_HANDLING_CLASSIC_TAG);
+            PricingHandling::PaymentLimited => {
+                buffer.push(PRICING_HANDLING_PAYMENT_LIMITED_TAG);
             }
             PricingHandling::Fixed => {
                 buffer.push(PRICING_HANDLING_FIXED_TAG);
@@ -65,7 +64,7 @@ impl FromBytes for PricingHandling {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
         let (tag, rem) = u8::from_bytes(bytes)?;
         match tag {
-            PRICING_HANDLING_CLASSIC_TAG => Ok((PricingHandling::Classic, rem)),
+            PRICING_HANDLING_PAYMENT_LIMITED_TAG => Ok((PricingHandling::PaymentLimited, rem)),
             PRICING_HANDLING_FIXED_TAG => Ok((PricingHandling::Fixed, rem)),
             _ => Err(bytesrepr::Error::Formatting),
         }
@@ -78,8 +77,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bytesrepr_roundtrip_for_classic() {
-        let handling = PricingHandling::Classic;
+    fn bytesrepr_roundtrip_for_payment_limited() {
+        let handling = PricingHandling::PaymentLimited;
         bytesrepr::test_serialization_roundtrip(&handling);
     }
 

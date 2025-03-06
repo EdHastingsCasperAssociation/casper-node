@@ -24,9 +24,6 @@ use rand::{
 #[cfg(feature = "json-schema")]
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "json-schema")]
-use serde_map_to_array::KeyValueJsonSchema;
-use serde_map_to_array::{BTreeMapToArray, KeyValueLabels};
 
 use crate::{
     addressable_entity::FromStrError,
@@ -181,7 +178,7 @@ impl FromBytes for EntryPointPayment {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
-pub struct EntryPoint {
+pub struct EntityEntryPoint {
     name: String,
     args: Parameters, // one argument vec![Parameter::new("chunked", CLType::Any)]
     ret: CLType,
@@ -190,7 +187,7 @@ pub struct EntryPoint {
     entry_point_payment: EntryPointPayment,
 }
 
-impl From<EntryPoint>
+impl From<EntityEntryPoint>
     for (
         String,
         Parameters,
@@ -200,7 +197,7 @@ impl From<EntryPoint>
         EntryPointPayment,
     )
 {
-    fn from(entry_point: EntryPoint) -> Self {
+    fn from(entry_point: EntityEntryPoint) -> Self {
         (
             entry_point.name,
             entry_point.args,
@@ -212,7 +209,7 @@ impl From<EntryPoint>
     }
 }
 
-impl EntryPoint {
+impl EntityEntryPoint {
     /// `EntryPoint` constructor.
     pub fn new<T: Into<String>>(
         name: T,
@@ -222,7 +219,7 @@ impl EntryPoint {
         entry_point_type: EntryPointType,
         entry_point_payment: EntryPointPayment,
     ) -> Self {
-        EntryPoint {
+        EntityEntryPoint {
             name: name.into(),
             args,
             ret,
@@ -234,7 +231,7 @@ impl EntryPoint {
 
     /// Create a default [`EntryPoint`] with specified name.
     pub fn default_with_name<T: Into<String>>(name: T) -> Self {
-        EntryPoint {
+        EntityEntryPoint {
             name: name.into(),
             ..Default::default()
         }
@@ -271,10 +268,10 @@ impl EntryPoint {
     }
 }
 
-impl Default for EntryPoint {
+impl Default for EntityEntryPoint {
     /// constructor for a public session `EntryPoint` that takes no args and returns `Unit`
     fn default() -> Self {
-        EntryPoint {
+        EntityEntryPoint {
             name: DEFAULT_ENTRY_POINT_NAME.to_string(),
             args: Vec::new(),
             ret: CLType::Unit,
@@ -285,7 +282,7 @@ impl Default for EntryPoint {
     }
 }
 
-impl ToBytes for EntryPoint {
+impl ToBytes for EntityEntryPoint {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         let mut buffer = bytesrepr::allocate_buffer(self)?;
         self.write_bytes(&mut buffer)?;
@@ -312,7 +309,7 @@ impl ToBytes for EntryPoint {
     }
 }
 
-impl FromBytes for EntryPoint {
+impl FromBytes for EntityEntryPoint {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
         let (name, bytes) = String::from_bytes(bytes)?;
         let (args, bytes) = Vec::<Parameter>::from_bytes(bytes)?;
@@ -322,7 +319,7 @@ impl FromBytes for EntryPoint {
         let (entry_point_payment, bytes) = EntryPointPayment::from_bytes(bytes)?;
 
         Ok((
-            EntryPoint {
+            EntityEntryPoint {
                 name,
                 args,
                 ret,
@@ -490,14 +487,9 @@ impl FromBytes for Parameter {
 }
 
 /// Collection of named entry points.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
-#[cfg_attr(feature = "json-schema", derive(JsonSchema))]
-#[serde(transparent, deny_unknown_fields)]
-pub struct EntryPoints(
-    #[serde(with = "BTreeMapToArray::<String, EntryPoint, EntryPointLabels>")]
-    BTreeMap<String, EntryPoint>,
-);
+pub struct EntryPoints(BTreeMap<String, EntityEntryPoint>);
 
 impl ToBytes for EntryPoints {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
@@ -515,7 +507,8 @@ impl ToBytes for EntryPoints {
 
 impl FromBytes for EntryPoints {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        let (entry_points_map, remainder) = BTreeMap::<String, EntryPoint>::from_bytes(bytes)?;
+        let (entry_points_map, remainder) =
+            BTreeMap::<String, EntityEntryPoint>::from_bytes(bytes)?;
         Ok((EntryPoints(entry_points_map), remainder))
     }
 }
@@ -523,7 +516,7 @@ impl FromBytes for EntryPoints {
 impl Default for EntryPoints {
     fn default() -> Self {
         let mut entry_points = EntryPoints::new();
-        let entry_point = EntryPoint::default();
+        let entry_point = EntityEntryPoint::default();
         entry_points.add_entry_point(entry_point);
         entry_points
     }
@@ -532,19 +525,19 @@ impl Default for EntryPoints {
 impl EntryPoints {
     /// Constructs a new, empty `EntryPoints`.
     pub const fn new() -> EntryPoints {
-        EntryPoints(BTreeMap::<String, EntryPoint>::new())
+        EntryPoints(BTreeMap::<String, EntityEntryPoint>::new())
     }
 
     /// Constructs a new `EntryPoints` with a single entry for the default `EntryPoint`.
     pub fn new_with_default_entry_point() -> Self {
         let mut entry_points = EntryPoints::new();
-        let entry_point = EntryPoint::default();
+        let entry_point = EntityEntryPoint::default();
         entry_points.add_entry_point(entry_point);
         entry_points
     }
 
     /// Adds new [`EntryPoint`].
-    pub fn add_entry_point(&mut self, entry_point: EntryPoint) {
+    pub fn add_entry_point(&mut self, entry_point: EntityEntryPoint) {
         self.0.insert(entry_point.name().to_string(), entry_point);
     }
 
@@ -554,7 +547,7 @@ impl EntryPoints {
     }
 
     /// Gets an existing [`EntryPoint`] by its name.
-    pub fn get(&self, entry_point_name: &str) -> Option<&EntryPoint> {
+    pub fn get(&self, entry_point_name: &str) -> Option<&EntityEntryPoint> {
         self.0.get(entry_point_name)
     }
 
@@ -564,7 +557,7 @@ impl EntryPoints {
     }
 
     /// Takes all entry points.
-    pub fn take_entry_points(self) -> Vec<EntryPoint> {
+    pub fn take_entry_points(self) -> Vec<EntityEntryPoint> {
         self.0.into_values().collect()
     }
 
@@ -586,26 +579,14 @@ impl EntryPoints {
     }
 }
 
-impl From<Vec<EntryPoint>> for EntryPoints {
-    fn from(entry_points: Vec<EntryPoint>) -> EntryPoints {
+impl From<Vec<EntityEntryPoint>> for EntryPoints {
+    fn from(entry_points: Vec<EntityEntryPoint>) -> EntryPoints {
         let entries = entry_points
             .into_iter()
             .map(|entry_point| (String::from(entry_point.name()), entry_point))
             .collect();
         EntryPoints(entries)
     }
-}
-
-struct EntryPointLabels;
-
-impl KeyValueLabels for EntryPointLabels {
-    const KEY: &'static str = "name";
-    const VALUE: &'static str = "entry_point";
-}
-
-#[cfg(feature = "json-schema")]
-impl KeyValueJsonSchema for EntryPointLabels {
-    const JSON_SCHEMA_KV_NAME: Option<&'static str> = Some("NamedEntryPoint");
 }
 
 /// The entry point address.
@@ -772,12 +753,12 @@ impl Distribution<EntryPointAddr> for Standard {
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 pub enum EntryPointValue {
     /// Entrypoints to be executed against the V1 Casper VM.
-    V1CasperVm(EntryPoint),
+    V1CasperVm(EntityEntryPoint),
 }
 
 impl EntryPointValue {
     /// Returns [`EntryPointValue::V1CasperVm`] variant.
-    pub fn new_v1_entry_point_value(entry_point: EntryPoint) -> Self {
+    pub fn new_v1_entry_point_value(entry_point: EntityEntryPoint) -> Self {
         Self::V1CasperVm(entry_point)
     }
 
@@ -819,7 +800,7 @@ impl FromBytes for EntryPointValue {
         let (tag, remainder) = u8::from_bytes(bytes)?;
         match tag {
             V1_ENTRY_POINT_TAG => {
-                let (entry_point, remainder) = EntryPoint::from_bytes(remainder)?;
+                let (entry_point, remainder) = EntityEntryPoint::from_bytes(remainder)?;
                 Ok((Self::V1CasperVm(entry_point), remainder))
             }
             _ => Err(Error::Formatting),

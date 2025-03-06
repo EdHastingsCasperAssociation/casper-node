@@ -12,7 +12,7 @@ use casper_contract::{
 };
 use casper_types::{
     account::AccountHash, addressable_entity::Parameters, contracts::NamedKeys,
-    AddressableEntityHash, ApiError, CLType, EntryPoint, EntryPointAccess, EntryPointPayment,
+    AddressableEntityHash, ApiError, CLType, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
     EntryPointType, EntryPoints, Key, RuntimeArgs, URef, U512,
 };
 
@@ -126,7 +126,7 @@ fn delegate() -> Result<(), ApiError> {
             let entry_points = {
                 let mut entry_points = EntryPoints::new();
 
-                let entry_point_1 = EntryPoint::new(
+                let entry_point_1 = EntityEntryPoint::new(
                     TRANSFER_FROM_PURSE_TO_ACCOUNT,
                     Parameters::default(),
                     CLType::Unit,
@@ -137,7 +137,7 @@ fn delegate() -> Result<(), ApiError> {
 
                 entry_points.add_entry_point(entry_point_1);
 
-                let entry_point_2 = EntryPoint::new(
+                let entry_point_2 = EntityEntryPoint::new(
                     TRANSFER_TO_ACCOUNT,
                     Parameters::default(),
                     CLType::Unit,
@@ -148,7 +148,7 @@ fn delegate() -> Result<(), ApiError> {
 
                 entry_points.add_entry_point(entry_point_2);
 
-                let entry_point_3 = EntryPoint::new(
+                let entry_point_3 = EntityEntryPoint::new(
                     TRANSFER_TO_ACCOUNT,
                     Parameters::default(),
                     CLType::Unit,
@@ -159,7 +159,7 @@ fn delegate() -> Result<(), ApiError> {
 
                 entry_points.add_entry_point(entry_point_3);
 
-                let entry_point_4 = EntryPoint::new(
+                let entry_point_4 = EntityEntryPoint::new(
                     TRANSFER_FROM_PURSE_TO_PURSE,
                     Parameters::default(),
                     CLType::Unit,

@@ -9,7 +9,7 @@ use casper_contract::{
 };
 use casper_types::{
     addressable_entity::Parameters, AccessRights, AddressableEntityHash, CLType, CLValue,
-    EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints, Key, URef,
+    EntityEntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints, Key, URef,
 };
 
 const DATA: &str = "data";
@@ -29,7 +29,7 @@ pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             "create",
             Parameters::default(),
             CLType::URef,

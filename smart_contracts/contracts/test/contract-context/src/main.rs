@@ -10,7 +10,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    addressable_entity::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
+    addressable_entity::{EntityEntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
     contracts::{ContractHash, ContractPackageHash, ContractVersion, NamedKeys},
     runtime_args, AddressableEntityHash, CLType, EntryPointPayment, Key, ENTITY_INITIAL_VERSION,
 };
@@ -92,7 +92,7 @@ pub extern "C" fn session_code_caller_as_contract() {
 fn create_entrypoints_1() -> EntryPoints {
     let mut entry_points = EntryPoints::new();
 
-    let contract_code_test = EntryPoint::new(
+    let contract_code_test = EntityEntryPoint::new(
         CONTRACT_CODE.to_string(),
         Vec::new(),
         CLType::I32,
@@ -102,7 +102,7 @@ fn create_entrypoints_1() -> EntryPoints {
     );
     entry_points.add_entry_point(contract_code_test);
 
-    let session_code_caller_as_contract = EntryPoint::new(
+    let session_code_caller_as_contract = EntityEntryPoint::new(
         "session_code_caller_as_contract".to_string(),
         Vec::new(),
         CLType::I32,

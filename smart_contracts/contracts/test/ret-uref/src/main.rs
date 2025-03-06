@@ -12,7 +12,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    runtime_args, AddressableEntityHash, CLType, CLValue, EntryPoint, EntryPointAccess,
+    runtime_args, AddressableEntityHash, CLType, CLValue, EntityEntryPoint, EntryPointAccess,
     EntryPointPayment, EntryPointType, EntryPoints, Key, Parameter, URef,
 };
 
@@ -49,7 +49,7 @@ pub extern "C" fn insert_uref() {
 pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let put_uref_entrypoint = EntryPoint::new(
+        let put_uref_entrypoint = EntityEntryPoint::new(
             PUT_UREF.to_string(),
             vec![Parameter::new(ACCESS_UREF, CLType::URef)],
             CLType::Unit,
@@ -58,7 +58,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(put_uref_entrypoint);
-        let get_uref_entrypoint = EntryPoint::new(
+        let get_uref_entrypoint = EntityEntryPoint::new(
             GET_UREF.to_string(),
             vec![],
             CLType::URef,
@@ -67,7 +67,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(get_uref_entrypoint);
-        let insert_uref_entrypoint = EntryPoint::new(
+        let insert_uref_entrypoint = EntityEntryPoint::new(
             INSERT_UREF.to_string(),
             vec![Parameter::new("contract_hash", CLType::ByteArray(32))],
             CLType::Unit,

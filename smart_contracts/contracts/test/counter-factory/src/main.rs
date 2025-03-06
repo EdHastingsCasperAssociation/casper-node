@@ -10,7 +10,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    addressable_entity::{EntryPoint, EntryPoints, Parameters},
+    addressable_entity::{EntityEntryPoint, EntryPoints, Parameters},
     bytesrepr::FromBytes,
     contracts::NamedKeys,
     ApiError, CLType, CLTyped, EntryPointAccess, EntryPointPayment, EntryPointType, Key, URef,
@@ -82,7 +82,7 @@ fn installer(name: String, initial_value: U512) {
 
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let entry_point: EntryPoint = EntryPoint::new(
+        let entry_point: EntityEntryPoint = EntityEntryPoint::new(
             INCREASE_ENTRY_POINT.to_string(),
             Parameters::new(),
             CLType::Unit,
@@ -91,7 +91,7 @@ fn installer(name: String, initial_value: U512) {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
-        let entry_point: EntryPoint = EntryPoint::new(
+        let entry_point: EntityEntryPoint = EntityEntryPoint::new(
             DECREASE_ENTRY_POINT.to_string(),
             Parameters::new(),
             CLType::Unit,
@@ -121,7 +121,7 @@ pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
 
-        let entry_point: EntryPoint = EntryPoint::new(
+        let entry_point: EntityEntryPoint = EntityEntryPoint::new(
             CONTRACT_FACTORY_ENTRY_POINT.to_string(),
             Parameters::new(),
             CLType::Unit,
@@ -130,7 +130,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
-        let entry_point: EntryPoint = EntryPoint::new(
+        let entry_point: EntityEntryPoint = EntityEntryPoint::new(
             CONTRACT_FACTORY_DEFAULT_ENTRY_POINT.to_string(),
             Parameters::new(),
             CLType::Unit,
@@ -139,7 +139,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
-        let entry_point: EntryPoint = EntryPoint::new(
+        let entry_point: EntityEntryPoint = EntityEntryPoint::new(
             INCREASE_ENTRY_POINT.to_string(),
             Parameters::new(),
             CLType::Unit,
@@ -148,7 +148,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
-        let entry_point: EntryPoint = EntryPoint::new(
+        let entry_point: EntityEntryPoint = EntityEntryPoint::new(
             DECREASE_ENTRY_POINT.to_string(),
             Parameters::new(),
             CLType::Unit,

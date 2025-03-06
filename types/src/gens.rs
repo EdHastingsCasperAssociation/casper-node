@@ -1,9 +1,6 @@
 //! Contains functions for generating arbitrary values for use by
 //! [`Proptest`](https://crates.io/crates/proptest).
 #![allow(missing_docs)]
-
-use core::u32;
-
 use alloc::{
     boxed::Box,
     collections::{BTreeMap, BTreeSet},
@@ -54,10 +51,10 @@ use crate::{
         TransferAddr,
     },
     AccessRights, AddressableEntity, AddressableEntityHash, BlockTime, ByteCode, ByteCodeAddr,
-    CLType, CLValue, Digest, EntityAddr, EntityKind, EntryPoint, EntryPointAccess, EntryPointAddr,
-    EntryPointPayment, EntryPointType, EntryPoints, EraId, Group, InitiatorAddr, Key, NamedArg,
-    Package, Parameter, Phase, PricingMode, ProtocolVersion, PublicKey, RuntimeArgs, SemVer,
-    StoredValue, TimeDiff, Timestamp, Transaction, TransactionEntryPoint,
+    CLType, CLValue, Digest, EntityAddr, EntityEntryPoint, EntityKind, EntryPointAccess,
+    EntryPointAddr, EntryPointPayment, EntryPointType, EntryPoints, EraId, Group, InitiatorAddr,
+    Key, NamedArg, Package, Parameter, Phase, PricingMode, ProtocolVersion, PublicKey, RuntimeArgs,
+    SemVer, StoredValue, TimeDiff, Timestamp, Transaction, TransactionEntryPoint,
     TransactionInvocationTarget, TransactionScheduling, TransactionTarget, TransactionV1, URef,
     U128, U256, U512,
 };
@@ -492,7 +489,7 @@ pub fn parameters_arb() -> impl Strategy<Value = Parameters> {
     collection::vec(parameter_arb(), 0..10)
 }
 
-pub fn entry_point_arb() -> impl Strategy<Value = EntryPoint> {
+pub fn entry_point_arb() -> impl Strategy<Value = EntityEntryPoint> {
     (
         ".*",
         parameters_arb(),
@@ -503,7 +500,7 @@ pub fn entry_point_arb() -> impl Strategy<Value = EntryPoint> {
     )
         .prop_map(
             |(name, parameters, entry_point_type, entry_point_access, entry_point_payment, ret)| {
-                EntryPoint::new(
+                EntityEntryPoint::new(
                     name,
                     parameters,
                     ret,

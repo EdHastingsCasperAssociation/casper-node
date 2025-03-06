@@ -19,9 +19,9 @@ use casper_storage::data_access_layer::GenesisRequest;
 use casper_types::{
     account::AccountHash, system::auction::DELEGATION_RATE_DENOMINATOR, AdministratorAccount,
     CoreConfig, FeeHandling, GenesisAccount, GenesisConfig, GenesisValidator, HostFunction,
-    HostFunctionCosts, MessageLimits, Motes, OpcodeCosts, PublicKey, RefundHandling, SecretKey,
-    StorageCosts, WasmConfig, WasmV1Config, DEFAULT_V1_MAX_STACK_HEIGHT,
-    DEFAULT_V1_WASM_MAX_MEMORY, U512,
+    HostFunctionCostsV1, MessageLimits, Motes, OpcodeCosts, PublicKey, RefundHandling, SecretKey,
+    StorageCosts, WasmConfig, WasmV1Config, WasmV2Config, DEFAULT_MAX_STACK_HEIGHT,
+    DEFAULT_WASM_MAX_MEMORY, U512,
 };
 use tempfile::TempDir;
 
@@ -189,20 +189,21 @@ fn setup_genesis_only() -> LmdbWasmTestBuilder {
 }
 
 fn make_wasm_config() -> WasmConfig {
-    let host_functions = HostFunctionCosts {
+    let host_functions = HostFunctionCostsV1 {
         // Required for non-standard payment that transfers to a system account.
         // Depends on a bug filled to lower transfer host functions to be able to freely transfer
         // funds inside payment code.
         transfer_from_purse_to_account: HostFunction::fixed(0),
-        ..HostFunctionCosts::default()
+        ..HostFunctionCostsV1::default()
     };
     let wasm_v1_config = WasmV1Config::new(
-        DEFAULT_V1_WASM_MAX_MEMORY,
-        DEFAULT_V1_MAX_STACK_HEIGHT,
+        DEFAULT_WASM_MAX_MEMORY,
+        DEFAULT_MAX_STACK_HEIGHT,
         OpcodeCosts::default(),
         host_functions,
     );
-    WasmConfig::new(MessageLimits::default(), wasm_v1_config)
+    let wasm_v2_config = WasmV2Config::default();
+    WasmConfig::new(MessageLimits::default(), wasm_v1_config, wasm_v2_config)
 }
 
 fn make_private_chain_config(

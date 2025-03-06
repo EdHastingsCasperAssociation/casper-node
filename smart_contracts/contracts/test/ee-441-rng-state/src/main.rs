@@ -10,7 +10,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    addressable_entity::Parameters, CLType, CLValue, EntryPoint, EntryPointAccess,
+    addressable_entity::Parameters, CLType, CLValue, EntityEntryPoint, EntryPointAccess,
     EntryPointPayment, EntryPointType, EntryPoints, Key, RuntimeArgs, URef, U512,
 };
 
@@ -39,7 +39,7 @@ pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
 
-        let do_nothing_entry_point = EntryPoint::new(
+        let do_nothing_entry_point = EntityEntryPoint::new(
             "do_nothing",
             Parameters::default(),
             CLType::String,
@@ -50,7 +50,7 @@ pub extern "C" fn call() {
 
         entry_points.add_entry_point(do_nothing_entry_point);
 
-        let do_something_entry_point = EntryPoint::new(
+        let do_something_entry_point = EntityEntryPoint::new(
             "do_something",
             Parameters::default(),
             CLType::URef,

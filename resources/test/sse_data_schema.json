@@ -4116,7 +4116,10 @@
           "$ref": "#/definitions/NamedKeys"
         },
         "entry_points": {
-          "$ref": "#/definitions/Array_of_NamedEntryPoint"
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EntryPoint"
+          }
         },
         "protocol_version": {
           "$ref": "#/definitions/ProtocolVersion"
@@ -4126,31 +4129,6 @@
     "ContractWasmHash": {
       "description": "The hash address of the contract wasm",
       "type": "string"
-    },
-    "Array_of_NamedEntryPoint": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/NamedEntryPoint"
-      }
-    },
-    "NamedEntryPoint": {
-      "type": "object",
-      "required": [
-        "entry_point",
-        "name"
-      ],
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "entry_point": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/EntryPoint"
-            }
-          ]
-        }
-      }
     },
     "EntryPoint": {
       "description": "Type signature of a method. Order of arguments matter since can be referenced by index as well as name.",
@@ -4841,14 +4819,14 @@
           ],
           "properties": {
             "V1CasperVm": {
-              "$ref": "#/definitions/EntryPoint2"
+              "$ref": "#/definitions/EntityEntryPoint"
             }
           },
           "additionalProperties": false
         }
       ]
     },
-    "EntryPoint2": {
+    "EntityEntryPoint": {
       "description": "Type signature of a method. Order of arguments matter since can be referenced by index as well as name.",
       "type": "object",
       "required": [

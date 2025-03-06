@@ -12,7 +12,9 @@ use casper_contract::{
 
 use casper_types::{
     account::AccountHash,
-    addressable_entity::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints, Parameter},
+    addressable_entity::{
+        EntityEntryPoint, EntryPointAccess, EntryPointType, EntryPoints, Parameter,
+    },
     AddressableEntityHash, CLType, CLTyped, EntryPointPayment, Key, NamedKeys, U512,
 };
 
@@ -41,7 +43,7 @@ pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
 
-        let faucet_entrypoint = EntryPoint::new(
+        let faucet_entrypoint = EntityEntryPoint::new(
             FAUCET_NAME.to_string(),
             vec![Parameter::new(ARG_TARGET, AccountHash::cl_type())],
             CLType::Unit,

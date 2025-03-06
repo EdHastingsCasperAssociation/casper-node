@@ -1030,8 +1030,6 @@ where
     }
 
     /// Adds data to a global state key and charges for bytes stored.
-    ///
-    /// This method performs full validation of the key to be written.
     pub(crate) fn metered_add_gs_unsafe(
         &mut self,
         key: Key,
@@ -1077,10 +1075,7 @@ where
         weight: Weight,
     ) -> Result<(), ExecError> {
         let context_key = self.context_key;
-        let entity_addr = match self.context_key_to_entity_addr() {
-            Ok(entity_addr) => entity_addr,
-            Err(error) => return Err(error),
-        };
+        let entity_addr = self.context_key_to_entity_addr()?;
 
         if EntryPointType::Caller == self.entry_point_type
             && entity_addr.tag() != EntityKindTag::Account
@@ -1146,10 +1141,7 @@ where
         account_hash: AccountHash,
     ) -> Result<(), ExecError> {
         let context_key = self.context_key;
-        let entity_addr = match self.context_key_to_entity_addr() {
-            Ok(entity_addr) => entity_addr,
-            Err(error) => return Err(error),
-        };
+        let entity_addr = self.context_key_to_entity_addr()?;
 
         if EntryPointType::Caller == self.entry_point_type
             && entity_addr.tag() != EntityKindTag::Account
@@ -1211,10 +1203,7 @@ where
         weight: Weight,
     ) -> Result<(), ExecError> {
         let context_key = self.context_key;
-        let entity_addr = match self.context_key_to_entity_addr() {
-            Ok(entity_addr) => entity_addr,
-            Err(error) => return Err(error),
-        };
+        let entity_addr = self.context_key_to_entity_addr()?;
 
         if EntryPointType::Caller == self.entry_point_type
             && entity_addr.tag() != EntityKindTag::Account
@@ -1302,10 +1291,7 @@ where
         threshold: Weight,
     ) -> Result<(), ExecError> {
         let context_key = self.context_key;
-        let entity_addr = match self.context_key_to_entity_addr() {
-            Ok(entity_addr) => entity_addr,
-            Err(error) => return Err(error),
-        };
+        let entity_addr = self.context_key_to_entity_addr()?;
 
         if EntryPointType::Caller == self.entry_point_type
             && entity_addr.tag() != EntityKindTag::Account
@@ -1414,7 +1400,7 @@ where
             .runtime_footprint()
             .borrow()
             .main_purse()
-            .ok_or_else(|| ExecError::InvalidContext)?;
+            .ok_or(ExecError::InvalidContext)?;
         Ok(main_purse)
     }
 
@@ -1621,10 +1607,7 @@ where
         topic_name: &str,
         topic_name_hash: TopicNameHash,
     ) -> Result<Result<(), MessageTopicError>, ExecError> {
-        let entity_addr = match self.context_key_to_entity_addr() {
-            Ok(entity_addr) => entity_addr,
-            Err(error) => return Err(error),
-        };
+        let entity_addr = self.context_key_to_entity_addr()?;
 
         // Take the addressable entity out of the global state
         {

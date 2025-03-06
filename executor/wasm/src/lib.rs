@@ -8,9 +8,7 @@ use std::{
 
 use bytes::Bytes;
 use casper_execution_engine::{
-    engine_state::{
-        BlockInfo, EngineConfig, Error as EngineError, ExecutableItem, ExecutionEngineV1,
-    },
+    engine_state::{BlockInfo, Error as EngineError, ExecutableItem, ExecutionEngineV1},
     execution::ExecError,
 };
 use casper_executor_wasm_common::{chain_utils, flags::ReturnFlags};
@@ -36,8 +34,8 @@ use casper_types::{
     addressable_entity::{ActionThresholds, AssociatedKeys},
     bytesrepr, AddressableEntity, AddressableEntityHash, ByteCode, ByteCodeAddr, ByteCodeHash,
     ByteCodeKind, ContractRuntimeTag, Digest, EntityAddr, EntityKind, Gas, Groups, InitiatorAddr,
-    Key, Package, PackageHash, PackageStatus, Phase, ProtocolVersion, StoredValue,
-    TransactionInvocationTarget, URef, U512,
+    Key, Package, PackageHash, PackageStatus, Phase, ProtocolVersion, StorageCosts, StoredValue,
+    TransactionInvocationTarget, URef, WasmV2Config, U512,
 };
 use either::Either;
 use install::{InstallContractError, InstallContractRequest, InstallContractResult};
@@ -61,6 +59,8 @@ pub enum ExecutorKind {
 pub struct ExecutorConfig {
     memory_limit: u32,
     executor_kind: ExecutorKind,
+    wasm_config: WasmV2Config,
+    storage_costs: StorageCosts,
 }
 
 impl ExecutorConfigBuilder {
@@ -73,6 +73,8 @@ impl ExecutorConfigBuilder {
 pub struct ExecutorConfigBuilder {
     memory_limit: Option<u32>,
     executor_kind: Option<ExecutorKind>,
+    wasm_config: Option<WasmV2Config>,
+    storage_costs: Option<StorageCosts>,
 }
 
 impl ExecutorConfigBuilder {
@@ -88,14 +90,30 @@ impl ExecutorConfigBuilder {
         self
     }
 
+    /// Set the wasm config.
+    pub fn with_wasm_config(mut self, wasm_config: WasmV2Config) -> Self {
+        self.wasm_config = Some(wasm_config);
+        self
+    }
+
+    /// Set the wasm config.
+    pub fn with_storage_costs(mut self, storage_costs: StorageCosts) -> Self {
+        self.storage_costs = Some(storage_costs);
+        self
+    }
+
     /// Build the `ExecutorConfig`.
     pub fn build(self) -> Result<ExecutorConfig, &'static str> {
         let memory_limit = self.memory_limit.ok_or("Memory limit is not set")?;
         let executor_kind = self.executor_kind.ok_or("Executor kind is not set")?;
+        let wasm_config = self.wasm_config.ok_or("Wasm config is not set")?;
+        let storage_costs = self.storage_costs.ok_or("Storage costs are not set")?;
 
         Ok(ExecutorConfig {
             memory_limit,
             executor_kind,
+            wasm_config,
+            storage_costs,
         })
     }
 }
@@ -105,7 +123,7 @@ pub struct ExecutorV2 {
     config: ExecutorConfig,
     compiled_wasm_engine: Arc<WasmerEngine>,
     execution_stack: Arc<RwLock<VecDeque<ExecutionKind>>>,
-    execution_engine_v1: ExecutionEngineV1,
+    execution_engine_v1: Arc<ExecutionEngineV1>,
 }
 
 impl ExecutorV2 {
@@ -509,6 +527,8 @@ impl ExecutorV2 {
 
         let context = Context {
             initiator,
+            config: self.config.wasm_config,
+            storage_costs: self.config.storage_costs,
             caller: caller_key,
             callee: callee_key,
             transferred_value,
@@ -743,7 +763,7 @@ impl ExecutorV2 {
 
 impl ExecutorV2 {
     /// Create a new `ExecutorV2` instance.
-    pub fn new(config: ExecutorConfig) -> Self {
+    pub fn new(config: ExecutorConfig, execution_engine_v1: Arc<ExecutionEngineV1>) -> Self {
         let wasm_engine = match config.executor_kind {
             ExecutorKind::Compiled => WasmerEngine::new(),
         };
@@ -751,9 +771,7 @@ impl ExecutorV2 {
             config,
             compiled_wasm_engine: Arc::new(wasm_engine),
             execution_stack: Default::default(),
-            execution_engine_v1: ExecutionEngineV1::new(EngineConfig::default()), /* TODO: Don't
-                                                                                   * use default
-                                                                                   * instance. */
+            execution_engine_v1,
         }
     }
 

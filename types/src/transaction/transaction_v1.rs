@@ -281,7 +281,7 @@ impl TransactionV1 {
         self.approvals.extend(approvals);
     }
 
-    /// Returns the payment amount if the txn is using classic mode.
+    /// Returns the payment amount if the txn is using payment limited mode.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
     pub fn payment_amount(&self) -> Option<u64> {
         if let PricingMode::PaymentLimited { payment_amount, .. } = self.pricing_mode() {
@@ -435,7 +435,7 @@ impl TransactionV1 {
 
     /// Returns `Ok` if and only if:
     ///   * the transaction hash is correct (see [`TransactionV1::has_valid_hash`] for details)
-    ///   * approvals are non empty, and
+    ///   * approvals are non-empty, and
     ///   * all approvals are valid signatures of the signed hash
     pub fn verify(&self) -> Result<(), InvalidTransactionV1> {
         #[cfg(any(feature = "once_cell", test))]

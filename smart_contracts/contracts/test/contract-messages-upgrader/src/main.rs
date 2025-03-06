@@ -16,7 +16,7 @@ use casper_contract::{
 };
 
 use casper_types::{
-    addressable_entity::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
+    addressable_entity::{EntityEntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
     api_error::ApiError,
     contract_messages::MessageTopicOperation,
     contracts::NamedKeys,
@@ -102,7 +102,7 @@ pub extern "C" fn call() {
         runtime::get_named_arg(ARG_REGISTER_DEFAULT_TOPIC_WITH_INIT);
 
     let mut emitter_entry_points = EntryPoints::new();
-    emitter_entry_points.add_entry_point(EntryPoint::new(
+    emitter_entry_points.add_entry_point(EntityEntryPoint::new(
         ENTRY_POINT_INIT,
         Vec::new(),
         CLType::Unit,
@@ -110,7 +110,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    emitter_entry_points.add_entry_point(EntryPoint::new(
+    emitter_entry_points.add_entry_point(EntityEntryPoint::new(
         ENTRY_POINT_EMIT_MESSAGE,
         vec![Parameter::new(ARG_MESSAGE_SUFFIX_NAME, String::cl_type())],
         CLType::Unit,
@@ -118,7 +118,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    emitter_entry_points.add_entry_point(EntryPoint::new(
+    emitter_entry_points.add_entry_point(EntityEntryPoint::new(
         ENTRY_POINT_EMIT_MESSAGE_FROM_EACH_VERSION,
         vec![Parameter::new(ARG_MESSAGE_SUFFIX_NAME, String::cl_type())],
         CLType::Unit,

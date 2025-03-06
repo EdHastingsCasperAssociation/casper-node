@@ -25,9 +25,6 @@ use serde::{
     de::{self, Error as SerdeError},
     ser, Deserialize, Deserializer, Serialize, Serializer,
 };
-#[cfg(feature = "json-schema")]
-use serde_map_to_array::KeyValueJsonSchema;
-use serde_map_to_array::{BTreeMapToArray, KeyValueLabels};
 
 pub use self::named_keys::NamedKeys;
 
@@ -40,10 +37,9 @@ use crate::{
     package::PackageStatus,
     serde_helpers::contract_package::HumanReadableContractPackage,
     uref::{self, URef},
-    AddressableEntityHash, CLType, CLTyped, EntityVersionKey, EntryPoint as EntityEntryPoint,
-    EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints as EntityEntryPoints, Group,
-    Groups, HashAddr, Key, Package, PackageHash, Parameter, Parameters, ProtocolVersion,
-    KEY_HASH_LENGTH,
+    AddressableEntityHash, CLType, CLTyped, EntityEntryPoint, EntityVersionKey, EntryPointAccess,
+    EntryPointPayment, EntryPointType, EntryPoints as EntityEntryPoints, Group, Groups, HashAddr,
+    Key, Package, PackageHash, Parameter, Parameters, ProtocolVersion, KEY_HASH_LENGTH,
 };
 
 const CONTRACT_STRING_PREFIX: &str = "contract-";
@@ -1130,12 +1126,8 @@ impl FromBytes for EntryPoint {
 /// Collection of named entry points.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
-#[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 #[serde(transparent, deny_unknown_fields)]
-pub struct EntryPoints(
-    #[serde(with = "BTreeMapToArray::<String, EntryPoint, EntryPointLabels>")]
-    BTreeMap<String, EntryPoint>,
-);
+pub struct EntryPoints(BTreeMap<String, EntryPoint>);
 
 impl From<crate::addressable_entity::EntryPoints> for EntryPoints {
     fn from(value: EntityEntryPoints) -> Self {
@@ -1218,8 +1210,8 @@ impl EntryPoints {
     }
 
     /// Adds new [`EntryPoint`].
-    pub fn add_entry_point(&mut self, entry_point: EntryPoint) {
-        self.0.insert(entry_point.name().to_string(), entry_point);
+    pub fn add_entry_point(&mut self, entry_point: EntryPoint) -> Option<EntryPoint> {
+        self.0.insert(entry_point.name().to_string(), entry_point)
     }
 
     /// Checks if given [`EntryPoint`] exists.
@@ -1280,18 +1272,6 @@ impl From<EntryPoints> for EntityEntryPoints {
     }
 }
 
-struct EntryPointLabels;
-
-impl KeyValueLabels for EntryPointLabels {
-    const KEY: &'static str = "name";
-    const VALUE: &'static str = "entry_point";
-}
-
-#[cfg(feature = "json-schema")]
-impl KeyValueJsonSchema for EntryPointLabels {
-    const JSON_SCHEMA_KV_NAME: Option<&'static str> = Some("NamedEntryPoint");
-}
-
 /// Methods and type signatures supported by a contract.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
@@ -1300,6 +1280,7 @@ pub struct Contract {
     contract_package_hash: ContractPackageHash,
     contract_wasm_hash: ContractWasmHash,
     named_keys: NamedKeys,
+    #[cfg_attr(feature = "json-schema", schemars(with = "Vec<EntryPoint>"))]
     entry_points: EntryPoints,
     protocol_version: ProtocolVersion,
 }

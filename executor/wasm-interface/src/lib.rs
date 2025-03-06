@@ -1,6 +1,7 @@
 pub mod executor;
 
 use bytes::Bytes;
+use casper_types::{HostFunction, HostFunctionCost};
 use thiserror::Error;
 
 use casper_executor_wasm_common::flags::ReturnFlags;
@@ -215,8 +216,10 @@ impl ConfigBuilder {
 
     /// Build the configuration.
     pub fn build(self) -> Config {
-        let gas_limit = self.gas_limit.expect("Required field");
-        let memory_limit = self.memory_limit.expect("Required field");
+        let gas_limit = self.gas_limit.expect("Required field missing: gas_limit");
+        let memory_limit = self
+            .memory_limit
+            .expect("Required field missing: memory_limit");
         Config {
             gas_limit,
             memory_limit,
@@ -244,11 +247,9 @@ impl MeteringPoints {
 ///
 /// This allows access for important instances such as the context object that was passed to the
 /// instance, wasm linear memory access, etc.
-
 pub trait Caller {
     type Context;
 
-    fn config(&self) -> &Config;
     fn context(&self) -> &Self::Context;
     fn context_mut(&mut self) -> &mut Self::Context;
     /// Returns currently running *unmodified* bytecode.
@@ -272,6 +273,14 @@ pub trait Caller {
     fn gas_consumed(&mut self) -> MeteringPoints;
     /// Set the amount of gas used.
     fn consume_gas(&mut self, value: u64) -> MeteringPoints;
+    /// Consumes a set amount of gas for the specified host function and weights
+    fn charge_host_function_call<T>(
+        &mut self,
+        host_function: &HostFunction<T>,
+        weights: T,
+    ) -> MeteringPoints
+    where
+        T: AsRef<[HostFunctionCost]> + Copy;
 }
 
 #[derive(Debug, Error)]

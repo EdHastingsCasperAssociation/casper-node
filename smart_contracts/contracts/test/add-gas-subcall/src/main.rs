@@ -10,7 +10,7 @@ use casper_contract::contract_api::{runtime, storage};
 
 use casper_types::{
     contracts::{ContractHash, ContractVersion},
-    runtime_args, ApiError, CLType, EntryPoint, EntryPointAccess, EntryPointPayment,
+    runtime_args, ApiError, CLType, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
     EntryPointType, EntryPoints, Key, Parameter,
 };
 
@@ -51,7 +51,7 @@ pub extern "C" fn add_gas() {
 fn store() -> (ContractHash, ContractVersion) {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             SUBCALL_NAME,
             vec![Parameter::new(ARG_GAS_AMOUNT, CLType::I32)],
             CLType::Unit,

@@ -11,7 +11,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    contracts::NamedKeys, CLType, CLValue, EntryPoint, EntryPointAccess, EntryPointPayment,
+    contracts::NamedKeys, CLType, CLValue, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
     EntryPointType, EntryPoints, Key, PackageHash, Parameter, URef,
 };
 
@@ -58,7 +58,7 @@ pub extern "C" fn call() {
 
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let add = EntryPoint::new(
+        let add = EntityEntryPoint::new(
             METHOD_ADD,
             vec![Parameter::new(ARG_PURSE_NAME, CLType::String)],
             CLType::Unit,
@@ -67,7 +67,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(add);
-        let version = EntryPoint::new(
+        let version = EntityEntryPoint::new(
             METHOD_VERSION,
             vec![],
             CLType::String,
@@ -77,7 +77,7 @@ pub extern "C" fn call() {
         );
         entry_points.add_entry_point(version);
 
-        let remove = EntryPoint::new(
+        let remove = EntityEntryPoint::new(
             METHOD_REMOVE,
             vec![Parameter::new(ARG_PURSE_NAME, CLType::String)],
             CLType::Unit,

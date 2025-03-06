@@ -75,9 +75,8 @@ pub(crate) enum Action {
     UpgradeManagement,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
-#[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 pub struct RuntimeFootprint {
     named_keys: NamedKeys,
     action_thresholds: BTreeMap<u8, Weight>,

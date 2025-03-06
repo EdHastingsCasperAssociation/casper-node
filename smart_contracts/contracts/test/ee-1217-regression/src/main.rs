@@ -8,7 +8,7 @@ use alloc::{string::ToString, vec};
 // casper_contract is required for it's [global_alloc] as well as handlers (such as panic_handler)
 use casper_contract::contract_api::{runtime, storage, system};
 use casper_types::{
-    runtime_args, system::auction, CLType, EntryPoint, EntryPointAccess, EntryPointPayment,
+    runtime_args, system::auction, CLType, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
     EntryPointType, EntryPoints, PublicKey, U512,
 };
 
@@ -136,7 +136,7 @@ pub extern "C" fn undelegate_session() {
 pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let add_bid_session_entry_point = EntryPoint::new(
+        let add_bid_session_entry_point = EntityEntryPoint::new(
             METHOD_ADD_BID_SESSION_NAME.to_string(),
             vec![],
             CLType::Unit,
@@ -144,7 +144,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let add_bid_contract_entry_point = EntryPoint::new(
+        let add_bid_contract_entry_point = EntityEntryPoint::new(
             METHOD_ADD_BID_CONTRACT_NAME.to_string(),
             vec![],
             CLType::Unit,
@@ -152,7 +152,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let withdraw_bid_session_entry_point = EntryPoint::new(
+        let withdraw_bid_session_entry_point = EntityEntryPoint::new(
             METHOD_WITHDRAW_BID_SESSION_NAME.to_string(),
             vec![],
             CLType::Unit,
@@ -160,7 +160,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let withdraw_bid_contract_entry_point = EntryPoint::new(
+        let withdraw_bid_contract_entry_point = EntityEntryPoint::new(
             METHOD_WITHDRAW_BID_CONTRACT_NAME.to_string(),
             vec![],
             CLType::Unit,
@@ -168,7 +168,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let delegate_session_entry_point = EntryPoint::new(
+        let delegate_session_entry_point = EntityEntryPoint::new(
             METHOD_DELEGATE_SESSION_NAME.to_string(),
             vec![],
             CLType::Unit,
@@ -176,7 +176,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let delegate_contract_entry_point = EntryPoint::new(
+        let delegate_contract_entry_point = EntityEntryPoint::new(
             METHOD_DELEGATE_CONTRACT_NAME.to_string(),
             vec![],
             CLType::Unit,
@@ -184,7 +184,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let undelegate_session_entry_point = EntryPoint::new(
+        let undelegate_session_entry_point = EntityEntryPoint::new(
             METHOD_UNDELEGATE_SESSION_NAME.to_string(),
             vec![],
             CLType::Unit,
@@ -192,7 +192,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let undelegate_contract_entry_point = EntryPoint::new(
+        let undelegate_contract_entry_point = EntityEntryPoint::new(
             METHOD_UNDELEGATE_CONTRACT_NAME.to_string(),
             vec![],
             CLType::Unit,
@@ -200,7 +200,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let activate_bid_session_entry_point = EntryPoint::new(
+        let activate_bid_session_entry_point = EntityEntryPoint::new(
             METHOD_ACTIVATE_BID_SESSION_NAME.to_string(),
             vec![],
             CLType::Unit,
@@ -208,7 +208,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let activate_bid_contract_entry_point = EntryPoint::new(
+        let activate_bid_contract_entry_point = EntityEntryPoint::new(
             METHOD_ACTIVATE_BID_CONTRACT_NAME.to_string(),
             vec![],
             CLType::Unit,

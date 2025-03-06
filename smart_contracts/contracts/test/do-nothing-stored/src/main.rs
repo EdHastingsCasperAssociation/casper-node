@@ -3,7 +3,7 @@
 
 use casper_contract::contract_api::{runtime, storage};
 use casper_types::{
-    addressable_entity::{EntryPoint, EntryPoints, Parameters},
+    addressable_entity::{EntityEntryPoint, EntryPoints, Parameters},
     CLType, EntryPointAccess, EntryPointPayment, EntryPointType, Key,
 };
 
@@ -22,7 +22,7 @@ pub extern "C" fn delegate() {
 pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             ENTRY_FUNCTION_NAME,
             Parameters::new(),
             CLType::Unit,

@@ -14,6 +14,7 @@ use casper_executor_wasm_interface::{
     WasmPreparationError,
 };
 use casper_storage::global_state::GlobalStateReader;
+use casper_types::{HostFunction, HostFunctionCost};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use wasmer::{
@@ -94,7 +95,6 @@ impl WasmerEngine {
 }
 
 struct WasmerEnv<S: GlobalStateReader, E: Executor> {
-    config: Config,
     context: Context<S, E>,
     instance: Weak<Instance>,
     bytecode: Bytes,
@@ -106,7 +106,7 @@ pub(crate) struct WasmerCaller<'a, S: GlobalStateReader, E: Executor> {
     env: FunctionEnvMut<'a, WasmerEnv<S, E>>,
 }
 
-impl<'a, S: GlobalStateReader + 'static, E: Executor + 'static> WasmerCaller<'a, S, E> {
+impl<S: GlobalStateReader + 'static, E: Executor + 'static> WasmerCaller<'_, S, E> {
     fn with_memory<T>(&self, f: impl FnOnce(MemoryView<'_>) -> T) -> T {
         let mem = &self.env.data().exported_runtime().memory;
         let binding = self.env.as_store_ref();
@@ -143,7 +143,7 @@ impl<'a, S: GlobalStateReader + 'static, E: Executor + 'static> WasmerCaller<'a,
     }
 }
 
-impl<'a, S: GlobalStateReader + 'static, E: Executor + 'static> Caller for WasmerCaller<'a, S, E> {
+impl<S: GlobalStateReader + 'static, E: Executor + 'static> Caller for WasmerCaller<'_, S, E> {
     type Context = Context<S, E>;
 
     fn memory_write(&self, offset: u32, data: &[u8]) -> Result<(), VMError> {
@@ -154,6 +154,7 @@ impl<'a, S: GlobalStateReader + 'static, E: Executor + 'static> Caller for Wasme
     fn context(&self) -> &Context<S, E> {
         &self.env.data().context
     }
+
     fn context_mut(&mut self) -> &mut Context<S, E> {
         &mut self.env.data_mut().context
     }
@@ -186,10 +187,6 @@ impl<'a, S: GlobalStateReader + 'static, E: Executor + 'static> Caller for Wasme
         Ok(ptr)
     }
 
-    fn config(&self) -> &Config {
-        &self.env.data().config
-    }
-
     fn bytecode(&self) -> Bytes {
         self.env.data().bytecode.clone()
     }
@@ -200,11 +197,11 @@ impl<'a, S: GlobalStateReader + 'static, E: Executor + 'static> Caller for Wasme
     }
 
     /// Set the amount of gas used.
-    fn consume_gas(&mut self, new_value: u64) -> MeteringPoints {
+    fn consume_gas(&mut self, amount: u64) -> MeteringPoints {
         let gas_consumed = self.gas_consumed();
         match gas_consumed {
-            MeteringPoints::Remaining(remaining_points) if remaining_points >= new_value => {
-                let remaining_points = remaining_points - new_value;
+            MeteringPoints::Remaining(remaining_points) if remaining_points >= amount => {
+                let remaining_points = remaining_points - amount;
                 self.set_remaining_points(remaining_points);
                 MeteringPoints::Remaining(remaining_points)
             }
@@ -216,19 +213,28 @@ impl<'a, S: GlobalStateReader + 'static, E: Executor + 'static> Caller for Wasme
     fn has_export(&self, name: &str) -> bool {
         self.with_instance(|instance| instance.exports.contains(name))
     }
+
+    fn charge_host_function_call<T>(
+        &mut self,
+        host_function: &HostFunction<T>,
+        weights: T,
+    ) -> MeteringPoints
+    where
+        T: AsRef<[HostFunctionCost]> + Copy,
+    {
+        let Some(cost) = host_function.calculate_gas_cost(weights) else {
+            return MeteringPoints::Exhausted; // Overflowing gas calculation means gas limit was
+                                              // exceeded
+        };
+        self.consume_gas(cost.value().as_u64())
+    }
 }
 
 impl<S: GlobalStateReader, E: Executor> WasmerEnv<S, E> {}
 
 impl<S: GlobalStateReader, E: Executor> WasmerEnv<S, E> {
-    fn new(
-        config: Config,
-        context: Context<S, E>,
-        code: Bytes,
-        interface_version: InterfaceVersion,
-    ) -> Self {
+    fn new(context: Context<S, E>, code: Bytes, interface_version: InterfaceVersion) -> Self {
         Self {
-            config,
             context,
             instance: Weak::new(),
             exported_runtime: None,
@@ -311,12 +317,7 @@ where
 
         let mut store = Store::new(engine);
 
-        let wasmer_env = WasmerEnv::new(
-            config.clone(),
-            context,
-            wasm_bytes,
-            InterfaceVersion::from(1u32),
-        );
+        let wasmer_env = WasmerEnv::new(context, wasm_bytes, InterfaceVersion::from(1u32));
         let function_env = FunctionEnv::new(&mut store, wasmer_env);
 
         let memory = Memory::new(
@@ -746,6 +747,8 @@ where
             initiator: data.context.initiator,
             caller: data.context.caller,
             callee: data.context.callee,
+            config: data.context.config,
+            storage_costs: data.context.storage_costs,
             transferred_value: data.context.transferred_value,
             tracking_copy: data.context.tracking_copy.fork2(),
             executor: data.context.executor.clone(),

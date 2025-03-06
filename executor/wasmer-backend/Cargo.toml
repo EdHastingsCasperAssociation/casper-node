@@ -13,5 +13,6 @@ casper-executor-wasm-interface = { path = "../wasm-interface" }
 casper-executor-wasm-host = { path = "../wasm-host" }
 casper-storage = { path = "../../storage" }
 casper-sdk-sys = { path = "../../smart_contracts/sdk-sys" }
+casper-types = { path = "../../types" }
 regex = "1.10.6"
 once_cell = "1.19.0"

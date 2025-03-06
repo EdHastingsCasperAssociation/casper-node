@@ -10,8 +10,8 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    contracts::NamedKeys, CLType, EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType,
-    EntryPoints, Key, U512,
+    contracts::NamedKeys, CLType, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
+    EntryPointType, EntryPoints, Key, U512,
 };
 
 const WRITE_FUNCTION_SMALL_NAME: &str = "write_function_small";
@@ -140,7 +140,7 @@ pub extern "C" fn new_uref_subcall() {
 pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             WRITE_FUNCTION_SMALL_NAME,
             Vec::new(),
             CLType::Unit,
@@ -149,7 +149,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             WRITE_FUNCTION_LARGE_NAME,
             Vec::new(),
             CLType::Unit,
@@ -158,7 +158,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             ADD_FUNCTION_SMALL_NAME,
             Vec::new(),
             CLType::Unit,
@@ -167,7 +167,7 @@ pub extern "C" fn call() {
             EntryPointPayment::Caller,
         );
         entry_points.add_entry_point(entry_point);
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             ADD_FUNCTION_LARGE_NAME,
             Vec::new(),
             CLType::Unit,
@@ -177,7 +177,7 @@ pub extern "C" fn call() {
         );
         entry_points.add_entry_point(entry_point);
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             NEW_UREF_FUNCTION,
             Vec::new(),
             CLType::Unit,
@@ -187,7 +187,7 @@ pub extern "C" fn call() {
         );
         entry_points.add_entry_point(entry_point);
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             PUT_KEY_FUNCTION,
             Vec::new(),
             CLType::Unit,
@@ -197,7 +197,7 @@ pub extern "C" fn call() {
         );
         entry_points.add_entry_point(entry_point);
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             REMOVE_KEY_FUNCTION,
             Vec::new(),
             CLType::Unit,
@@ -207,7 +207,7 @@ pub extern "C" fn call() {
         );
         entry_points.add_entry_point(entry_point);
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             CREATE_CONTRACT_PACKAGE_AT_HASH_FUNCTION,
             Vec::new(),
             CLType::Unit,
@@ -217,7 +217,7 @@ pub extern "C" fn call() {
         );
         entry_points.add_entry_point(entry_point);
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             CREATE_CONTRACT_USER_GROUP_FUNCTION_FUNCTION,
             Vec::new(),
             CLType::Unit,
@@ -227,7 +227,7 @@ pub extern "C" fn call() {
         );
         entry_points.add_entry_point(entry_point);
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             PROVISION_UREFS_FUNCTION,
             Vec::new(),
             CLType::Unit,
@@ -237,7 +237,7 @@ pub extern "C" fn call() {
         );
         entry_points.add_entry_point(entry_point);
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             REMOVE_CONTRACT_USER_GROUP_FUNCTION,
             Vec::new(),
             CLType::Unit,
@@ -247,7 +247,7 @@ pub extern "C" fn call() {
         );
         entry_points.add_entry_point(entry_point);
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             NEW_UREF_SUBCALL_FUNCTION,
             Vec::new(),
             CLType::Unit,

@@ -15,7 +15,7 @@ use casper_types::{
     account::{AccountHash, ActionType, Weight},
     bytesrepr::Bytes,
     contracts::{ContractHash, ContractVersion, NamedKeys},
-    runtime_args, ApiError, BlockTime, CLType, CLValue, EntryPoint, EntryPointAccess,
+    runtime_args, ApiError, BlockTime, CLType, CLValue, EntityEntryPoint, EntryPointAccess,
     EntryPointPayment, EntryPointType, EntryPoints, Key, Parameter, Phase, U512,
 };
 
@@ -218,7 +218,7 @@ fn store_function(
     let entry_points = {
         let mut entry_points = EntryPoints::new();
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             entry_point_name,
             vec![
                 Parameter::new(ARG_SEED, CLType::U64),

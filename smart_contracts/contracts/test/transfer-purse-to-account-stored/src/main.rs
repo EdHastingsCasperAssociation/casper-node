@@ -8,7 +8,9 @@ use alloc::{string::ToString, vec};
 use casper_contract::contract_api::{runtime, storage};
 
 use casper_types::{
-    addressable_entity::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints, Parameter},
+    addressable_entity::{
+        EntityEntryPoint, EntryPointAccess, EntryPointType, EntryPoints, Parameter,
+    },
     AddressableEntityHash, CLType, EntryPointPayment, Key,
 };
 
@@ -30,7 +32,7 @@ pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
 
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             ENTRY_FUNCTION_NAME.to_string(),
             vec![
                 Parameter::new(ARG_0_NAME, CLType::ByteArray(32)),

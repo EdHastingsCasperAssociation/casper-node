@@ -883,7 +883,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        AccessRights, EntityVersionKey, EntryPoint, EntryPointAccess, EntryPointPayment,
+        AccessRights, EntityEntryPoint, EntityVersionKey, EntryPointAccess, EntryPointPayment,
         EntryPointType, Parameter, ProtocolVersion, URef,
     };
     use alloc::borrow::ToOwned;
@@ -919,7 +919,7 @@ mod tests {
         // add entry_points
         let _entry_points = {
             let mut ret = BTreeMap::new();
-            let entrypoint = EntryPoint::new(
+            let entrypoint = EntityEntryPoint::new(
                 "method0".to_string(),
                 vec![],
                 CLType::U32,
@@ -928,7 +928,7 @@ mod tests {
                 EntryPointPayment::Caller,
             );
             ret.insert(entrypoint.name().to_owned(), entrypoint);
-            let entrypoint = EntryPoint::new(
+            let entrypoint = EntityEntryPoint::new(
                 "method1".to_string(),
                 vec![Parameter::new("Foo", CLType::U32)],
                 CLType::U32,

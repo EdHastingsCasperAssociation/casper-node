@@ -20,7 +20,6 @@ use tempfile::TempDir;
 use thiserror::Error;
 use tokio::time;
 
-use casper_execution_engine::engine_state::MAX_PAYMENT_AMOUNT;
 use casper_storage::{
     data_access_layer::{
         AddressableEntityResult, BalanceIdentifier, BalanceResult, EntryPointExistsResult,
@@ -39,7 +38,7 @@ use casper_types::{
     InvalidDeploy, InvalidTransaction, InvalidTransactionV1, Key, PricingHandling, PricingMode,
     ProtocolVersion, PublicKey, SecretKey, StoredValue, TestBlockBuilder, TimeDiff, Timestamp,
     Transaction, TransactionArgs, TransactionConfig, TransactionRuntimeParams, TransactionV1, URef,
-    U512,
+    DEFAULT_BASELINE_MOTES_AMOUNT,
 };
 
 use super::*;
@@ -178,6 +177,7 @@ enum TxnType {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum TestScenario {
     FromPeerInvalidTransaction(TxnType),
+    FromPeerInvalidTransactionZeroPayment(TxnType),
     FromPeerExpired(TxnType),
     FromPeerValidTransaction(TxnType),
     FromPeerRepeatedValidTransaction(TxnType),
@@ -189,6 +189,7 @@ enum TestScenario {
     FromPeerSessionContract(TxnType, ContractScenario),
     FromPeerSessionContractPackage(TxnType, ContractPackageScenario),
     FromClientInvalidTransaction(TxnType),
+    FromClientInvalidTransactionZeroPayment(TxnType),
     FromClientSlightlyFutureDatedTransaction(TxnType),
     FromClientFutureDatedTransaction(TxnType),
     FromClientExpired(TxnType),
@@ -226,6 +227,7 @@ impl TestScenario {
     fn source(&self, rng: &mut NodeRng) -> Source {
         match self {
             TestScenario::FromPeerInvalidTransaction(_)
+            | TestScenario::FromPeerInvalidTransactionZeroPayment(_)
             | TestScenario::FromPeerExpired(_)
             | TestScenario::FromPeerValidTransaction(_)
             | TestScenario::FromPeerRepeatedValidTransaction(_)
@@ -239,6 +241,7 @@ impl TestScenario {
             | TestScenario::FromPeerSessionContractPackage(..)
             | TestScenario::InvalidFieldsFromPeer => Source::Peer(NodeId::random(rng)),
             TestScenario::FromClientInvalidTransaction(_)
+            | TestScenario::FromClientInvalidTransactionZeroPayment(_)
             | TestScenario::FromClientSlightlyFutureDatedTransaction(_)
             | TestScenario::FromClientFutureDatedTransaction(_)
             | TestScenario::FromClientExpired(_)
@@ -285,6 +288,48 @@ impl TestScenario {
                 let mut txn = TransactionV1::random(rng);
                 txn.invalidate();
                 Transaction::from(txn)
+            }
+            TestScenario::FromClientInvalidTransactionZeroPayment(TxnType::V1) => {
+                let txn = TransactionV1Builder::new_session(
+                    false,
+                    Bytes::from(vec![1]),
+                    TransactionRuntimeParams::VmCasperV1,
+                )
+                .with_pricing_mode(PricingMode::PaymentLimited {
+                    standard_payment: true,
+                    gas_price_tolerance: 5,
+                    payment_amount: 0,
+                })
+                .with_chain_name("casper-example")
+                .with_timestamp(Timestamp::now())
+                .with_secret_key(&secret_key)
+                .build()
+                .unwrap();
+                Transaction::from(txn)
+            }
+            TestScenario::FromPeerInvalidTransactionZeroPayment(TxnType::V1) => {
+                let txn = TransactionV1Builder::new_session(
+                    false,
+                    Bytes::from(vec![1]),
+                    TransactionRuntimeParams::VmCasperV1,
+                )
+                .with_pricing_mode(PricingMode::PaymentLimited {
+                    standard_payment: true,
+                    gas_price_tolerance: 5,
+                    payment_amount: 0,
+                })
+                .with_chain_name("casper-example")
+                .with_timestamp(Timestamp::now())
+                .with_secret_key(&secret_key)
+                .build()
+                .unwrap();
+                Transaction::from(txn)
+            }
+            TestScenario::FromClientInvalidTransactionZeroPayment(TxnType::Deploy) => {
+                Transaction::from(Deploy::random_without_payment_amount(rng))
+            }
+            TestScenario::FromPeerInvalidTransactionZeroPayment(TxnType::Deploy) => {
+                Transaction::from(Deploy::random_without_payment_amount(rng))
             }
             TestScenario::FromPeerExpired(TxnType::Deploy)
             | TestScenario::FromClientExpired(TxnType::Deploy) => {
@@ -585,15 +630,15 @@ impl TestScenario {
                 }
             }
             TestScenario::InvalidPricingModeForTransactionV1 => {
-                let classic_mode_transaction = TransactionV1Builder::new_random(rng)
+                let payment_limited_mode_transaction = TransactionV1Builder::new_random(rng)
                     .with_pricing_mode(PricingMode::Fixed {
                         gas_price_tolerance: 5,
                         additional_computation_factor: 0,
                     })
                     .with_chain_name("casper-example")
                     .build()
-                    .expect("must create classic mode transaction");
-                Transaction::from(classic_mode_transaction)
+                    .expect("must create payment limited transaction");
+                Transaction::from(payment_limited_mode_transaction)
             }
             TestScenario::TooLowGasPriceToleranceForTransactionV1 => {
                 const TOO_LOW_GAS_PRICE_TOLERANCE: u8 = 0;
@@ -692,9 +737,11 @@ impl TestScenario {
             | TestScenario::FromClientSlightlyFutureDatedTransaction(_)
             | TestScenario::FromClientSignedByAdmin(..) => true,
             TestScenario::FromPeerInvalidTransaction(_)
+            | TestScenario::FromPeerInvalidTransactionZeroPayment(_)
             | TestScenario::FromClientInsufficientBalance(_)
             | TestScenario::FromClientMissingAccount(_)
             | TestScenario::FromClientInvalidTransaction(_)
+            | TestScenario::FromClientInvalidTransactionZeroPayment(_)
             | TestScenario::FromClientFutureDatedTransaction(_)
             | TestScenario::FromClientAccountWithInsufficientWeight(_)
             | TestScenario::FromClientAccountWithInvalidAssociatedKeys(_)
@@ -934,13 +981,14 @@ impl reactor::Reactor for Reactor {
                         StoredValue::CLValue(CLValue::from_t(()).expect("should get CLValue")),
                         VecDeque::new(),
                     );
+                    let baseline_amount = U512::from(DEFAULT_BASELINE_MOTES_AMOUNT);
                     let motes = if matches!(
                         self.test_scenario,
                         TestScenario::FromClientInsufficientBalance(_)
                     ) {
-                        MAX_PAYMENT_AMOUNT - 1
+                        baseline_amount - 1
                     } else {
-                        MAX_PAYMENT_AMOUNT
+                        baseline_amount
                     };
                     let balance_result =
                         if self.test_scenario == TestScenario::AccountWithUnknownBalance {
@@ -953,7 +1001,7 @@ impl reactor::Reactor for Reactor {
                             BalanceResult::Success {
                                 purse_addr,
                                 total_balance: Default::default(),
-                                available_balance: U512::from(motes),
+                                available_balance: motes,
                                 proofs_result,
                             }
                         };
@@ -1061,13 +1109,13 @@ impl reactor::Reactor for Reactor {
         _rng: &mut NodeRng,
     ) -> Result<(Self, Effects<Self::Event>), Self::Error> {
         let (storage_config, storage_tempdir) = storage::Config::new_for_tests(1);
-        let storage_withdir = WithDir::new(storage_tempdir.path(), storage_config);
+        let storage_with_dir = WithDir::new(storage_tempdir.path(), storage_config);
 
         let transaction_acceptor =
-            TransactionAcceptor::new(Config::default(), Arc::clone(&chainspec), registry).unwrap();
+            TransactionAcceptor::new(Config::default(), Arc::clone(&chainspec), registry)?;
 
         let storage = Storage::new(
-            &storage_withdir,
+            &storage_with_dir,
             None,
             ProtocolVersion::from_parts(1, 0, 0),
             EraId::default(),
@@ -1281,6 +1329,7 @@ async fn run_transaction_acceptor_without_timeout(
             // Check that invalid transactions sent by a client raise the `InvalidTransaction`
             // announcement with the appropriate source.
             TestScenario::FromClientInvalidTransaction(_)
+            | TestScenario::FromClientInvalidTransactionZeroPayment(_)
             | TestScenario::FromClientFutureDatedTransaction(_)
             | TestScenario::FromClientMissingAccount(_)
             | TestScenario::FromClientInsufficientBalance(_)
@@ -1363,6 +1412,7 @@ async fn run_transaction_acceptor_without_timeout(
             // Check that invalid transactions sent by a peer raise the `InvalidTransaction`
             // announcement with the appropriate source.
             TestScenario::FromPeerInvalidTransaction(_)
+            | TestScenario::FromPeerInvalidTransactionZeroPayment(_)
             | TestScenario::BalanceCheckForDeploySentByPeer
             | TestScenario::InvalidFieldsFromPeer => {
                 matches!(
@@ -1375,7 +1425,7 @@ async fn run_transaction_acceptor_without_timeout(
                     )
                 )
             }
-            // Check that a, new and valid, transaction sent by a peer raises an
+            // Check that a new and valid, transaction sent by a peer raises an
             // `AcceptedNewTransaction` announcement with the appropriate source.
             TestScenario::FromPeerValidTransaction(_)
             | TestScenario::FromPeerMissingAccount(_)
@@ -1515,6 +1565,21 @@ async fn should_reject_invalid_transaction_v1_from_peer() {
 }
 
 #[tokio::test]
+async fn should_reject_zero_payment_transaction_v1_from_peer() {
+    let result = run_transaction_acceptor(TestScenario::FromPeerInvalidTransactionZeroPayment(
+        TxnType::V1,
+    ))
+    .await;
+
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
+            InvalidTransactionV1::InvalidPaymentAmount
+        )))
+    ))
+}
+
+#[tokio::test]
 async fn should_accept_valid_deploy_from_peer_for_missing_account() {
     let result =
         run_transaction_acceptor(TestScenario::FromPeerMissingAccount(TxnType::Deploy)).await;
@@ -1596,6 +1661,20 @@ async fn should_reject_invalid_transaction_v1_from_client() {
     assert!(matches!(
         result,
         Err(super::Error::InvalidTransaction(InvalidTransaction::V1(_)))
+    ))
+}
+
+#[tokio::test]
+async fn should_reject_invalid_transaction_v1_zero_payment_from_client() {
+    let result = run_transaction_acceptor(TestScenario::FromClientInvalidTransactionZeroPayment(
+        TxnType::V1,
+    ))
+    .await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
+            InvalidTransactionV1::InvalidPaymentAmount
+        )))
     ))
 }
 

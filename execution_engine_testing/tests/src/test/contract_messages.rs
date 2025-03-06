@@ -13,9 +13,9 @@ use casper_types::{
     bytesrepr::ToBytes,
     contract_messages::{MessageChecksum, MessagePayload, MessageTopicSummary, TopicNameHash},
     runtime_args, AddressableEntityHash, BlockGlobalAddr, BlockTime, CLValue, CoreConfig, Digest,
-    HostFunction, HostFunctionCosts, Key, MessageLimits, OpcodeCosts, RuntimeArgs, StorageCosts,
-    StoredValue, SystemConfig, WasmConfig, WasmV1Config, DEFAULT_V1_MAX_STACK_HEIGHT,
-    DEFAULT_V1_WASM_MAX_MEMORY, U512,
+    HostFunction, HostFunctionCostsV1, HostFunctionCostsV2, Key, MessageLimits, OpcodeCosts,
+    RuntimeArgs, StorageCosts, StoredValue, SystemConfig, WasmConfig, WasmV1Config, WasmV2Config,
+    DEFAULT_MAX_STACK_HEIGHT, DEFAULT_WASM_MAX_MEMORY, U512,
 };
 
 const MESSAGE_EMITTER_INSTALLER_WASM: &str = "contract_messages_emitter.wasm";
@@ -483,12 +483,18 @@ fn should_not_add_duplicate_topics() {
 #[test]
 fn should_not_exceed_configured_limits() {
     let chainspec = {
-        let default_wasm_config = WasmV1Config::default();
+        let default_wasm_v1_config = WasmV1Config::default();
+        let default_wasm_v2_config = WasmV2Config::default();
         let wasm_v1_config = WasmV1Config::new(
-            default_wasm_config.max_memory(),
-            default_wasm_config.max_stack_height(),
-            default_wasm_config.opcode_costs(),
-            default_wasm_config.take_host_function_costs(),
+            default_wasm_v1_config.max_memory(),
+            default_wasm_v1_config.max_stack_height(),
+            default_wasm_v1_config.opcode_costs(),
+            default_wasm_v1_config.take_host_function_costs(),
+        );
+        let wasm_v2_config = WasmV2Config::new(
+            default_wasm_v2_config.max_memory(),
+            default_wasm_v2_config.opcode_costs(),
+            default_wasm_v2_config.take_host_function_costs(),
         );
         let wasm_config = WasmConfig::new(
             MessageLimits {
@@ -497,6 +503,7 @@ fn should_not_exceed_configured_limits() {
                 max_topics_per_contract: 2,
             },
             wasm_v1_config,
+            wasm_v2_config,
         );
         ChainspecConfig {
             system_costs_config: SystemConfig::default(),
@@ -657,12 +664,17 @@ fn should_charge_expected_gas_for_storage() {
 
     let chainspec = {
         let wasm_v1_config = WasmV1Config::new(
-            DEFAULT_V1_WASM_MAX_MEMORY,
-            DEFAULT_V1_MAX_STACK_HEIGHT,
+            DEFAULT_WASM_MAX_MEMORY,
+            DEFAULT_MAX_STACK_HEIGHT,
             OpcodeCosts::zero(),
-            HostFunctionCosts::zero(),
+            HostFunctionCostsV1::zero(),
         );
-        let wasm_config = WasmConfig::new(MessageLimits::default(), wasm_v1_config);
+        let wasm_v2_config = WasmV2Config::new(
+            DEFAULT_WASM_MAX_MEMORY,
+            OpcodeCosts::zero(),
+            HostFunctionCostsV2::zero(),
+        );
+        let wasm_config = WasmConfig::new(MessageLimits::default(), wasm_v1_config, wasm_v2_config);
         ChainspecConfig {
             wasm_config,
             core_config: CoreConfig::default(),
@@ -769,16 +781,21 @@ fn should_charge_increasing_gas_consumed_for_multiple_messages_emitted() {
         emit_consumed_per_execution(EMIT_MESSAGE_FROM_EACH_VERSION_NUM_MESSAGES);
     let chainspec = {
         let wasm_v1_config = WasmV1Config::new(
-            DEFAULT_V1_WASM_MAX_MEMORY,
-            DEFAULT_V1_MAX_STACK_HEIGHT,
+            DEFAULT_WASM_MAX_MEMORY,
+            DEFAULT_MAX_STACK_HEIGHT,
             OpcodeCosts::zero(),
-            HostFunctionCosts {
+            HostFunctionCostsV1 {
                 emit_message: HostFunction::fixed(FIRST_MESSAGE_EMIT_COST),
                 cost_increase_per_message: COST_INCREASE_PER_MESSAGE,
                 ..Zero::zero()
             },
         );
-        let wasm_config = WasmConfig::new(MessageLimits::default(), wasm_v1_config);
+        let wasm_v2_config = WasmV2Config::new(
+            DEFAULT_WASM_MAX_MEMORY,
+            OpcodeCosts::zero(),
+            HostFunctionCostsV2::default(),
+        );
+        let wasm_config = WasmConfig::new(MessageLimits::default(), wasm_v1_config, wasm_v2_config);
         ChainspecConfig {
             wasm_config,
             core_config: CoreConfig::default(),
@@ -886,11 +903,17 @@ fn should_register_topic_on_contract_creation() {
 fn should_not_exceed_configured_topic_name_limits_on_contract_upgrade_no_init() {
     let chainspec = {
         let default_wasm_v1_config = WasmV1Config::default();
+        let default_wasm_v2_config = WasmV2Config::default();
         let wasm_v1_config = WasmV1Config::new(
             default_wasm_v1_config.max_memory(),
             default_wasm_v1_config.max_stack_height(),
             default_wasm_v1_config.opcode_costs(),
             default_wasm_v1_config.take_host_function_costs(),
+        );
+        let wasm_v2_config = WasmV2Config::new(
+            default_wasm_v2_config.max_memory(),
+            default_wasm_v2_config.opcode_costs(),
+            default_wasm_v2_config.take_host_function_costs(),
         );
         let wasm_config = WasmConfig::new(
             MessageLimits {
@@ -899,6 +922,7 @@ fn should_not_exceed_configured_topic_name_limits_on_contract_upgrade_no_init() 
                 max_topics_per_contract: 3,
             },
             wasm_v1_config,
+            wasm_v2_config,
         );
         ChainspecConfig {
             wasm_config,
@@ -921,12 +945,18 @@ fn should_not_exceed_configured_topic_name_limits_on_contract_upgrade_no_init() 
 #[test]
 fn should_not_exceed_configured_max_topics_per_contract_upgrade_no_init() {
     let chainspec = {
-        let default_wasm_config = WasmV1Config::default();
+        let default_wasm_v1_config = WasmV1Config::default();
         let wasm_v1_config = WasmV1Config::new(
-            default_wasm_config.max_memory(),
-            default_wasm_config.max_stack_height(),
-            default_wasm_config.opcode_costs(),
-            default_wasm_config.take_host_function_costs(),
+            default_wasm_v1_config.max_memory(),
+            default_wasm_v1_config.max_stack_height(),
+            default_wasm_v1_config.opcode_costs(),
+            default_wasm_v1_config.take_host_function_costs(),
+        );
+        let default_wasm_v2_config = WasmV2Config::default();
+        let wasm_v2_config = WasmV2Config::new(
+            default_wasm_v2_config.max_memory(),
+            default_wasm_v2_config.opcode_costs(),
+            default_wasm_v2_config.take_host_function_costs(),
         );
         let wasm_config = WasmConfig::new(
             MessageLimits {
@@ -936,6 +966,7 @@ fn should_not_exceed_configured_max_topics_per_contract_upgrade_no_init() {
                                              * topics carry over, the upgrade should fail. */
             },
             wasm_v1_config,
+            wasm_v2_config,
         );
         ChainspecConfig {
             wasm_config,
@@ -1137,10 +1168,10 @@ fn emit_message_should_consume_variable_gas_based_on_topic_and_message_size() {
 
     let chainspec = {
         let wasm_v1_config = WasmV1Config::new(
-            DEFAULT_V1_WASM_MAX_MEMORY,
-            DEFAULT_V1_MAX_STACK_HEIGHT,
+            DEFAULT_WASM_MAX_MEMORY,
+            DEFAULT_MAX_STACK_HEIGHT,
             OpcodeCosts::zero(),
-            HostFunctionCosts {
+            HostFunctionCostsV1 {
                 emit_message: HostFunction::new(
                     MESSAGE_EMIT_COST,
                     [
@@ -1153,7 +1184,12 @@ fn emit_message_should_consume_variable_gas_based_on_topic_and_message_size() {
                 ..Zero::zero()
             },
         );
-        let wasm_config = WasmConfig::new(MessageLimits::default(), wasm_v1_config);
+        let wasm_v2_config = WasmV2Config::new(
+            DEFAULT_WASM_MAX_MEMORY,
+            OpcodeCosts::zero(),
+            HostFunctionCostsV2::default(),
+        );
+        let wasm_config = WasmConfig::new(MessageLimits::default(), wasm_v1_config, wasm_v2_config);
         ChainspecConfig {
             wasm_config,
             core_config: CoreConfig::default(),

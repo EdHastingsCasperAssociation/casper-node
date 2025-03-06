@@ -65,7 +65,7 @@ use casper_storage::DbRawBytesSpec;
 use casper_types::BlockWithSignatures;
 use casper_types::{
     bytesrepr::{FromBytes, ToBytes},
-    execution::{execution_result_v1, ExecutionResult, ExecutionResultV1, ExecutionResultV2},
+    execution::{execution_result_v1, ExecutionResult, ExecutionResultV1},
     Approval, ApprovalsHash, AvailableBlockRange, Block, BlockBody, BlockHash, BlockHeader,
     BlockHeaderWithSignatures, BlockSignatures, BlockSignaturesV1, BlockSignaturesV2, BlockV2,
     ChainNameDigest, DeployHash, EraId, ExecutionInfo, FinalitySignature, ProtocolVersion,
@@ -1052,7 +1052,6 @@ impl Storage {
         transaction_hashes
             .map(|transaction_hash| {
                 Self::get_transaction_with_finalized_approvals(&ro_txn, transaction_hash)
-                    .map_err(FatalStorageError::from)
             })
             .collect()
     }
@@ -2149,13 +2148,9 @@ fn successful_transfers(execution_result: &ExecutionResult) -> Vec<Transfer> {
                 }
             }
         }
-        ExecutionResult::V2(ExecutionResultV2 {
-            transfers,
-            error_message,
-            ..
-        }) => {
-            if error_message.is_none() {
-                for transfer in transfers {
+        ExecutionResult::V2(execution_result_v2) => {
+            if execution_result_v2.error_message.is_none() {
+                for transfer in &execution_result_v2.transfers {
                     all_transfers.push(transfer.clone());
                 }
             }

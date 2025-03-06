@@ -19,7 +19,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    addressable_entity::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
+    addressable_entity::{EntityEntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
     api_error,
     bytesrepr::{self, ToBytes},
     contracts::{ContractPackage, ContractPackageHash, NamedKeys},
@@ -188,7 +188,7 @@ pub extern "C" fn remove_group_urefs() {
 /// Restricted uref comes from creating a group and will be assigned to a smart contract
 fn create_entry_points_1() -> EntryPoints {
     let mut entry_points = EntryPoints::new();
-    let restricted_session = EntryPoint::new(
+    let restricted_session = EntityEntryPoint::new(
         CREATE_GROUP.to_string(),
         vec![
             Parameter::new(GROUP_NAME_ARG, CLType::String),
@@ -202,7 +202,7 @@ fn create_entry_points_1() -> EntryPoints {
     );
     entry_points.add_entry_point(restricted_session);
 
-    let remove_group = EntryPoint::new(
+    let remove_group = EntityEntryPoint::new(
         REMOVE_GROUP.to_string(),
         vec![Parameter::new(GROUP_NAME_ARG, CLType::String)],
         CLType::Unit,
@@ -213,7 +213,7 @@ fn create_entry_points_1() -> EntryPoints {
     entry_points.add_entry_point(remove_group);
 
     let entry_point_name = EXTEND_GROUP_UREFS.to_string();
-    let extend_group_urefs = EntryPoint::new(
+    let extend_group_urefs = EntityEntryPoint::new(
         entry_point_name,
         vec![
             Parameter::new(GROUP_NAME_ARG, CLType::String),
@@ -227,7 +227,7 @@ fn create_entry_points_1() -> EntryPoints {
     entry_points.add_entry_point(extend_group_urefs);
 
     let entry_point_name = REMOVE_GROUP_UREFS.to_string();
-    let remove_group_urefs = EntryPoint::new(
+    let remove_group_urefs = EntityEntryPoint::new(
         entry_point_name,
         vec![
             Parameter::new(GROUP_NAME_ARG, CLType::String),

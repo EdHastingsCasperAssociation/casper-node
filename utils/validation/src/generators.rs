@@ -18,10 +18,10 @@ use casper_types::{
         mint::BalanceHoldAddr,
     },
     AccessRights, AddressableEntityHash, BlockTime, ByteCode, ByteCodeHash, ByteCodeKind, CLType,
-    CLTyped, CLValue, ContractRuntimeTag, DeployHash, DeployInfo, EntityVersionKey, EntityVersions,
-    EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPointValue, EraId, Group,
-    Groups, Key, Package, PackageHash, PackageStatus, Parameter, ProtocolVersion, PublicKey,
-    SecretKey, StoredValue, TransferAddr, TransferV1, URef, U512,
+    CLTyped, CLValue, ContractRuntimeTag, DeployHash, DeployInfo, EntityEntryPoint,
+    EntityVersionKey, EntityVersions, EntryPointAccess, EntryPointPayment, EntryPointType,
+    EntryPointValue, EraId, Group, Groups, Key, Package, PackageHash, PackageStatus, Parameter,
+    ProtocolVersion, PublicKey, SecretKey, StoredValue, TransferAddr, TransferV1, URef, U512,
 };
 use casper_validation::{
     abi::{ABIFixture, ABITestCase},
@@ -375,7 +375,7 @@ pub fn make_abi_test_fixtures() -> Result<TestFixtures, Error> {
             ABITestCase::from_inputs(vec![StoredValue::ByteCode(byte_code).into()])?,
         );
 
-        let public_contract_entry_point = EntryPoint::new(
+        let public_contract_entry_point = EntityEntryPoint::new(
             "public_entry_point_func",
             vec![
                 Parameter::new("param1", U512::cl_type()),

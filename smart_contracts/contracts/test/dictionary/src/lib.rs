@@ -14,8 +14,8 @@ use casper_contract::{
 };
 use casper_types::{
     addressable_entity::EntityKindTag, api_error, bytesrepr::ToBytes, contracts::NamedKeys,
-    AccessRights, AddressableEntityHash, ApiError, CLType, CLValue, EntryPoint, EntryPointAccess,
-    EntryPointPayment, EntryPointType, EntryPoints, Key, URef,
+    AccessRights, AddressableEntityHash, ApiError, CLType, CLValue, EntityEntryPoint,
+    EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints, Key, URef,
 };
 
 pub const DICTIONARY_NAME: &str = "local";
@@ -176,7 +176,7 @@ pub fn delegate() {
     assert!(storage::new_dictionary(MALICIOUS_KEY_NAME).is_err());
 
     let mut entry_points = EntryPoints::new();
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         MODIFY_WRITE_ENTRYPOINT,
         Vec::new(),
         CLType::Unit,
@@ -184,7 +184,7 @@ pub fn delegate() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         SHARE_RO_ENTRYPOINT,
         Vec::new(),
         CLType::Unit,
@@ -192,7 +192,7 @@ pub fn delegate() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         SHARE_W_ENTRYPOINT,
         Vec::new(),
         CLType::Unit,
@@ -200,7 +200,7 @@ pub fn delegate() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         INVALID_PUT_DICTIONARY_ITEM_KEY_ENTRYPOINT,
         Vec::new(),
         CLType::Unit,
@@ -208,7 +208,7 @@ pub fn delegate() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         INVALID_GET_DICTIONARY_ITEM_KEY_ENTRYPOINT,
         Vec::new(),
         CLType::Unit,

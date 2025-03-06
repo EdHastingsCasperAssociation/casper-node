@@ -930,6 +930,8 @@ fn should_correctly_set_upgrade_threshold_on_entity_upgrade() {
         .get_addressable_entity(entity_hash)
         .expect("must have purse holder entity hash");
 
+    let purse_holder_main_purse_before = purse_holder_as_entity.main_purse();
+
     let actual_associated_keys = purse_holder_as_entity.associated_keys();
 
     assert!(actual_associated_keys.is_empty());
@@ -958,10 +960,12 @@ fn should_correctly_set_upgrade_threshold_on_entity_upgrade() {
         .get_addressable_entity(new_entity_hash)
         .expect("must have purse holder entity hash");
 
+    let updated_entity_main_purse = updated_purse_entity.main_purse();
     let actual_associated_keys = updated_purse_entity.associated_keys();
 
     let expect_associated_keys = AssociatedKeys::new(*DEFAULT_ACCOUNT_ADDR, Weight::new(1));
 
+    assert_eq!(purse_holder_main_purse_before, updated_entity_main_purse);
     assert_eq!(actual_associated_keys, &expect_associated_keys);
 }
 

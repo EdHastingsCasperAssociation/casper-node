@@ -204,6 +204,8 @@ pub enum InvalidTransaction {
     MissingSeed,
     // Pricing mode not implemented yet
     PricingModeNotSupported,
+    // Invalid payment amount.
+    InvalidPaymentAmount,
 }
 
 impl Display for InvalidTransaction {
@@ -325,10 +327,10 @@ impl Display for InvalidTransaction {
                 )
             }
             InvalidTransaction::UnableToCalculateGasLimit => {
-                write!(formatter, "unable to calculate gas limit",)
+                write!(formatter, "unable to calculate gas limit", )
             }
             InvalidTransaction::UnableToCalculateGasCost => {
-                write!(formatter, "unable to calculate gas cost",)
+                write!(formatter, "unable to calculate gas cost", )
             }
             InvalidTransaction::InvalidPricingMode { price_mode } => {
                 write!(
@@ -371,14 +373,14 @@ impl Display for InvalidTransaction {
                         index,
                     ),
                 }
-            },
+            }
             InvalidTransaction::CannotCalculateFieldsHash => write!(
                 formatter,
                 "cannot calculate a hash digest for the transaction"
             ),
             InvalidTransaction::EntryPointMustBeCall { entry_point } => {
                 write!(formatter, "entry point must be call: {entry_point}")
-            },
+            }
             InvalidTransaction::NoWasmLaneMatchesTransaction() => write!(formatter, "Could not match any generic wasm lane to the specified transaction"),
             InvalidTransaction::UnexpectedTransactionFieldEntries => write!(formatter, "There were entries in the fields map of the payload that could not be matched"),
             InvalidTransaction::ExpectedNamedArguments => {
@@ -398,6 +400,9 @@ impl Display for InvalidTransaction {
             }
             InvalidTransaction::PricingModeNotSupported => {
                 write!(formatter, "Pricing mode not supported")
+            }
+            InvalidTransaction::InvalidPaymentAmount => {
+                write!(formatter, "invalid payment amount")
             }
         }
     }
@@ -451,7 +456,8 @@ impl StdError for InvalidTransaction {
             | InvalidTransaction::ExpectedBytesArguments
             | InvalidTransaction::InvalidTransactionRuntime { .. }
             | InvalidTransaction::MissingSeed
-            | InvalidTransaction::PricingModeNotSupported => None,
+            | InvalidTransaction::PricingModeNotSupported
+            | InvalidTransaction::InvalidPaymentAmount => None,
         }
     }
 }

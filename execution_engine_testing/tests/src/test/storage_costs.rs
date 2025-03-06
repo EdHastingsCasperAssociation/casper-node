@@ -16,9 +16,9 @@ use casper_types::{
     bytesrepr::{Bytes, ToBytes},
     contracts::{ContractHash, ContractPackage, ContractVersionKey},
     AddressableEntityHash, BrTableCost, CLValue, ControlFlowCosts, EraId, Gas, Group, Groups,
-    HostFunctionCosts, Key, MessageLimits, OpcodeCosts, ProtocolVersion, RuntimeArgs, StorageCosts,
-    StoredValue, URef, WasmConfig, WasmV1Config, DEFAULT_V1_MAX_STACK_HEIGHT,
-    DEFAULT_V1_WASM_MAX_MEMORY, U512,
+    HostFunctionCostsV1, HostFunctionCostsV2, Key, MessageLimits, OpcodeCosts, ProtocolVersion,
+    RuntimeArgs, StorageCosts, StoredValue, URef, WasmConfig, WasmV1Config, WasmV2Config,
+    DEFAULT_MAX_STACK_HEIGHT, DEFAULT_WASM_MAX_MEMORY, U512,
 };
 #[cfg(not(feature = "use-as-wasm"))]
 use casper_types::{
@@ -54,7 +54,7 @@ const WRITE_SMALL_VALUE: &[u8] = b"1";
 const WRITE_LARGE_VALUE: &[u8] = b"1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111";
 
 const ADD_SMALL_VALUE: u64 = 1;
-const ADD_LARGE_VALUE: u64 = u64::max_value();
+const ADD_LARGE_VALUE: u64 = u64::MAX;
 
 const NEW_OPCODE_COSTS: OpcodeCosts = OpcodeCosts {
     bit: 0,
@@ -93,15 +93,21 @@ const NEW_OPCODE_COSTS: OpcodeCosts = OpcodeCosts {
     sign: 0,
 };
 
-static NEW_HOST_FUNCTION_COSTS: Lazy<HostFunctionCosts> = Lazy::new(HostFunctionCosts::zero);
+static NEW_HOST_FUNCTION_COSTS: Lazy<HostFunctionCostsV1> = Lazy::new(HostFunctionCostsV1::zero);
+static NEW_HOST_FUNCTION_COSTS_V2: Lazy<HostFunctionCostsV2> = Lazy::new(HostFunctionCostsV2::zero);
 static NO_COSTS_WASM_CONFIG: Lazy<WasmConfig> = Lazy::new(|| {
     let wasm_v1_config = WasmV1Config::new(
-        DEFAULT_V1_WASM_MAX_MEMORY,
-        DEFAULT_V1_MAX_STACK_HEIGHT,
+        DEFAULT_WASM_MAX_MEMORY,
+        DEFAULT_MAX_STACK_HEIGHT,
         NEW_OPCODE_COSTS,
         *NEW_HOST_FUNCTION_COSTS,
     );
-    WasmConfig::new(MessageLimits::default(), wasm_v1_config)
+    let wasm_v2_config = WasmV2Config::new(
+        DEFAULT_WASM_MAX_MEMORY,
+        NEW_OPCODE_COSTS,
+        *NEW_HOST_FUNCTION_COSTS_V2,
+    );
+    WasmConfig::new(MessageLimits::default(), wasm_v1_config, wasm_v2_config)
 });
 
 static NEW_PROTOCOL_VERSION: Lazy<ProtocolVersion> = Lazy::new(|| {

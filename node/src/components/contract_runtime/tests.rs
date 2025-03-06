@@ -477,7 +477,7 @@ mod test_mod {
         let key = Key::EntryPoint(
             EntryPointAddr::new_v1_entry_point_addr(entity_addr, entry_point_name).unwrap(),
         );
-        let entry_point = casper_types::EntryPoint::new(
+        let entry_point = casper_types::EntityEntryPoint::new(
             entry_point_name,
             vec![],
             CLType::Unit,

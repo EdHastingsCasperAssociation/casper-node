@@ -38,7 +38,7 @@ use casper_types::{
     },
     addressable_entity::{
         self, ActionThresholds, ActionType, AddressableEntity, AddressableEntityHash,
-        AssociatedKeys, ContractRuntimeTag, EntityKindTag, EntryPoint, EntryPointAccess,
+        AssociatedKeys, ContractRuntimeTag, EntityEntryPoint, EntityKindTag, EntryPointAccess,
         EntryPointType, EntryPoints, MessageTopicError, MessageTopics, NamedKeyAddr, NamedKeyValue,
         Parameter, Weight, DEFAULT_ENTRY_POINT_NAME,
     },
@@ -1034,9 +1034,7 @@ where
 
         let result = match entry_point_name {
             auction::METHOD_GET_ERA_VALIDATORS => (|| {
-                runtime
-                    .context
-                    .charge_gas(auction_costs.get_era_validators.into())?;
+                runtime.charge_system_contract_call::<u64>(auction_costs.get_era_validators)?;
 
                 let result = runtime.get_era_validators().map_err(Self::reverter)?;
 
@@ -1233,7 +1231,7 @@ where
 
             // Type: `fn slash(validator_account_hashes: &[AccountHash]) -> Result<(), ExecError>`
             auction::METHOD_SLASH => (|| {
-                runtime.context.charge_gas(auction_costs.slash.into())?;
+                runtime.charge_system_contract_call(auction_costs.slash)?;
 
                 let validator_public_keys =
                     Self::get_named_argument(runtime_args, auction::ARG_VALIDATOR_PUBLIC_KEYS)?;
@@ -1246,9 +1244,7 @@ where
             // Type: `fn distribute(reward_factors: BTreeMap<PublicKey, u64>) -> Result<(),
             // ExecError>`
             auction::METHOD_DISTRIBUTE => (|| {
-                runtime
-                    .context
-                    .charge_gas(auction_costs.distribute.into())?;
+                runtime.charge_system_contract_call(auction_costs.distribute)?;
                 let rewards = Self::get_named_argument(runtime_args, auction::ARG_REWARDS_MAP)?;
                 runtime.distribute(rewards).map_err(Self::reverter)?;
                 CLValue::from_t(()).map_err(Self::reverter)
@@ -1256,9 +1252,7 @@ where
 
             // Type: `fn read_era_id() -> Result<EraId, ExecError>`
             auction::METHOD_READ_ERA_ID => (|| {
-                runtime
-                    .context
-                    .charge_gas(auction_costs.read_era_id.into())?;
+                runtime.charge_system_contract_call(auction_costs.read_era_id)?;
 
                 let result = runtime.read_era_id().map_err(Self::reverter)?;
                 CLValue::from_t(result).map_err(Self::reverter)
@@ -1459,7 +1453,7 @@ where
     fn get_context_key_for_contract_call(
         &self,
         entity_addr: EntityAddr,
-        entry_point: &EntryPoint,
+        entry_point: &EntityEntryPoint,
     ) -> Result<Key, ExecError> {
         let current = self.context.entry_point_type();
         let next = entry_point.entry_point_type();
@@ -1617,9 +1611,7 @@ where
                     }
                 };
 
-                let package_hash = footprint
-                    .package_hash()
-                    .ok_or_else(|| ExecError::InvalidContext)?;
+                let package_hash = footprint.package_hash().ok_or(ExecError::InvalidContext)?;
                 let package: Package = self.context.get_package(package_hash)?;
 
                 // System contract hashes are disabled at upgrade point
@@ -1799,7 +1791,7 @@ where
 
         let context_entity_hash = context_entity_key
             .into_entity_hash_addr()
-            .ok_or_else(|| ExecError::UnexpectedKeyVariant(context_entity_key))?;
+            .ok_or(ExecError::UnexpectedKeyVariant(context_entity_key))?;
 
         let (should_attenuate_urefs, should_validate_urefs) = {
             // Determines if this call originated from the system account based on a first
@@ -1935,9 +1927,7 @@ where
         }
 
         let module: Module = {
-            let byte_code_addr = footprint
-                .wasm_hash()
-                .ok_or_else(|| ExecError::InvalidContext)?;
+            let byte_code_addr = footprint.wasm_hash().ok_or(ExecError::InvalidContext)?;
 
             let byte_code_key = match footprint.entity_kind() {
                 EntityKind::System(_) | EntityKind::Account(_) => {
@@ -1995,7 +1985,7 @@ where
         let transfers = self.context.transfers_mut();
         runtime.context.transfers().clone_into(transfers);
 
-        return match result {
+        match result {
             Ok(_) => {
                 // If `Ok` and the `host_buffer` is `None`, the contract's execution succeeded but
                 // did not explicitly call `runtime::ret()`.  Treat as though the
@@ -2053,7 +2043,7 @@ where
                 }
                 Err(ExecError::Interpreter(error.into()))
             }
-        };
+        }
     }
 
     fn call_contract_host_buffer(
@@ -2806,7 +2796,7 @@ where
                 }
             }
 
-            let main_purse = if !requires_purse_creation {
+            let main_purse = if requires_purse_creation {
                 self.create_purse()?
             } else {
                 previous_entity.main_purse()

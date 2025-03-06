@@ -24,7 +24,7 @@ use casper_types::{
     api_error,
     bytesrepr::ToBytes,
     contracts::{ContractHash, ContractPackageHash},
-    runtime_args, AccessRights, ApiError, CLType, CLValue, EntryPoint, EntryPointAccess,
+    runtime_args, AccessRights, ApiError, CLType, CLValue, EntityEntryPoint, EntryPointAccess,
     EntryPointPayment, EntryPointType, EntryPoints, EraId, Key, NamedKeys, Parameter,
     TransferredTo, URef, U512,
 };
@@ -43,7 +43,7 @@ extern "C" fn noop() {}
 
 fn store_noop_contract(maybe_contract_pkg_hash: Option<ContractPackageHash>) -> ContractHash {
     let mut entry_points = EntryPoints::new();
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         NOOP,
         vec![],
         CLType::Unit,
@@ -447,7 +447,7 @@ pub extern "C" fn call() {
             let entry_points_len: u32 = runtime::get_named_arg("entry_points_len");
             let mut entry_points = EntryPoints::new();
             for entry_point_index in 0..entry_points_len {
-                entry_points.add_entry_point(EntryPoint::new(
+                entry_points.add_entry_point(EntityEntryPoint::new(
                     format!("function_{entry_point_index}"),
                     vec![Parameter::new("a", CLType::PublicKey); 10],
                     CLType::Unit,

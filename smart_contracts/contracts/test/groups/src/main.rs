@@ -15,7 +15,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    addressable_entity::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
+    addressable_entity::{EntityEntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
     contracts::ContractPackageHash,
     runtime_args,
     system::{handle_payment, standard_payment},
@@ -127,7 +127,7 @@ fn create_group(package_hash: ContractPackageHash) -> URef {
 /// Restricted uref comes from creating a group and will be assigned to a smart contract
 fn create_entry_points_1() -> EntryPoints {
     let mut entry_points = EntryPoints::new();
-    let restricted_session = EntryPoint::new(
+    let restricted_session = EntityEntryPoint::new(
         RESTRICTED_SESSION.to_string(),
         Vec::new(),
         CLType::I32,
@@ -137,7 +137,7 @@ fn create_entry_points_1() -> EntryPoints {
     );
     entry_points.add_entry_point(restricted_session);
 
-    let restricted_contract = EntryPoint::new(
+    let restricted_contract = EntityEntryPoint::new(
         RESTRICTED_CONTRACT.to_string(),
         Vec::new(),
         CLType::I32,
@@ -147,7 +147,7 @@ fn create_entry_points_1() -> EntryPoints {
     );
     entry_points.add_entry_point(restricted_contract);
 
-    let restricted_session_caller = EntryPoint::new(
+    let restricted_session_caller = EntityEntryPoint::new(
         RESTRICTED_SESSION_CALLER.to_string(),
         vec![Parameter::new(ARG_PACKAGE_HASH, CLType::Key)],
         CLType::I32,
@@ -157,7 +157,7 @@ fn create_entry_points_1() -> EntryPoints {
     );
     entry_points.add_entry_point(restricted_session_caller);
 
-    let restricted_contract = EntryPoint::new(
+    let restricted_contract = EntityEntryPoint::new(
         RESTRICTED_CONTRACT.to_string(),
         Vec::new(),
         CLType::I32,
@@ -167,7 +167,7 @@ fn create_entry_points_1() -> EntryPoints {
     );
     entry_points.add_entry_point(restricted_contract);
 
-    let unrestricted_contract_caller = EntryPoint::new(
+    let unrestricted_contract_caller = EntityEntryPoint::new(
         UNRESTRICTED_CONTRACT_CALLER.to_string(),
         Vec::new(),
         CLType::I32,
@@ -181,7 +181,7 @@ fn create_entry_points_1() -> EntryPoints {
     );
     entry_points.add_entry_point(unrestricted_contract_caller);
 
-    let unrestricted_contract_caller_as_session = EntryPoint::new(
+    let unrestricted_contract_caller_as_session = EntityEntryPoint::new(
         RESTRICTED_CONTRACT_CALLER_AS_SESSION.to_string(),
         Vec::new(),
         CLType::I32,
@@ -195,7 +195,7 @@ fn create_entry_points_1() -> EntryPoints {
     );
     entry_points.add_entry_point(unrestricted_contract_caller_as_session);
 
-    let uncallable_session = EntryPoint::new(
+    let uncallable_session = EntityEntryPoint::new(
         UNCALLABLE_SESSION.to_string(),
         Vec::new(),
         CLType::I32,
@@ -209,7 +209,7 @@ fn create_entry_points_1() -> EntryPoints {
     );
     entry_points.add_entry_point(uncallable_session);
 
-    let uncallable_contract = EntryPoint::new(
+    let uncallable_contract = EntityEntryPoint::new(
         UNCALLABLE_CONTRACT.to_string(),
         Vec::new(),
         CLType::I32,
@@ -225,7 +225,7 @@ fn create_entry_points_1() -> EntryPoints {
 
     // Directly calls entry_points that are protected with empty group of lists to verify that even
     // though they're not callable externally, they're still visible in the WASM.
-    let call_restricted_entry_points = EntryPoint::new(
+    let call_restricted_entry_points = EntityEntryPoint::new(
         CALL_RESTRICTED_ENTRY_POINTS.to_string(),
         Vec::new(),
         CLType::I32,
@@ -239,7 +239,7 @@ fn create_entry_points_1() -> EntryPoints {
     );
     entry_points.add_entry_point(call_restricted_entry_points);
 
-    let restricted_standard_payment = EntryPoint::new(
+    let restricted_standard_payment = EntityEntryPoint::new(
         RESTRICTED_STANDARD_PAYMENT.to_string(),
         vec![Parameter::new(
             standard_payment::ARG_AMOUNT,

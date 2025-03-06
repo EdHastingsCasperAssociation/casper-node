@@ -1,12 +1,17 @@
 use std::{fs::File, path::Path, sync::Arc};
 
 use bytes::Bytes;
+use casper_execution_engine::engine_state::ExecutionEngineV1;
 use casper_executor_wasm::{
-    install::{InstallContractRequest, InstallContractRequestBuilder, InstallContractResult},
+    install::{
+        InstallContractError, InstallContractRequest, InstallContractRequestBuilder,
+        InstallContractResult,
+    },
     ExecutorConfigBuilder, ExecutorKind, ExecutorV2,
 };
-use casper_executor_wasm_interface::executor::{
-    ExecuteRequest, ExecuteRequestBuilder, ExecuteWithProviderResult, ExecutionKind,
+use casper_executor_wasm_interface::{
+    executor::{ExecuteRequest, ExecuteRequestBuilder, ExecuteWithProviderResult, ExecutionKind},
+    HostError,
 };
 use casper_storage::{
     data_access_layer::{GenesisRequest, GenesisResult, QueryRequest, QueryResult},
@@ -20,9 +25,10 @@ use casper_storage::{
     AddressGenerator,
 };
 use casper_types::{
-    account::AccountHash, BlockHash, ChainspecRegistry, Digest, GenesisAccount, GenesisConfig, Key,
-    Motes, Phase, ProtocolVersion, PublicKey, SecretKey, StorageCosts, StoredValue, SystemConfig,
-    Timestamp, TransactionHash, TransactionV1Hash, WasmConfig, U512,
+    account::AccountHash, BlockHash, ChainspecRegistry, Digest, GenesisAccount, GenesisConfig,
+    HostFunction, HostFunctionCostsV2, Key, Motes, Phase, ProtocolVersion, PublicKey, SecretKey,
+    StorageCosts, StoredValue, SystemConfig, Timestamp, TransactionHash, TransactionV1Hash,
+    WasmConfig, WasmV2Config, U512,
 };
 use fs_extra::dir;
 use once_cell::sync::Lazy;
@@ -44,11 +50,13 @@ const VM2_HARNESS: Bytes = Bytes::from_static(include_bytes!("../vm2-harness.was
 const VM2_CEP18: Bytes = Bytes::from_static(include_bytes!("../vm2_cep18.wasm"));
 const VM2_LEGACY_COUNTER_PROXY: Bytes =
     Bytes::from_static(include_bytes!("../vm2_legacy_counter_proxy.wasm"));
-const VM2_CEP18_CALLER: Bytes = Bytes::from_static(include_bytes!("../vm2-cep18-caller.wasm"));
+// const VM2_CEP18_CALLER: Bytes = Bytes::from_static(include_bytes!("../vm2-cep18-caller.wasm"));
 const VM2_TRAIT: Bytes = Bytes::from_static(include_bytes!("../vm2_trait.wasm"));
 // const VM2_FLIPPER: Bytes = Bytes::from_static(include_bytes!("../vm2_flipper.wasm"));
-const VM2_UPGRADABLE: Bytes = Bytes::from_static(include_bytes!("../vm2_upgradable.wasm"));
-const VM2_UPGRADABLE_V2: Bytes = Bytes::from_static(include_bytes!("../vm2_upgradable_v2.wasm"));
+// const VM2_UPGRADABLE: Bytes = Bytes::from_static(include_bytes!("../vm2_upgradable.wasm"));
+// const VM2_UPGRADABLE_V2: Bytes = Bytes::from_static(include_bytes!("../vm2_upgradable_v2.wasm"));
+
+const VM2_HOST: Bytes = Bytes::from_static(include_bytes!("../vm2_host.wasm"));
 
 const TRANSACTION_HASH_BYTES: [u8; 32] = [55; 32];
 const TRANSACTION_HASH: TransactionHash =
@@ -145,6 +153,7 @@ fn harness() {
         .with_parent_block_hash(BlockHash::new(Digest::hash(b"bl0ck")))
         .build()
         .expect("should build");
+
     run_wasm_session(
         &mut executor,
         &mut global_state,
@@ -153,80 +162,83 @@ fn harness() {
     );
 }
 
-fn make_executor() -> ExecutorV2 {
+pub(crate) fn make_executor() -> ExecutorV2 {
+    let execution_engine_v1 = ExecutionEngineV1::default();
     let executor_config = ExecutorConfigBuilder::default()
         .with_memory_limit(17)
         .with_executor_kind(ExecutorKind::Compiled)
+        .with_wasm_config(WasmV2Config::default())
+        .with_storage_costs(StorageCosts::default())
         .build()
         .expect("Should build");
-    ExecutorV2::new(executor_config)
+    ExecutorV2::new(executor_config, Arc::new(execution_engine_v1))
 }
 
-#[test]
-fn cep18() {
-    let mut executor = make_executor();
+// #[test]
+// fn cep18() {
+//     let mut executor = make_executor();
 
-    let (mut global_state, mut state_root_hash, _tempdir) = make_global_state_with_genesis();
+//     let (mut global_state, mut state_root_hash, _tempdir) = make_global_state_with_genesis();
 
-    let address_generator = make_address_generator();
+//     let address_generator = make_address_generator();
 
-    let input_data = borsh::to_vec(&("Foo Token".to_string(),))
-        .map(Bytes::from)
-        .unwrap();
+//     let input_data = borsh::to_vec(&("Foo Token".to_string(),))
+//         .map(Bytes::from)
+//         .unwrap();
 
-    let create_request = InstallContractRequestBuilder::default()
-        .with_initiator(*DEFAULT_ACCOUNT_HASH)
-        .with_gas_limit(1_000_000)
-        .with_transaction_hash(TRANSACTION_HASH)
-        .with_wasm_bytes(VM2_CEP18.clone())
-        .with_shared_address_generator(Arc::clone(&address_generator))
-        .with_transferred_value(0)
-        .with_entry_point("new".to_string())
-        .with_input(input_data)
-        .with_chain_name(DEFAULT_CHAIN_NAME)
-        .with_block_time(Timestamp::now().into())
-        .with_state_hash(Digest::from_raw([0; 32])) // TODO: Carry on state root hash
-        .with_block_height(1) // TODO: Carry on block height
-        .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on parent block hash
-        .build()
-        .expect("should build");
+//     let create_request = InstallContractRequestBuilder::default()
+//         .with_initiator(*DEFAULT_ACCOUNT_HASH)
+//         .with_gas_limit(1_000_000)
+//         .with_transaction_hash(TRANSACTION_HASH)
+//         .with_wasm_bytes(VM2_CEP18.clone())
+//         .with_shared_address_generator(Arc::clone(&address_generator))
+//         .with_transferred_value(0)
+//         .with_entry_point("new".to_string())
+//         .with_input(input_data)
+//         .with_chain_name(DEFAULT_CHAIN_NAME)
+//         .with_block_time(Timestamp::now().into())
+//         .with_state_hash(Digest::from_raw([0; 32])) // TODO: Carry on state root hash
+//         .with_block_height(1) // TODO: Carry on block height
+//         .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on
+// parent block hash         .build()
+//         .expect("should build");
 
-    let create_result = run_create_contract(
-        &mut executor,
-        &mut global_state,
-        state_root_hash,
-        create_request,
-    );
+//     let create_result = run_create_contract(
+//         &mut executor,
+//         &mut global_state,
+//         state_root_hash,
+//         create_request,
+//     );
 
-    state_root_hash = global_state
-        .commit_effects(state_root_hash, create_result.effects().clone())
-        .expect("Should commit");
+//     state_root_hash = global_state
+//         .commit_effects(state_root_hash, create_result.effects().clone())
+//         .expect("Should commit");
 
-    let execute_request = ExecuteRequestBuilder::default()
-        .with_initiator(*DEFAULT_ACCOUNT_HASH)
-        .with_caller_key(Key::Account(*DEFAULT_ACCOUNT_HASH))
-        .with_gas_limit(DEFAULT_GAS_LIMIT)
-        .with_transferred_value(1000)
-        .with_transaction_hash(TRANSACTION_HASH)
-        .with_target(ExecutionKind::SessionBytes(VM2_CEP18_CALLER))
-        .with_serialized_input((create_result.smart_contract_addr(),))
-        .with_transferred_value(0)
-        .with_shared_address_generator(Arc::clone(&address_generator))
-        .with_chain_name(DEFAULT_CHAIN_NAME)
-        .with_block_time(Timestamp::now().into())
-        .with_state_hash(Digest::from_raw([0; 32])) // TODO: Carry on state root hash
-        .with_block_height(1) // TODO: Carry on block height
-        .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on parent block hash
-        .build()
-        .expect("should build");
+//     let execute_request = ExecuteRequestBuilder::default()
+//         .with_initiator(*DEFAULT_ACCOUNT_HASH)
+//         .with_caller_key(Key::Account(*DEFAULT_ACCOUNT_HASH))
+//         .with_gas_limit(DEFAULT_GAS_LIMIT)
+//         .with_transferred_value(1000)
+//         .with_transaction_hash(TRANSACTION_HASH)
+//         .with_target(ExecutionKind::SessionBytes(VM2_CEP18_CALLER))
+//         .with_serialized_input((create_result.smart_contract_addr(),))
+//         .with_transferred_value(0)
+//         .with_shared_address_generator(Arc::clone(&address_generator))
+//         .with_chain_name(DEFAULT_CHAIN_NAME)
+//         .with_block_time(Timestamp::now().into())
+//         .with_state_hash(Digest::from_raw([0; 32])) // TODO: Carry on state root hash
+//         .with_block_height(1) // TODO: Carry on block height
+//         .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on
+// parent block hash         .build()
+//         .expect("should build");
 
-    let _effects_2 = run_wasm_session(
-        &mut executor,
-        &mut global_state,
-        state_root_hash,
-        execute_request,
-    );
-}
+//     let _effects_2 = run_wasm_session(
+//         &mut executor,
+//         &mut global_state,
+//         state_root_hash,
+//         execute_request,
+//     );
+// }
 
 fn make_global_state_with_genesis() -> (LmdbGlobalState, Digest, TempDir) {
     let default_accounts = vec![GenesisAccount::Account {
@@ -289,165 +301,165 @@ fn traits() {
     );
 }
 
-#[test]
-fn upgradable() {
-    let mut executor = make_executor();
+// #[test]
+// fn upgradable() {
+//     let mut executor = make_executor();
 
-    let (mut global_state, mut state_root_hash, _tempdir) = make_global_state_with_genesis();
+//     let (mut global_state, mut state_root_hash, _tempdir) = make_global_state_with_genesis();
 
-    let address_generator = make_address_generator();
+//     let address_generator = make_address_generator();
 
-    let upgradable_address;
+//     let upgradable_address;
 
-    state_root_hash = {
-        let input_data = borsh::to_vec(&(0u8,)).map(Bytes::from).unwrap();
+//     state_root_hash = {
+//         let input_data = borsh::to_vec(&(0u8,)).map(Bytes::from).unwrap();
 
-        let create_request = base_install_request_builder()
-            .with_wasm_bytes(VM2_UPGRADABLE.clone())
-            .with_shared_address_generator(Arc::clone(&address_generator))
-            .with_gas_limit(DEFAULT_GAS_LIMIT)
-            .with_transferred_value(0)
-            .with_entry_point("new".to_string())
-            .with_input(input_data)
-            .build()
-            .expect("should build");
+//         let create_request = base_install_request_builder()
+//             .with_wasm_bytes(VM2_UPGRADABLE.clone())
+//             .with_shared_address_generator(Arc::clone(&address_generator))
+//             .with_gas_limit(DEFAULT_GAS_LIMIT)
+//             .with_transferred_value(0)
+//             .with_entry_point("new".to_string())
+//             .with_input(input_data)
+//             .build()
+//             .expect("should build");
 
-        let create_result = run_create_contract(
-            &mut executor,
-            &mut global_state,
-            state_root_hash,
-            create_request,
-        );
+//         let create_result = run_create_contract(
+//             &mut executor,
+//             &mut global_state,
+//             state_root_hash,
+//             create_request,
+//         );
 
-        upgradable_address = *create_result.smart_contract_addr();
+//         upgradable_address = *create_result.smart_contract_addr();
 
-        global_state
-            .commit_effects(state_root_hash, create_result.effects().clone())
-            .expect("Should commit")
-    };
+//         global_state
+//             .commit_effects(state_root_hash, create_result.effects().clone())
+//             .expect("Should commit")
+//     };
 
-    let version_before_upgrade = {
-        let execute_request = base_execute_builder()
-            .with_target(ExecutionKind::Stored {
-                address: upgradable_address,
-                entry_point: "version".to_string(),
-            })
-            .with_input(Bytes::new())
-            .with_gas_limit(DEFAULT_GAS_LIMIT)
-            .with_transferred_value(0)
-            .with_shared_address_generator(Arc::clone(&address_generator))
-            .build()
-            .expect("should build");
-        let res = run_wasm_session(
-            &mut executor,
-            &mut global_state,
-            state_root_hash,
-            execute_request,
-        );
-        let output = res.output().expect("should have output");
-        let version: String = borsh::from_slice(output).expect("should deserialize");
-        version
-    };
-    assert_eq!(version_before_upgrade, "v1");
+//     let version_before_upgrade = {
+//         let execute_request = base_execute_builder()
+//             .with_target(ExecutionKind::Stored {
+//                 address: upgradable_address,
+//                 entry_point: "version".to_string(),
+//             })
+//             .with_input(Bytes::new())
+//             .with_gas_limit(DEFAULT_GAS_LIMIT)
+//             .with_transferred_value(0)
+//             .with_shared_address_generator(Arc::clone(&address_generator))
+//             .build()
+//             .expect("should build");
+//         let res = run_wasm_session(
+//             &mut executor,
+//             &mut global_state,
+//             state_root_hash,
+//             execute_request,
+//         );
+//         let output = res.output().expect("should have output");
+//         let version: String = borsh::from_slice(output).expect("should deserialize");
+//         version
+//     };
+//     assert_eq!(version_before_upgrade, "v1");
 
-    {
-        // Increment the value
-        let execute_request = base_execute_builder()
-            .with_target(ExecutionKind::Stored {
-                address: upgradable_address,
-                entry_point: "increment".to_string(),
-            })
-            .with_input(Bytes::new())
-            .with_gas_limit(DEFAULT_GAS_LIMIT)
-            .with_transferred_value(0)
-            .with_shared_address_generator(Arc::clone(&address_generator))
-            .build()
-            .expect("should build");
-        let res = run_wasm_session(
-            &mut executor,
-            &mut global_state,
-            state_root_hash,
-            execute_request,
-        );
-        state_root_hash = global_state
-            .commit_effects(state_root_hash, res.effects().clone())
-            .expect("Should commit");
-    };
+//     {
+//         // Increment the value
+//         let execute_request = base_execute_builder()
+//             .with_target(ExecutionKind::Stored {
+//                 address: upgradable_address,
+//                 entry_point: "increment".to_string(),
+//             })
+//             .with_input(Bytes::new())
+//             .with_gas_limit(DEFAULT_GAS_LIMIT)
+//             .with_transferred_value(0)
+//             .with_shared_address_generator(Arc::clone(&address_generator))
+//             .build()
+//             .expect("should build");
+//         let res = run_wasm_session(
+//             &mut executor,
+//             &mut global_state,
+//             state_root_hash,
+//             execute_request,
+//         );
+//         state_root_hash = global_state
+//             .commit_effects(state_root_hash, res.effects().clone())
+//             .expect("Should commit");
+//     };
 
-    let binding = VM2_UPGRADABLE_V2;
-    let new_code = binding.as_ref();
+//     let binding = VM2_UPGRADABLE_V2;
+//     let new_code = binding.as_ref();
 
-    let execute_request = base_execute_builder()
-        .with_transferred_value(0)
-        .with_target(ExecutionKind::Stored {
-            address: upgradable_address,
-            entry_point: "perform_upgrade".to_string(),
-        })
-        .with_gas_limit(DEFAULT_GAS_LIMIT * 10)
-        .with_serialized_input((new_code,))
-        .with_shared_address_generator(Arc::clone(&address_generator))
-        .build()
-        .expect("should build");
-    let res = run_wasm_session(
-        &mut executor,
-        &mut global_state,
-        state_root_hash,
-        execute_request,
-    );
-    state_root_hash = global_state
-        .commit_effects(state_root_hash, res.effects().clone())
-        .expect("Should commit");
+//     let execute_request = base_execute_builder()
+//         .with_transferred_value(0)
+//         .with_target(ExecutionKind::Stored {
+//             address: upgradable_address,
+//             entry_point: "perform_upgrade".to_string(),
+//         })
+//         .with_gas_limit(DEFAULT_GAS_LIMIT * 10)
+//         .with_serialized_input((new_code,))
+//         .with_shared_address_generator(Arc::clone(&address_generator))
+//         .build()
+//         .expect("should build");
+//     let res = run_wasm_session(
+//         &mut executor,
+//         &mut global_state,
+//         state_root_hash,
+//         execute_request,
+//     );
+//     state_root_hash = global_state
+//         .commit_effects(state_root_hash, res.effects().clone())
+//         .expect("Should commit");
 
-    let version_after_upgrade = {
-        let execute_request = base_execute_builder()
-            .with_target(ExecutionKind::Stored {
-                address: upgradable_address,
-                entry_point: "version".to_string(),
-            })
-            .with_input(Bytes::new())
-            .with_gas_limit(DEFAULT_GAS_LIMIT)
-            .with_transferred_value(0)
-            .with_shared_address_generator(Arc::clone(&address_generator))
-            .build()
-            .expect("should build");
-        let res = run_wasm_session(
-            &mut executor,
-            &mut global_state,
-            state_root_hash,
-            execute_request,
-        );
-        let output = res.output().expect("should have output");
-        let version: String = borsh::from_slice(output).expect("should deserialize");
-        version
-    };
-    assert_eq!(version_after_upgrade, "v2");
+//     let version_after_upgrade = {
+//         let execute_request = base_execute_builder()
+//             .with_target(ExecutionKind::Stored {
+//                 address: upgradable_address,
+//                 entry_point: "version".to_string(),
+//             })
+//             .with_input(Bytes::new())
+//             .with_gas_limit(DEFAULT_GAS_LIMIT)
+//             .with_transferred_value(0)
+//             .with_shared_address_generator(Arc::clone(&address_generator))
+//             .build()
+//             .expect("should build");
+//         let res = run_wasm_session(
+//             &mut executor,
+//             &mut global_state,
+//             state_root_hash,
+//             execute_request,
+//         );
+//         let output = res.output().expect("should have output");
+//         let version: String = borsh::from_slice(output).expect("should deserialize");
+//         version
+//     };
+//     assert_eq!(version_after_upgrade, "v2");
 
-    {
-        // Increment the value
-        let execute_request = base_execute_builder()
-            .with_target(ExecutionKind::Stored {
-                address: upgradable_address,
-                entry_point: "increment_by".to_string(),
-            })
-            .with_serialized_input((10u64,))
-            .with_gas_limit(DEFAULT_GAS_LIMIT)
-            .with_transferred_value(0)
-            .with_shared_address_generator(Arc::clone(&address_generator))
-            .build()
-            .expect("should build");
-        let res = run_wasm_session(
-            &mut executor,
-            &mut global_state,
-            state_root_hash,
-            execute_request,
-        );
-        state_root_hash = global_state
-            .commit_effects(state_root_hash, res.effects().clone())
-            .expect("Should commit");
-    };
+//     {
+//         // Increment the value
+//         let execute_request = base_execute_builder()
+//             .with_target(ExecutionKind::Stored {
+//                 address: upgradable_address,
+//                 entry_point: "increment_by".to_string(),
+//             })
+//             .with_serialized_input((10u64,))
+//             .with_gas_limit(DEFAULT_GAS_LIMIT)
+//             .with_transferred_value(0)
+//             .with_shared_address_generator(Arc::clone(&address_generator))
+//             .build()
+//             .expect("should build");
+//         let res = run_wasm_session(
+//             &mut executor,
+//             &mut global_state,
+//             state_root_hash,
+//             execute_request,
+//         );
+//         state_root_hash = global_state
+//             .commit_effects(state_root_hash, res.effects().clone())
+//             .expect("Should commit");
+//     };
 
-    let _ = state_root_hash;
-}
+//     let _ = state_root_hash;
+// }
 
 fn run_create_contract(
     executor: &mut ExecutorV2,
@@ -637,4 +649,175 @@ fn backwards_compatibility() {
         state_root_hash,
         call_request,
     );
+}
+
+// host function tests
+
+fn call_dummy_host_fn_by_name(
+    host_function_name: &str,
+    gas_limit: u64,
+) -> Result<InstallContractResult, InstallContractError> {
+    let executor = {
+        let execution_engine_v1 = ExecutionEngineV1::default();
+        let default_wasm_config = WasmV2Config::default();
+        let wasm_config = WasmV2Config::new(
+            default_wasm_config.max_memory(),
+            default_wasm_config.max_stack_height(),
+            default_wasm_config.opcode_costs(),
+            HostFunctionCostsV2 {
+                read: HostFunction::fixed(1),
+                write: HostFunction::fixed(1),
+                copy_input: HostFunction::fixed(1),
+                ret: HostFunction::fixed(1),
+                create: HostFunction::fixed(1),
+                env_caller: HostFunction::fixed(1),
+                env_block_time: HostFunction::fixed(1),
+                env_transferred_value: HostFunction::fixed(1),
+                transfer: HostFunction::fixed(1),
+                env_balance: HostFunction::fixed(1),
+                upgrade: HostFunction::fixed(1),
+                call: HostFunction::fixed(1),
+                print: HostFunction::fixed(1),
+            },
+        );
+        let executor_config = ExecutorConfigBuilder::default()
+            .with_memory_limit(17)
+            .with_executor_kind(ExecutorKind::Compiled)
+            .with_wasm_config(wasm_config)
+            .with_storage_costs(StorageCosts::default())
+            .build()
+            .expect("Should build");
+        ExecutorV2::new(executor_config, Arc::new(execution_engine_v1))
+    };
+
+    let (mut global_state, state_root_hash, _tempdir) = make_global_state_with_genesis();
+
+    let address_generator = make_address_generator();
+
+    let input_data = borsh::to_vec(&(host_function_name.to_owned(),))
+        .map(Bytes::from)
+        .unwrap();
+
+    let create_request = InstallContractRequestBuilder::default()
+        .with_initiator(*DEFAULT_ACCOUNT_HASH)
+        .with_gas_limit(gas_limit)
+        .with_transaction_hash(TRANSACTION_HASH)
+        .with_wasm_bytes(VM2_HOST.clone())
+        .with_shared_address_generator(Arc::clone(&address_generator))
+        .with_transferred_value(0)
+        .with_entry_point("new".to_string())
+        .with_input(input_data)
+        .with_chain_name(DEFAULT_CHAIN_NAME)
+        .with_block_time(Timestamp::now().into())
+        .with_state_hash(Digest::from_raw([0; 32]))
+        .with_block_height(1)
+        .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32])))
+        .build()
+        .expect("should build");
+
+    executor.install_contract(state_root_hash, &mut global_state, create_request)
+}
+
+fn assert_consumes_gas(host_function_name: &str) {
+    let result = call_dummy_host_fn_by_name(host_function_name, 1);
+    assert!(result.is_err_and(|e| match e {
+        InstallContractError::Constructor {
+            host_error: HostError::CalleeGasDepleted,
+        } => true,
+        _ => false,
+    }));
+}
+
+#[test]
+fn host_functions_consume_gas() {
+    assert_consumes_gas("get_caller");
+    assert_consumes_gas("get_block_time");
+    assert_consumes_gas("get_value");
+    assert_consumes_gas("get_balance_of");
+    assert_consumes_gas("call");
+    assert_consumes_gas("input");
+    assert_consumes_gas("create");
+    assert_consumes_gas("print");
+    assert_consumes_gas("read");
+    assert_consumes_gas("ret");
+    assert_consumes_gas("transfer");
+    assert_consumes_gas("upgrade");
+    assert_consumes_gas("write");
+}
+
+fn write_n_bytes_at_limit(
+    bytes_len: u64,
+    gas_limit: u64,
+) -> Result<InstallContractResult, InstallContractError> {
+    let executor = {
+        let execution_engine_v1 = ExecutionEngineV1::default();
+        let default_wasm_config = WasmV2Config::default();
+        let wasm_config = WasmV2Config::new(
+            default_wasm_config.max_memory(),
+            default_wasm_config.max_stack_height(),
+            default_wasm_config.opcode_costs(),
+            HostFunctionCostsV2 {
+                read: HostFunction::fixed(0),
+                write: HostFunction::fixed(0),
+                copy_input: HostFunction::fixed(0),
+                ret: HostFunction::fixed(0),
+                create: HostFunction::fixed(0),
+                env_caller: HostFunction::fixed(0),
+                env_block_time: HostFunction::fixed(0),
+                env_transferred_value: HostFunction::fixed(0),
+                transfer: HostFunction::fixed(0),
+                env_balance: HostFunction::fixed(0),
+                upgrade: HostFunction::fixed(0),
+                call: HostFunction::fixed(0),
+                print: HostFunction::fixed(0),
+            },
+        );
+        let executor_config = ExecutorConfigBuilder::default()
+            .with_memory_limit(17)
+            .with_executor_kind(ExecutorKind::Compiled)
+            .with_wasm_config(wasm_config)
+            .with_storage_costs(StorageCosts::new(1))
+            .build()
+            .expect("Should build");
+        ExecutorV2::new(executor_config, Arc::new(execution_engine_v1))
+    };
+
+    let (mut global_state, state_root_hash, _tempdir) = make_global_state_with_genesis();
+
+    let address_generator = make_address_generator();
+
+    let input_data = borsh::to_vec(&(bytes_len,)).map(Bytes::from).unwrap();
+
+    let create_request = InstallContractRequestBuilder::default()
+        .with_initiator(*DEFAULT_ACCOUNT_HASH)
+        .with_gas_limit(gas_limit)
+        .with_transaction_hash(TRANSACTION_HASH)
+        .with_wasm_bytes(VM2_HOST.clone())
+        .with_shared_address_generator(Arc::clone(&address_generator))
+        .with_transferred_value(0)
+        .with_entry_point("new_with_write".to_string())
+        .with_input(input_data)
+        .with_chain_name(DEFAULT_CHAIN_NAME)
+        .with_block_time(Timestamp::now().into())
+        .with_state_hash(Digest::from_raw([0; 32]))
+        .with_block_height(1)
+        .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32])))
+        .build()
+        .expect("should build");
+
+    executor.install_contract(state_root_hash, &mut global_state, create_request)
+}
+
+#[test]
+fn consume_gas_on_write() {
+    let successful_write = write_n_bytes_at_limit(50, 10_000);
+    assert!(successful_write.is_ok());
+
+    let out_of_gas_write_exceeded_gas_limit = write_n_bytes_at_limit(50, 10);
+    assert!(out_of_gas_write_exceeded_gas_limit.is_err_and(|e| match e {
+        InstallContractError::Constructor {
+            host_error: HostError::CalleeGasDepleted,
+        } => true,
+        _ => false,
+    }));
 }

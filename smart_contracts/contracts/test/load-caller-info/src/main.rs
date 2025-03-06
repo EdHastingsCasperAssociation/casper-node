@@ -10,7 +10,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    AddressableEntityHash, ApiError, CLType, EntryPoint, EntryPointAccess, EntryPointPayment,
+    AddressableEntityHash, ApiError, CLType, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
     EntryPointType, EntryPoints, Key,
 };
 
@@ -43,7 +43,7 @@ pub extern "C" fn get_full_stack() {
 pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
-        let initiator_entry_point = EntryPoint::new(
+        let initiator_entry_point = EntityEntryPoint::new(
             "initiator".to_string(),
             vec![],
             CLType::Unit,
@@ -51,7 +51,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let immediate_entry_point = EntryPoint::new(
+        let immediate_entry_point = EntityEntryPoint::new(
             "get_immediate_caller".to_string(),
             vec![],
             CLType::Unit,
@@ -59,7 +59,7 @@ pub extern "C" fn call() {
             EntryPointType::Called,
             EntryPointPayment::Caller,
         );
-        let full_stack_entry_point = EntryPoint::new(
+        let full_stack_entry_point = EntityEntryPoint::new(
             "get_full_stack".to_string(),
             vec![],
             CLType::Unit,

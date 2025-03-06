@@ -15,7 +15,7 @@ use casper_types::{
     contracts::NamedKeys,
     runtime_args,
     system::{handle_payment, mint},
-    AccessRights, AddressableEntityHash, CLType, CLTyped, EntryPoint, EntryPointAccess,
+    AccessRights, AddressableEntityHash, CLType, CLTyped, EntityEntryPoint, EntryPointAccess,
     EntryPointPayment, EntryPointType, EntryPoints, Key, Parameter, RuntimeArgs, URef, U512,
 };
 
@@ -140,7 +140,7 @@ pub extern "C" fn hardcoded_payment() {
 pub extern "C" fn call() {
     let mut entry_points = EntryPoints::new();
 
-    let send_to_account = EntryPoint::new(
+    let send_to_account = EntityEntryPoint::new(
         METHOD_SEND_TO_ACCOUNT,
         vec![
             Parameter::new(ARG_SOURCE, URef::cl_type()),
@@ -152,7 +152,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     );
-    let send_to_purse = EntryPoint::new(
+    let send_to_purse = EntityEntryPoint::new(
         METHOD_SEND_TO_PURSE,
         vec![
             Parameter::new(ARG_SOURCE, URef::cl_type()),
@@ -164,7 +164,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     );
-    let hardcoded_src = EntryPoint::new(
+    let hardcoded_src = EntityEntryPoint::new(
         METHOD_HARDCODED_PURSE_SRC,
         vec![
             Parameter::new(ARG_TARGET, URef::cl_type()),
@@ -175,7 +175,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     );
-    let stored_payment = EntryPoint::new(
+    let stored_payment = EntityEntryPoint::new(
         METHOD_STORED_PAYMENT,
         vec![
             Parameter::new(ARG_SOURCE, URef::cl_type()),
@@ -186,7 +186,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     );
-    let hardcoded_payment = EntryPoint::new(
+    let hardcoded_payment = EntityEntryPoint::new(
         METHOD_HARDCODED_PAYMENT,
         vec![Parameter::new(ARG_AMOUNT, CLType::U512)],
         CLType::Unit,

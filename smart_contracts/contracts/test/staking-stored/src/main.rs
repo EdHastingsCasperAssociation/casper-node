@@ -10,7 +10,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    contracts::NamedKeys, ApiError, CLType, EntryPoint, EntryPointAccess, EntryPointPayment,
+    contracts::NamedKeys, ApiError, CLType, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
     EntryPointType, EntryPoints, Key, Parameter, URef,
 };
 
@@ -37,7 +37,7 @@ fn build_named_keys_and_purse() -> (NamedKeys, URef) {
 fn entry_points() -> EntryPoints {
     let mut entry_points = EntryPoints::new();
 
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         staking::ENTRY_POINT_RUN,
         vec![
             Parameter::new(staking::ARG_ACTION, CLType::String),

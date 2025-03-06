@@ -15,7 +15,7 @@ use casper_contract::{
 use core::convert::TryInto;
 
 use casper_types::{
-    addressable_entity::{EntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
+    addressable_entity::{EntityEntryPoint, EntryPointAccess, EntryPointType, EntryPoints},
     contracts::NamedKeys,
     CLType, CLTyped, EntryPointPayment, Key, PackageHash, Parameter, URef,
 };
@@ -38,7 +38,7 @@ pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
 
-        let delegate = EntryPoint::new(
+        let delegate = EntityEntryPoint::new(
             ENTRY_FUNCTION_NAME.to_string(),
             vec![Parameter::new(ARG_PURSE_NAME, String::cl_type())],
             CLType::Unit,

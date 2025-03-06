@@ -8,7 +8,7 @@ use alloc::collections::BTreeMap;
 use casper_contract::contract_api::{runtime, storage};
 
 use casper_types::{
-    contracts::NamedKeys, CLType, CLTyped, EntryPoint, EntryPointAccess, EntryPointPayment,
+    contracts::NamedKeys, CLType, CLTyped, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
     EntryPointType, EntryPoints, Group, Key, Parameter,
 };
 use gh_1470_regression::{
@@ -52,7 +52,7 @@ pub extern "C" fn call() {
 
     let mut entry_points = EntryPoints::new();
 
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         RESTRICTED_DO_NOTHING_ENTRYPOINT,
         vec![
             Parameter::new(ARG2, Arg2Type::cl_type()),
@@ -65,7 +65,7 @@ pub extern "C" fn call() {
         EntryPointPayment::Caller,
     ));
 
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         RESTRICTED_WITH_EXTRA_ARG_ENTRYPOINT,
         vec![
             Parameter::new(ARG3, Arg3Type::cl_type()),

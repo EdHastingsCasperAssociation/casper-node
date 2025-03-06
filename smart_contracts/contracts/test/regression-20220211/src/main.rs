@@ -7,7 +7,7 @@ use casper_contract::{
 };
 use casper_types::{
     addressable_entity::Parameters, AccessRights, AddressableEntityHash, CLType, CLValue,
-    EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints, Key, URef,
+    EntityEntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints, Key, URef,
 };
 
 const RET_AS_CONTRACT: &str = "ret_as_contract";
@@ -25,7 +25,7 @@ const CONTRACT_HASH_NAME: &str = "regression-contract-hash";
 #[no_mangle]
 pub extern "C" fn call() {
     let mut entry_points = EntryPoints::new();
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         RET_AS_CONTRACT,
         Parameters::new(),
         CLType::Unit,
@@ -33,7 +33,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         RET_AS_SESSION,
         Parameters::new(),
         CLType::Unit,
@@ -41,7 +41,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         PUT_KEY_AS_SESSION,
         Parameters::new(),
         CLType::Unit,
@@ -49,7 +49,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         PUT_KEY_AS_CONTRACT,
         Parameters::new(),
         CLType::Unit,
@@ -57,7 +57,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         READ_AS_SESSION,
         Parameters::new(),
         CLType::Unit,
@@ -65,7 +65,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         READ_AS_CONTRACT,
         Parameters::new(),
         CLType::Unit,
@@ -73,7 +73,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         WRITE_AS_SESSION,
         Parameters::new(),
         CLType::Unit,
@@ -81,7 +81,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         WRITE_AS_CONTRACT,
         Parameters::new(),
         CLType::Unit,
@@ -89,7 +89,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         ADD_AS_SESSION,
         Parameters::new(),
         CLType::Unit,
@@ -97,7 +97,7 @@ pub extern "C" fn call() {
         EntryPointType::Called,
         EntryPointPayment::Caller,
     ));
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         ADD_AS_CONTRACT,
         Parameters::new(),
         CLType::Unit,

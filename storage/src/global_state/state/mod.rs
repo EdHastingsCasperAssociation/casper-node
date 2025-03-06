@@ -36,7 +36,7 @@ use casper_types::{
         },
         AUCTION, HANDLE_PAYMENT, MINT,
     },
-    Account, AddressableEntity, BlockGlobalAddr, CLValue, Digest, EntityAddr, EntryPoint,
+    Account, AddressableEntity, BlockGlobalAddr, CLValue, Digest, EntityAddr, EntityEntryPoint,
     EntryPointAddr, EntryPointValue, HoldsEpoch, Key, KeyTag, Phase, PublicKey, RuntimeArgs,
     StoredValue, SystemHashRegistry, U512,
 };
@@ -1960,9 +1960,9 @@ pub trait StateProvider: Send + Sync + Sized {
                             ContractResult::Success { contract } => {
                                 match contract.entry_points().get(entry_point_name) {
                                     Some(contract_entry_point) => EntryPointResult::Success {
-                                        entry_point: EntryPointValue::V1CasperVm(EntryPoint::from(
-                                            contract_entry_point,
-                                        )),
+                                        entry_point: EntryPointValue::V1CasperVm(
+                                            EntityEntryPoint::from(contract_entry_point),
+                                        ),
                                     },
                                     None => {
                                         EntryPointResult::ValueNotFound(query_result_not_found_msg)

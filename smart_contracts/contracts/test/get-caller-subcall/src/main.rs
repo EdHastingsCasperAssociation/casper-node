@@ -10,7 +10,7 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    account::AccountHash, CLType, CLValue, EntryPoint, EntryPointAccess, EntryPointPayment,
+    account::AccountHash, CLType, CLValue, EntityEntryPoint, EntryPointAccess, EntryPointPayment,
     EntryPointType, EntryPoints, RuntimeArgs,
 };
 
@@ -37,7 +37,7 @@ pub extern "C" fn call() {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
         // takes no args, ret's PublicKey
-        let entry_point = EntryPoint::new(
+        let entry_point = EntityEntryPoint::new(
             ENTRY_POINT_NAME.to_string(),
             Vec::new(),
             CLType::ByteArray(32),

@@ -214,10 +214,12 @@ impl PricingMode {
     ) -> Result<Motes, PricingModeError> {
         let gas_limit = self.gas_limit(chainspec, entry_point, lane_id)?;
         let motes = match self {
-            PricingMode::PaymentLimited { .. } | PricingMode::Fixed { .. } => {
-                Motes::from_gas(gas_limit, gas_price)
+            PricingMode::PaymentLimited { payment_amount, .. } => {
+                Motes::from_gas(Gas::from(*payment_amount), gas_price)
                     .ok_or(PricingModeError::UnableToCalculateGasCost)?
             }
+            PricingMode::Fixed { .. } => Motes::from_gas(gas_limit, gas_price)
+                .ok_or(PricingModeError::UnableToCalculateGasCost)?,
             PricingMode::Prepaid { .. } => {
                 Motes::zero() // prepaid
             }
@@ -425,17 +427,11 @@ mod tests {
 
     #[test]
     fn test_to_bytes_and_from_bytes() {
-        let classic = PricingMode::PaymentLimited {
+        bytesrepr::test_serialization_roundtrip(&PricingMode::PaymentLimited {
             payment_amount: 100,
             gas_price_tolerance: 1,
             standard_payment: true,
-        };
-        match classic {
-            PricingMode::PaymentLimited { .. } => {}
-            PricingMode::Fixed { .. } => {}
-            PricingMode::Prepaid { .. } => {}
-        }
-        bytesrepr::test_serialization_roundtrip(&classic);
+        });
         bytesrepr::test_serialization_roundtrip(&PricingMode::Fixed {
             gas_price_tolerance: 2,
             additional_computation_factor: 1,

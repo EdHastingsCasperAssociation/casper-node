@@ -6,8 +6,8 @@ use crate::{
         METHOD_GET_ERA_VALIDATORS, METHOD_READ_ERA_ID, METHOD_REDELEGATE, METHOD_RUN_AUCTION,
         METHOD_SLASH, METHOD_UNDELEGATE, METHOD_WITHDRAW_BID,
     },
-    CLType, CLTyped, EntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints,
-    Parameter, PublicKey, U512,
+    CLType, CLTyped, EntityEntryPoint, EntryPointAccess, EntryPointPayment, EntryPointType,
+    EntryPoints, Parameter, PublicKey, U512,
 };
 use alloc::boxed::Box;
 
@@ -21,7 +21,7 @@ use super::{
 pub fn auction_entry_points() -> EntryPoints {
     let mut entry_points = EntryPoints::new();
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_GET_ERA_VALIDATORS,
         vec![],
         Option::<ValidatorWeights>::cl_type(),
@@ -31,7 +31,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_ADD_BID,
         vec![
             Parameter::new(ARG_PUBLIC_KEY, PublicKey::cl_type()),
@@ -47,7 +47,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_WITHDRAW_BID,
         vec![
             Parameter::new(ARG_PUBLIC_KEY, PublicKey::cl_type()),
@@ -60,7 +60,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_DELEGATE,
         vec![
             Parameter::new(ARG_DELEGATOR, PublicKey::cl_type()),
@@ -74,7 +74,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_UNDELEGATE,
         vec![
             Parameter::new(ARG_DELEGATOR, PublicKey::cl_type()),
@@ -88,7 +88,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_REDELEGATE,
         vec![
             Parameter::new(ARG_DELEGATOR, PublicKey::cl_type()),
@@ -103,7 +103,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_RUN_AUCTION,
         vec![Parameter::new(ARG_ERA_END_TIMESTAMP_MILLIS, u64::cl_type())],
         CLType::Unit,
@@ -113,7 +113,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_SLASH,
         vec![],
         CLType::Unit,
@@ -123,7 +123,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_DISTRIBUTE,
         vec![Parameter::new(
             ARG_REWARDS_MAP,
@@ -136,7 +136,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_READ_ERA_ID,
         vec![],
         CLType::U64,
@@ -146,7 +146,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_ACTIVATE_BID,
         vec![Parameter::new(ARG_VALIDATOR, CLType::PublicKey)],
         CLType::Unit,
@@ -156,7 +156,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_CHANGE_BID_PUBLIC_KEY,
         vec![
             Parameter::new(ARG_PUBLIC_KEY, PublicKey::cl_type()),
@@ -169,7 +169,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_ADD_RESERVATIONS,
         vec![Parameter::new(
             ARG_RESERVATIONS,
@@ -182,7 +182,7 @@ pub fn auction_entry_points() -> EntryPoints {
     );
     entry_points.add_entry_point(entry_point);
 
-    let entry_point = EntryPoint::new(
+    let entry_point = EntityEntryPoint::new(
         METHOD_CANCEL_RESERVATIONS,
         vec![
             Parameter::new(ARG_VALIDATOR, PublicKey::cl_type()),

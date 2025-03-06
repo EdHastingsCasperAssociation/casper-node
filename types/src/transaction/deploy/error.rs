@@ -149,6 +149,9 @@ pub enum InvalidDeploy {
         /// The payment amount received.
         got: Box<U512>,
     },
+
+    /// Invalid payment amount.
+    InvalidPaymentAmount,
 }
 
 impl Display for InvalidDeploy {
@@ -288,6 +291,7 @@ impl Display for InvalidDeploy {
                     got, wasm_lane_gas_limit
                 )
             }
+            InvalidDeploy::InvalidPaymentAmount => write!(formatter, "invalid payment amount",),
         }
     }
 }
@@ -326,7 +330,8 @@ impl StdError for InvalidDeploy {
             | InvalidDeploy::GasPriceToleranceTooLow { .. }
             | InvalidDeploy::InvalidRuntime
             | InvalidDeploy::ChainspecHasNoWasmLanesDefined
-            | InvalidDeploy::ExceededWasmLaneGasLimit { .. } => None,
+            | InvalidDeploy::ExceededWasmLaneGasLimit { .. }
+            | InvalidDeploy::InvalidPaymentAmount => None,
         }
     }
 }

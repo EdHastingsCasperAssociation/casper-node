@@ -11,14 +11,14 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    contracts::NamedKeys, AddressableEntityHash, CLType, CLTyped, EntryPoint, EntryPointAccess,
-    EntryPointPayment, EntryPointType, EntryPoints, Key, Parameter, URef,
+    contracts::NamedKeys, AddressableEntityHash, CLType, CLTyped, EntityEntryPoint,
+    EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints, Key, Parameter, URef,
 };
 
 #[no_mangle]
 pub extern "C" fn call() {
     let mut entry_points = EntryPoints::new();
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         "perform_operations",
         vec![Parameter::new(
             "operations",

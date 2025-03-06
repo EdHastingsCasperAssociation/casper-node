@@ -10,8 +10,8 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
-    account::AccountHash, contracts::NamedKeys, CLType, CLTyped, EntryPoint, EntryPointAccess,
-    EntryPointPayment, EntryPointType, EntryPoints, Key, Parameter, URef, U512,
+    account::AccountHash, contracts::NamedKeys, CLType, CLTyped, EntityEntryPoint,
+    EntryPointAccess, EntryPointPayment, EntryPointType, EntryPoints, Key, Parameter, URef, U512,
 };
 
 const TRANSFER_AS_CONTRACT: &str = "transfer_as_contract";
@@ -30,7 +30,7 @@ pub extern "C" fn call() {
     runtime::put_key(PACKAGE_HASH_NAME, contract_package_hash.into());
 
     let mut entry_points = EntryPoints::new();
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         TRANSFER_AS_CONTRACT,
         vec![Parameter::new(ARG_PURSE, URef::cl_type())],
         CLType::Unit,
@@ -41,7 +41,7 @@ pub extern "C" fn call() {
 
     type NonTrivialArg = BTreeMap<String, Key>;
 
-    entry_points.add_entry_point(EntryPoint::new(
+    entry_points.add_entry_point(EntityEntryPoint::new(
         NONTRIVIAL_ARG_AS_CONTRACT,
         vec![Parameter::new(ARG_PURSE, NonTrivialArg::cl_type())],
         CLType::Unit,
