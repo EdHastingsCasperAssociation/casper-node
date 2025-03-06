@@ -117,6 +117,7 @@ const KEY_CHECKSUM_REGISTRY_SERIALIZED_LENGTH: usize =
     KEY_ID_SERIALIZED_LENGTH + PADDING_BYTES.len();
 const KEY_PACKAGE_SERIALIZED_LENGTH: usize = KEY_ID_SERIALIZED_LENGTH + 32;
 const KEY_MESSAGE_SERIALIZED_LENGTH: usize = KEY_ID_SERIALIZED_LENGTH
+    + U8_SERIALIZED_LENGTH
     + KEY_HASH_LENGTH
     + TOPIC_NAME_HASH_LENGTH
     + U8_SERIALIZED_LENGTH
@@ -2252,12 +2253,15 @@ mod tests {
         );
         assert_eq!(
             format!("{}", MESSAGE_TOPIC_KEY),
-            format!("Key::Message({}-{})", HEX_STRING, HEX_STRING)
+            format!(
+                "Key::Message(entity-contract-{}-{})",
+                HEX_STRING, HEX_STRING
+            )
         );
         assert_eq!(
             format!("{}", MESSAGE_KEY),
             format!(
-                "Key::Message({}-{}-{})",
+                "Key::Message(entity-contract-{}-{}-{})",
                 HEX_STRING, TOPIC_NAME_HEX_STRING, MESSAGE_INDEX_HEX_STRING
             )
         );
