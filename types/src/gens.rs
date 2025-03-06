@@ -124,10 +124,10 @@ pub fn named_key_addr_arb() -> impl Strategy<Value = NamedKeyAddr> {
 
 pub fn message_addr_arb() -> impl Strategy<Value = MessageAddr> {
     prop_oneof![
-        (u8_slice_32(), u8_slice_32()).prop_map(|(hash_addr, topic_name_hash)| {
+        (entity_addr_arb(), u8_slice_32()).prop_map(|(hash_addr, topic_name_hash)| {
             MessageAddr::new_topic_addr(hash_addr, TopicNameHash::new(topic_name_hash))
         }),
-        (u8_slice_32(), u8_slice_32(), example_u32_arb()).prop_map(
+        (entity_addr_arb(), u8_slice_32(), example_u32_arb()).prop_map(
             |(hash_addr, topic_name_hash, index)| MessageAddr::new_message_addr(
                 hash_addr,
                 TopicNameHash::new(topic_name_hash),

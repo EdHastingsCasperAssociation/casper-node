@@ -5,7 +5,7 @@ use casper_types::{
     bytesrepr::{self, FromBytes, ToBytes, U8_SERIALIZED_LENGTH},
     contract_messages::TopicNameHash,
     system::{auction::BidAddrTag, mint::BalanceHoldAddrTag},
-    EntityAddr, HashAddr, KeyTag, URefAddr,
+    EntityAddr, KeyTag, URefAddr,
 };
 #[cfg(any(feature = "testing", test))]
 use rand::Rng;
@@ -16,9 +16,9 @@ pub enum KeyPrefix {
     /// Retrieves all delegator bid addresses for a given validator.
     DelegatorBidAddrsByValidator(AccountHash),
     /// Retrieves all messages for a given entity.
-    MessagesByEntity(HashAddr),
+    MessagesByEntity(EntityAddr),
     /// Retrieves all messages for a given entity and topic.
-    MessagesByEntityAndTopic(HashAddr, TopicNameHash),
+    MessagesByEntityAndTopic(EntityAddr, TopicNameHash),
     /// Retrieves all named keys for a given entity.
     NamedKeysByEntity(EntityAddr),
     /// Retrieves all gas balance holds for a given purse.
@@ -145,13 +145,13 @@ impl FromBytes for KeyPrefix {
                 }
             }
             tag if tag == KeyTag::Message as u8 => {
-                let (hash_addr, remainder) = HashAddr::from_bytes(remainder)?;
+                let (entity_addr, remainder) = EntityAddr::from_bytes(remainder)?;
                 if remainder.is_empty() {
-                    (KeyPrefix::MessagesByEntity(hash_addr), remainder)
+                    (KeyPrefix::MessagesByEntity(entity_addr), remainder)
                 } else {
                     let (topic, remainder) = TopicNameHash::from_bytes(remainder)?;
                     (
-                        KeyPrefix::MessagesByEntityAndTopic(hash_addr, topic),
+                        KeyPrefix::MessagesByEntityAndTopic(entity_addr, topic),
                         remainder,
                     )
                 }

@@ -1174,9 +1174,9 @@ impl Key {
 
     /// Creates a new [`Key::Message`] variant that identifies an indexed message based on an
     /// `hash_addr`, `topic_name_hash` and message `index`.
-    pub fn message(hash_addr: HashAddr, topic_name_hash: TopicNameHash, index: u32) -> Key {
+    pub fn message(entity_addr: EntityAddr, topic_name_hash: TopicNameHash, index: u32) -> Key {
         Key::Message(MessageAddr::new_message_addr(
-            hash_addr,
+            entity_addr,
             topic_name_hash,
             index,
         ))
@@ -1184,8 +1184,8 @@ impl Key {
 
     /// Creates a new [`Key::Message`] variant that identifies a message topic based on an
     /// `hash_addr` and a hash of the topic name.
-    pub fn message_topic(hash_addr: HashAddr, topic_name_hash: TopicNameHash) -> Key {
-        Key::Message(MessageAddr::new_topic_addr(hash_addr, topic_name_hash))
+    pub fn message_topic(entity_addr: EntityAddr, topic_name_hash: TopicNameHash) -> Key {
+        Key::Message(MessageAddr::new_topic_addr(entity_addr, topic_name_hash))
     }
 
     /// Creates a new [`Key::EntryPoint`] variant from an entrypoint addr.
@@ -2036,11 +2036,11 @@ mod tests {
     const BYTE_CODE_EMPTY_KEY: Key = Key::ByteCode(ByteCodeAddr::Empty);
     const BYTE_CODE_V1_WASM_KEY: Key = Key::ByteCode(ByteCodeAddr::V1CasperWasm([42; 32]));
     const MESSAGE_TOPIC_KEY: Key = Key::Message(MessageAddr::new_topic_addr(
-        [42; 32],
+        EntityAddr::SmartContract([42; 32]),
         TopicNameHash::new([42; 32]),
     ));
     const MESSAGE_KEY: Key = Key::Message(MessageAddr::new_message_addr(
-        [42; 32],
+        EntityAddr::SmartContract([42; 32]),
         TopicNameHash::new([2; 32]),
         15,
     ));
@@ -2712,11 +2712,11 @@ mod tests {
         round_trip(&Key::ByteCode(ByteCodeAddr::Empty));
         round_trip(&Key::ByteCode(ByteCodeAddr::V1CasperWasm(zeros)));
         round_trip(&Key::Message(MessageAddr::new_topic_addr(
-            zeros,
+            EntityAddr::new_smart_contract(zeros),
             nines.into(),
         )));
         round_trip(&Key::Message(MessageAddr::new_message_addr(
-            zeros,
+            EntityAddr::new_smart_contract(zeros),
             nines.into(),
             1,
         )));
