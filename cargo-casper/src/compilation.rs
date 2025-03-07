@@ -1,26 +1,21 @@
-use std::{path::{Path, PathBuf}, process::Command};
+use std::{
+    path::PathBuf,
+    process::Command,
+};
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, Context, Result};
 use tempfile::TempDir;
 
+/// Represents a job to compile a Cargo project.
 pub(crate) struct CompileJob<'a> {
     manifest_path: &'a str,
-    features: Option<Vec<String>>,
+    features: Vec<String>,
     rustflags: Option<String>,
 }
 
-pub(crate) struct CompilationResults {
-    artifacts: Vec<PathBuf>,
-    dirs: Vec<TempDir>,
-}
-
-impl CompilationResults {
-    pub fn artifacts(&self) -> &[PathBuf] {
-        &self.artifacts
-    }
-}
-
 impl<'a> CompileJob<'a> {
+    /// Creates a new compile job with the given manifest path, optional features,
+    /// and optional *additional* rustflags.
     pub fn new(
         manifest_path: &'a str,
         features: Option<Vec<String>>,
@@ -28,84 +23,114 @@ impl<'a> CompileJob<'a> {
     ) -> Self {
         Self {
             manifest_path,
-            features,
+            features: features.unwrap_or_default(),
             rustflags,
         }
     }
 
+    /// Adds or replaces the additional rustflags for the compilation.
     pub fn with_rustflags(mut self, rustflags: String) -> Self {
         self.rustflags = Some(rustflags);
         self
     }
 
-    pub fn dispatch<T: IntoIterator<Item = String>>(
+    /// Dispatches the compilation job. This builds the Cargo project into a temporary target directory.
+    pub fn dispatch<T, I, S>(
         &self,
-        target: &'static str,
-        extra_features: T
-    ) -> Result<CompilationResults, anyhow::Error> {
-        let tempdir = TempDir::new()
-            .with_context(|| "Failed to create temporary directory")?;
+        target: T,
+        extra_features: I,
+    ) -> Result<CompilationResults>
+    where
+        T: Into<String>,
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let target: String = target.into();
+        let temp_dir = TempDir::new()
+            .context("Failed to create temporary directory")?;
 
-        let mut features = self.features.clone().unwrap_or_default();
-        features.extend(extra_features);
-
+        // Merge the configured features with any extra features
+        let mut features = self.features.clone();
+        features.extend(extra_features.into_iter().map(Into::into));
         let features_str = features.join(",");
 
-        let mut args = vec!["build", "--manifest-path", self.manifest_path];
-        args.extend(["--target", target]);
-        args.extend(["--features", &features_str, "--lib", "--release"]);
-        args.extend([
+        // Build the argument list
+        let target_dir = temp_dir
+            .path()
+            .to_str()
+            .context("Temporary directory path is not valid UTF-8")?;
+
+        let args = [
+            "build",
+            "--manifest-path",
+            self.manifest_path,
+            "--target",
+            target.as_str(),
+            "--features",
+            &features_str,
+            "--lib",
+            "--release",
             "--target-dir",
-            &tempdir.path().as_os_str().to_str().expect("invalid path"),
-        ]);
+            target_dir,
+        ];
 
-        eprintln!("Running command {:?}", args);
+        eprintln!("Running cargo with args: {:?}", args);
 
-        let rustflags = if let Some(rustflags) = &self.rustflags {
-            rustflags.to_owned()
-        } else {
-            std::env::var("RUSTFLAGS").unwrap_or_default()
+        // Get any rustflags from the environment and combine with the additional rustflags
+        let env_rustflags = std::env::var("RUSTFLAGS").unwrap_or_default();
+
+        let rustflags = match self.rustflags.as_ref() {
+            Some(additional) if env_rustflags.is_empty() => additional.clone(),
+            Some(additional) => format!("{} {}", env_rustflags, additional),
+            None => env_rustflags,
         };
 
-        let mut output = Command::new("cargo")
+        // Run the cargo build command and capture the output
+        let output = Command::new("cargo")
             .args(&args)
             .env("RUSTFLAGS", rustflags)
-            .spawn()
-            .with_context(|| "Failed to execute cargo build command")?;
+            .output()
+            .context("Failed to execute cargo build command")?;
 
-        let exit_status = output
-            .wait()
-            .with_context(|| "Failed to wait on child")?;
-
-        if !exit_status.success() {
-            eprintln!("Command executed with failing error code");
-            std::process::exit(exit_status.code().unwrap_or(1));
+        if !output.status.success() {
+            return Err(anyhow!(
+                "Cargo build failed:\nSTDERR: {}\nSTDOUT: {}",
+                String::from_utf8_lossy(&output.stderr),
+                String::from_utf8_lossy(&output.stdout)
+            ));
         }
 
-        let artifact_dir = tempdir
-            .path()
-            .join(target)
-            .join("release");
+        // Determine where the build artifacts are located and read them
+        // into a vector
+        let artifact_dir = temp_dir.path().join(target).join("release");
+        eprintln!("Artifact directory: {:?}", artifact_dir);
 
-        eprintln!("Artifact dir: {artifact_dir:?}");
-
-        let artifacts: Vec<_> = std::fs::read_dir(&artifact_dir)
-            .with_context(|| "Artifact read directory failure")?
-            .into_iter()
-            .filter_map(|dir_entry| {
-                let dir_entry = dir_entry.unwrap();
-                let path = dir_entry.path();
-                if path.is_file() {
-                    Some(path)
-                } else {
-                    None
-                }
+        let artifacts = std::fs::read_dir(&artifact_dir)
+            .with_context(|| format!("Failed to read artifact directory: {:?}", artifact_dir))?
+            .filter_map(|entry| match entry {
+                Ok(entry) if entry.path().is_file() => Some(entry.path()),
+                _ => None,
             })
             .collect();
 
         Ok(CompilationResults {
             artifacts,
-            dirs: vec![tempdir]
+            temp_dir: Some(temp_dir),
         })
+    }
+}
+
+/// Results of a compilation job.
+pub(crate) struct CompilationResults {
+    artifacts: Vec<PathBuf>,
+    // Keeps the temporary directory alive so that artifacts remain accessible
+    #[allow(dead_code)]
+    temp_dir: Option<TempDir>,
+}
+
+impl CompilationResults {
+    /// Returns a slice of paths to the build artifacts.
+    pub fn artifacts(&self) -> &[PathBuf] {
+        &self.artifacts
     }
 }

@@ -1,7 +1,6 @@
 use anyhow::Context;
 use include_dir::DirEntry;
 use include_dir::{include_dir, Dir};
-use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,6 +10,8 @@ use crate::compilation::CompileJob;
 
 // Embed the entire "injected" directory into the binary.
 static INJECTED_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/schema-inject");
+
+const INJECT_SCHEMA_MARKER: &str = "{{__CARGO_CASPER_INJECT_SCHEMA_MARKER}}";
 
 /// Recursively extracts a virtual (embedded) directory into the specified path.
 fn extract_dir(dir: &Dir, target: &Path) -> io::Result<()> {
@@ -70,7 +71,7 @@ pub fn build_with_schema_injected(
         .with_context(|| "Failed reading schema-inject's lib.rs")?;
 
     schema_lib_contents = schema_lib_contents.replace(
-        crate::INJECT_SCHEMA_MARKER,
+        INJECT_SCHEMA_MARKER,
         schema
     );
 
@@ -86,7 +87,7 @@ pub fn build_with_schema_injected(
 
     let schema_compilation_results = schema_compilation.dispatch(
         "wasm32-unknown-unknown",
-        None
+        Option::<String>::None
     ).with_context(|| "Failed compiling the schema-inject crate")?;
 
     let schema_lib = schema_compilation_results
@@ -96,23 +97,21 @@ pub fn build_with_schema_injected(
         .with_context(|| "Couldn't find the compiled schema-inject lib")?;
 
     // Build user's wasm with the schema lib statically linked and exported
-    let mut rustflags = env::var("RUSTFLAGS").unwrap_or_default();
-    if !rustflags.is_empty() {
-        rustflags.push(' ');
-    }
-    rustflags.push_str(&format!("-C link-arg={} ", schema_lib.to_string_lossy()));
-    rustflags.push_str("-C link-arg=--export=__casper_schema");
+    let rustflags = format!(
+        "-C link-arg={} -C link-arg=--export=__casper_schema",
+        schema_lib.to_string_lossy()
+    );
 
     let build_results = user_lib_compilation
         .with_rustflags(rustflags)
-        .dispatch("wasm32-unknown-unknown", None)
-        .with_context(|| "Failed to compile user wasm")?;
+        .dispatch("wasm32-unknown-unknown", Option::<String>::None)
+        .context("Failed to compile user wasm")?;
 
     let built_wasm_path = build_results
         .artifacts()
         .iter()
         .find(|x| x.extension().unwrap() == "wasm")
-        .with_context(|| "Failed to locate user wasm")?;
+        .context("Failed to locate user wasm")?;
 
     let production_wasm_path = production_wasm_output_dir
         .join(built_wasm_path.file_name().unwrap())
@@ -121,7 +120,7 @@ pub fn build_with_schema_injected(
     std::fs::copy(
         &built_wasm_path,
         &production_wasm_path
-    ).with_context(|| "Failed moving production wasm to output location")?;
+    ).context("Failed moving production wasm to output location")?;
 
     Ok(production_wasm_path)
 }

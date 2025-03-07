@@ -9,8 +9,6 @@ use clap::{Parser, Subcommand};
 pub(crate) mod compilation;
 pub(crate) mod injector;
 
-const INJECT_SCHEMA_MARKER: &str = "{{__CARGO_CASPER_INJECT_SCHEMA_MARKER}}";
-
 #[derive(Debug, Subcommand)]
 pub enum Command {
     GetSchema {
@@ -69,19 +67,20 @@ fn main() -> anyhow::Result<()> {
                 Some(features.features.clone()),
                 Some("-C link-dead-code".into())
             );
+
             let build_result = compilation.dispatch(
                 env!("TARGET"), [
                     "casper-sdk/__abi_generator".to_string(),
                     "casper-macros/__abi_generator".to_string(),
                 ]
-            ).with_context(|| "ABI-rich wasm compilation failure")?;
+            ).context("ABI-rich wasm compilation failure")?;
 
             // Stage 2: Extract ABI information from the built contract
             let artifact_path = build_result
                 .artifacts()
                 .into_iter()
                 .find(|x| x.extension().unwrap_or_default() == "so")
-                .with_context(|| "Failed loading the built contract")?;
+                .context("Failed loading the built contract")?;
             eprintln!("Loading: {artifact_path:?}");
 
             let lib = unsafe { libloading::Library::new(&artifact_path).unwrap() };
@@ -89,6 +88,7 @@ fn main() -> anyhow::Result<()> {
             let load_entrypoints: libloading::Symbol<CasperLoadEntrypoints> =
                 unsafe { lib.get(b"__cargo_casper_load_entrypoints").unwrap() };
 
+            #[allow(unused_variables)]
             let collect_abi: libloading::Symbol<CollectABI> =
                 unsafe { lib.get(b"__cargo_casper_collect_abi").unwrap() };
 
@@ -146,13 +146,13 @@ fn main() -> anyhow::Result<()> {
                 compilation,
                 &serde_json::to_string(&schema)?,
                 &wasm_output
-            ).with_context(|| "Failed compiling user wasm with schema")?;
+            ).context("Failed compiling user wasm with schema")?;
 
             // Stage 5: Run wasm optimizations passes that will shrink the size of the wasm.
             std::process::Command::new("wasm-strip")
                 .args(&[&production_wasm_path])
                 .spawn()
-                .with_context(|| "Failed to execute wasm-strip command. Is wabt installed?")?;
+                .context("Failed to execute wasm-strip command. Is wabt installed?")?;
 
             // Stage 6: Update external schema file by adding wasm hash from Stage 4.
             // TODO: The above
