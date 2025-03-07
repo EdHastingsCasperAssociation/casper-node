@@ -1,4 +1,4 @@
-use super::*;
+use super::{fixture::TestFixture, *};
 use crate::{testing::LARGE_WASM_LANE_ID, types::MetaTransaction};
 use casper_storage::data_access_layer::{
     AddressableEntityRequest, BalanceIdentifier, ProofHandling, QueryRequest, QueryResult,
@@ -13,6 +13,9 @@ use casper_types::{
 };
 use once_cell::sync::Lazy;
 
+use crate::reactor::main_reactor::tests::{
+    configs_override::ConfigsOverride, initial_stakes::InitialStakes,
+};
 use casper_types::{bytesrepr::Bytes, execution::ExecutionResultV1};
 
 static ALICE_SECRET_KEY: Lazy<Arc<SecretKey>> = Lazy::new(|| {

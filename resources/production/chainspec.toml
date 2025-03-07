@@ -88,7 +88,7 @@ max_delegators_per_validator = 1200
 # The split in finality signature rewards between block producer and participating signers.
 finders_fee = [1, 5]
 # The proportion of baseline rewards going to reward finality signatures specifically.
-finality_signature_proportion = [1, 2]
+finality_signature_proportion = [95, 100]
 # Lookback interval indicating which past block we are looking at to reward.
 signature_rewards_max_delay = 3
 # Allows transfers between accounts in the blockchain network.
