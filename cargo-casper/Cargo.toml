@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.4.11", features = ["derive"] }
 clap-cargo = { version = "0.14.0", features = ["cargo_metadata"] }
-libloading = "0.8.3"
+libloading = "0.8.6"
 casper-sdk-sys = { path = "../smart_contracts/sdk-sys" }
 casper-sdk = { path = "../smart_contracts/sdk", features = ["__abi_generator"] }
 include_dir = "0.7.4"

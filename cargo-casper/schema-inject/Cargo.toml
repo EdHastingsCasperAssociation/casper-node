@@ -7,5 +7,5 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
-casper-macros = { path = "../../smart_contracts/macros" }
-casper-sdk = { path = "../../smart_contracts/sdk" }
+casper-macros = { git = "https://github.com/casper-network/casper-node.git" }
+casper-sdk = { git = "https://github.com/casper-network/casper-node.git" }

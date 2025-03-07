@@ -1,7 +1,8 @@
 use anyhow::Context;
+use casper_sdk::abi::Definitions;
 use compilation::CompileJob;
 
-use std::{ffi::c_void, fs, path::PathBuf, ptr::NonNull};
+use std::{ffi::c_void, fs, path::PathBuf, ptr::NonNull, str::FromStr};
 
 use clap::{Parser, Subcommand};
 
@@ -58,16 +59,15 @@ fn main() -> anyhow::Result<()> {
         // else entirely (eg. BuildSchema with an optional --embedded flag sounds more appropriate).
         Command::GetSchema {
             output: output_path,
-            workspace,
             features,
             ..
         } => {
             // Stage 1: Compile contract package to a native library with extra code that will
             // produce ABI information including entrypoints, types, etc.
             let compilation = CompileJob::new(
-                workspace.package.first().with_context(|| "Failed selecting package")?,
+                "./Cargo.toml",
                 Some(features.features.clone()),
-                None
+                Some("-C link-dead-code".into())
             );
             let build_result = compilation.dispatch(
                 env!("TARGET"), [
@@ -77,7 +77,12 @@ fn main() -> anyhow::Result<()> {
             ).with_context(|| "ABI-rich wasm compilation failure")?;
 
             // Stage 2: Extract ABI information from the built contract
-            let artifact_path = build_result.artifacts().into_iter().next().expect("artifact");
+            let artifact_path = build_result
+                .artifacts()
+                .into_iter()
+                .find(|x| x.extension().unwrap_or_default() == "so")
+                .with_context(|| "Failed loading the built contract")?;
+            eprintln!("Loading: {artifact_path:?}");
 
             let lib = unsafe { libloading::Library::new(&artifact_path).unwrap() };
 
@@ -95,12 +100,16 @@ fn main() -> anyhow::Result<()> {
             };
 
             let defs = {
-                let mut defs = casper_sdk::abi::Definitions::default();
+                // TODO: segfaults
+
+                /*let mut defs = casper_sdk::abi::Definitions::default();
                 let ptr = NonNull::from(&mut defs);
                 unsafe {
                     collect_abi(ptr.as_ptr());
                 }
-                defs
+                defs*/
+
+                Definitions::default()
             };
 
             // Stage 3: Construct a schema object from the extracted information
@@ -128,20 +137,20 @@ fn main() -> anyhow::Result<()> {
             //
             // Optionally (but by default) create an entrypoint in the wasm that will have
             // embedded schema JSON file for discoverability (aka internal schema).
-            let production_build = injector::build_with_schema_injected(
+            let wasm_output = match output_path {
+                Some(path) => path,
+                None => PathBuf::from_str("./").unwrap(),
+            };
+
+            let production_wasm_path = injector::build_with_schema_injected(
                 compilation,
-                &serde_json::to_string(&schema)?
+                &serde_json::to_string(&schema)?,
+                &wasm_output
             ).with_context(|| "Failed compiling user wasm with schema")?;
 
             // Stage 5: Run wasm optimizations passes that will shrink the size of the wasm.
-            let production_wasm_path = production_build
-                .artifacts()
-                .iter()
-                .find(|x| x.extension().unwrap_or_default() == "wasm")
-                .with_context(|| "Couldn't find the compiled wasm file")?;
-
             std::process::Command::new("wasm-strip")
-                .args(&[production_wasm_path])
+                .args(&[&production_wasm_path])
                 .spawn()
                 .with_context(|| "Failed to execute wasm-strip command. Is wabt installed?")?;
 
@@ -149,10 +158,7 @@ fn main() -> anyhow::Result<()> {
             // TODO: The above
 
             // Stage 7: Report all paths
-            eprintln!("Production wasm at: {production_wasm_path:?}");
-            if let Some(output) = output_path {
-                eprintln!("Production schema at: {output:?}")
-            }
+            eprintln!("Production wasm at: {wasm_output:?}");
         }
     }
     Ok(())

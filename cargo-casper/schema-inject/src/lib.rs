@@ -1,6 +1,6 @@
 use casper_sdk::{casper_executor_wasm_common::flags::ReturnFlags, host::casper_return};
 
-const SCHEMA: &str = "{{__CARGO_CASPER_INJECT_SCHEMA_MARKER}}";
+const SCHEMA: &str = r#""{{__CARGO_CASPER_INJECT_SCHEMA_MARKER}}""#;
 
 #[no_mangle]
 pub extern "C" fn __casper_schema() {

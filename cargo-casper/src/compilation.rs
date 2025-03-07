@@ -1,16 +1,17 @@
-use std::{path::PathBuf, process::Command};
+use std::{path::{Path, PathBuf}, process::Command};
 
 use anyhow::{bail, Context};
 use tempfile::TempDir;
 
 pub(crate) struct CompileJob<'a> {
-    package: &'a str,
+    manifest_path: &'a str,
     features: Option<Vec<String>>,
     rustflags: Option<String>,
 }
 
-pub(crate)  struct CompilationResults {
+pub(crate) struct CompilationResults {
     artifacts: Vec<PathBuf>,
+    dirs: Vec<TempDir>,
 }
 
 impl CompilationResults {
@@ -21,12 +22,12 @@ impl CompilationResults {
 
 impl<'a> CompileJob<'a> {
     pub fn new(
-        package: &'a str,
+        manifest_path: &'a str,
         features: Option<Vec<String>>,
         rustflags: Option<String>,
     ) -> Self {
         Self {
-            package,
+            manifest_path,
             features,
             rustflags,
         }
@@ -50,7 +51,7 @@ impl<'a> CompileJob<'a> {
 
         let features_str = features.join(",");
 
-        let mut args = vec!["build", "-p", self.package];
+        let mut args = vec!["build", "--manifest-path", self.manifest_path];
         args.extend(["--target", target]);
         args.extend(["--features", &features_str, "--lib", "--release"]);
         args.extend([
@@ -81,7 +82,12 @@ impl<'a> CompileJob<'a> {
             std::process::exit(exit_status.code().unwrap_or(1));
         }
 
-        let artifact_dir = tempdir.path().join(target).join("release");
+        let artifact_dir = tempdir
+            .path()
+            .join(target)
+            .join("release");
+
+        eprintln!("Artifact dir: {artifact_dir:?}");
 
         let artifacts: Vec<_> = std::fs::read_dir(&artifact_dir)
             .with_context(|| "Artifact read directory failure")?
@@ -89,13 +95,7 @@ impl<'a> CompileJob<'a> {
             .filter_map(|dir_entry| {
                 let dir_entry = dir_entry.unwrap();
                 let path = dir_entry.path();
-                if path.is_file()
-                    && dbg!(&path)
-                        .extension()?
-                        .to_str()
-                        .expect("valid string")
-                        .ends_with(&std::env::consts::DLL_SUFFIX[1..])
-                {
+                if path.is_file() {
                     Some(path)
                 } else {
                     None
@@ -103,12 +103,9 @@ impl<'a> CompileJob<'a> {
             })
             .collect();
 
-        if artifacts.len() != 1 {
-            bail!("Expected exactly one build artifact: {:?}", artifacts);
-        }
-
         Ok(CompilationResults {
-            artifacts
+            artifacts,
+            dirs: vec![tempdir]
         })
     }
 }
