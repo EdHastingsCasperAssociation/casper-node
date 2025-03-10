@@ -537,9 +537,6 @@ impl ExecutorV2 {
             ExecutionKind::SessionBytes(_wasm_bytes) => Key::Account(initiator),
         };
 
-        // Here we don't carry the cost from callee. Each execution restarts the counter.
-        let emit_message_cost = self.config.wasm_config.host_function_costs().emit.cost();
-
         let context = Context {
             initiator,
             config: self.config.wasm_config,
@@ -555,7 +552,6 @@ impl ExecutorV2 {
             input,
             block_time,
             message_limits: self.config.message_limits,
-            emit_message_cost,
         };
 
         let wasm_instance_config = ConfigBuilder::new()

@@ -406,7 +406,6 @@ cost = 150
 size_multiplier = 100
 
 [wasm.v2.host_function_costs]
-cost_increase_per_message = 50
 read = { cost = 0, arguments = [0, 0, 0, 0, 0, 0] }
 write = { cost = 0, arguments = [0, 0, 0, 0, 0] }
 copy_input = { cost = 0, arguments = [0, 0] }

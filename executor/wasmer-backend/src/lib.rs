@@ -770,7 +770,6 @@ where
             input: data.context.input.clone(),
             block_time: data.context.block_time,
             message_limits: data.context.message_limits,
-            emit_message_cost: data.context.emit_message_cost,
         }
     }
 }

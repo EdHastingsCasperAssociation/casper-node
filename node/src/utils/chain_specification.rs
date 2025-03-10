@@ -304,7 +304,6 @@ mod tests {
         });
     static EXPECTED_GENESIS_HOST_FUNCTION_COSTS_V2: Lazy<HostFunctionCostsV2> =
         Lazy::new(|| HostFunctionCostsV2 {
-            cost_increase_per_message: 50,
             read: HostFunction::new(100, [0, 1, 2, 3, 4, 5]),
             write: HostFunction::new(101, [0, 1, 2, 3, 4]),
             copy_input: HostFunction::new(102, [0, 1]),

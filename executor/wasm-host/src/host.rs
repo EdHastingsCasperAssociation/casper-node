@@ -1404,33 +1404,14 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
     payload_ptr: u32,
     payload_size: u32,
 ) -> VMResult<i32> {
-    let emit_message_cost = caller.context().emit_message_cost;
     // Charge for parameter weights.
-    let emit_host_function = caller
-        .context()
-        .config
-        .host_function_costs()
-        .emit
-        .with_new_static_cost(emit_message_cost);
+    let emit_host_function = caller.context().config.host_function_costs().emit;
 
     charge_host_function_call(
         &mut caller,
         &emit_host_function,
         [topic_name_ptr, topic_name_size, payload_ptr, payload_size],
     )?;
-
-    let emit_message_cost = emit_message_cost
-        .checked_add(
-            caller
-                .context()
-                .config
-                .host_function_costs()
-                .cost_increase_per_message,
-        )
-        .ok_or(VMError::OutOfGas)?;
-
-    // Update the cost for the next emit call.
-    caller.context_mut().emit_message_cost = emit_message_cost;
 
     if topic_name_size > caller.context().message_limits.max_topic_name_size {
         return Ok(HOST_ERROR_TOPIC_TOO_LONG);

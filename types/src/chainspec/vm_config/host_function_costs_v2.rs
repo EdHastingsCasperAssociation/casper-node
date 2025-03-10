@@ -12,10 +12,6 @@ use super::HostFunction;
 /// Representation of argument's cost.
 pub type Cost = u32;
 
-/// Default value that the cost of calling `casper_emit` increases by for every new message
-/// emitted within an execution.
-const DEFAULT_COST_INCREASE_PER_MESSAGE_EMITTED: u32 = 50;
-
 /// An identifier that represents an unused argument.
 const NOT_USED: Cost = 0;
 
@@ -71,8 +67,6 @@ pub const DEFAULT_HOST_FUNCTION_NEW_DICTIONARY: HostFunction<[Cost; 1]> =
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[serde(deny_unknown_fields)]
 pub struct HostFunctionCostsV2 {
-    /// Cost increase for successive calls to `casper_emit` within an execution.
-    pub cost_increase_per_message: u32,
     /// Cost of calling the `read` host function.
     pub read: HostFunction<[Cost; 6]>,
     /// Cost of calling the `write` host function.
@@ -106,7 +100,6 @@ pub struct HostFunctionCostsV2 {
 impl Zero for HostFunctionCostsV2 {
     fn zero() -> Self {
         Self {
-            cost_increase_per_message: 0,
             read: HostFunction::zero(),
             write: HostFunction::zero(),
             copy_input: HostFunction::zero(),
@@ -126,7 +119,6 @@ impl Zero for HostFunctionCostsV2 {
 
     fn is_zero(&self) -> bool {
         let HostFunctionCostsV2 {
-            cost_increase_per_message,
             read,
             write,
             copy_input,
@@ -142,8 +134,7 @@ impl Zero for HostFunctionCostsV2 {
             print,
             emit,
         } = self;
-        cost_increase_per_message.is_zero()
-            && read.is_zero()
+        read.is_zero()
             && write.is_zero()
             && copy_input.is_zero()
             && ret.is_zero()
@@ -163,7 +154,6 @@ impl Zero for HostFunctionCostsV2 {
 impl Default for HostFunctionCostsV2 {
     fn default() -> Self {
         Self {
-            cost_increase_per_message: DEFAULT_COST_INCREASE_PER_MESSAGE_EMITTED,
             read: HostFunction::new(
                 DEFAULT_READ_VALUE_COST,
                 [
@@ -241,7 +231,6 @@ impl Default for HostFunctionCostsV2 {
 impl ToBytes for HostFunctionCostsV2 {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         let mut ret = bytesrepr::unchecked_allocate_buffer(self);
-        ret.append(&mut self.cost_increase_per_message.to_bytes()?);
         ret.append(&mut self.read.to_bytes()?);
         ret.append(&mut self.write.to_bytes()?);
         ret.append(&mut self.copy_input.to_bytes()?);
@@ -260,8 +249,7 @@ impl ToBytes for HostFunctionCostsV2 {
     }
 
     fn serialized_length(&self) -> usize {
-        self.cost_increase_per_message.serialized_length()
-            + self.read.serialized_length()
+        self.read.serialized_length()
             + self.write.serialized_length()
             + self.copy_input.serialized_length()
             + self.ret.serialized_length()
@@ -280,8 +268,7 @@ impl ToBytes for HostFunctionCostsV2 {
 
 impl FromBytes for HostFunctionCostsV2 {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        let (cost_increase_per_message, rem) = FromBytes::from_bytes(bytes)?;
-        let (read, rem) = FromBytes::from_bytes(rem)?;
+        let (read, rem) = FromBytes::from_bytes(bytes)?;
         let (write, rem) = FromBytes::from_bytes(rem)?;
         let (copy_input, rem) = FromBytes::from_bytes(rem)?;
         let (ret, rem) = FromBytes::from_bytes(rem)?;
@@ -297,7 +284,6 @@ impl FromBytes for HostFunctionCostsV2 {
         let (emit, rem) = FromBytes::from_bytes(rem)?;
         Ok((
             HostFunctionCostsV2 {
-                cost_increase_per_message,
                 read,
                 write,
                 copy_input,
@@ -322,7 +308,6 @@ impl FromBytes for HostFunctionCostsV2 {
 impl Distribution<HostFunctionCostsV2> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HostFunctionCostsV2 {
         HostFunctionCostsV2 {
-            cost_increase_per_message: rng.gen(),
             read: rng.gen(),
             write: rng.gen(),
             copy_input: rng.gen(),
@@ -357,7 +342,6 @@ pub mod gens {
 
     prop_compose! {
         pub fn host_function_costs_v2_arb() (
-            cost_increase_per_message in any::<u32>(),
             read in host_function_cost_v2_arb(),
             write in host_function_cost_v2_arb(),
             copy_input in host_function_cost_v2_arb(),
@@ -374,7 +358,6 @@ pub mod gens {
             emit in host_function_cost_v2_arb(),
         ) -> HostFunctionCostsV2 {
             HostFunctionCostsV2 {
-                cost_increase_per_message,
                 read,
                 write,
                 copy_input,
