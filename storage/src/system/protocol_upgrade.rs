@@ -501,7 +501,7 @@ where
         {
             let versions: BTreeMap<EntityVersionKey, EntityAddr> = contract_package
                 .versions()
-                .into_iter()
+                .iter()
                 .map(|(version, contract_hash)| {
                     let entity_version = EntityVersionKey::new(2, version.contract_version());
                     let entity_hash = EntityAddr::System(contract_hash.value());
@@ -511,7 +511,7 @@ where
 
             let disabled_versions = contract_package
                 .disabled_versions()
-                .into_iter()
+                .iter()
                 .map(|contract_versions| {
                     EntityVersionKey::new(
                         contract_versions.protocol_version_major(),

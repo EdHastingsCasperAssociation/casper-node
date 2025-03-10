@@ -491,7 +491,7 @@ fn administrator_account_should_disable_any_contract_used_as_session() {
 
     let stored_entity_addr = stored_entity_key
         .into_hash_addr()
-        .map(|addr| EntityAddr::SmartContract(addr))
+        .map(EntityAddr::SmartContract)
         .expect("must get entity addr");
 
     assert!(
