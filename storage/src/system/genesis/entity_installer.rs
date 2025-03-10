@@ -676,6 +676,12 @@ where
             }
         };
 
+        let entity_addr = match entity_kind.tag() {
+            EntityKindTag::System => EntityAddr::new_system(entity_hash.value()),
+            EntityKindTag::Account => EntityAddr::new_account(entity_hash.value()),
+            EntityKindTag::SmartContract => EntityAddr::new_smart_contract(entity_hash.value()),
+        };
+
         let package_hash = PackageHash::new(self.address_generator.borrow_mut().new_hash_address());
 
         let byte_code = ByteCode::new(ByteCodeKind::Empty, vec![]);
@@ -706,7 +712,7 @@ where
                 Groups::default(),
                 PackageStatus::default(),
             );
-            package.insert_entity_version(protocol_version.value().major, entity_hash);
+            package.insert_entity_version(protocol_version.value().major, entity_addr);
             package
         };
 
@@ -715,12 +721,6 @@ where
         self.tracking_copy
             .borrow_mut()
             .write(byte_code_key, StoredValue::ByteCode(byte_code));
-
-        let entity_addr = match entity_kind.tag() {
-            EntityKindTag::System => EntityAddr::new_system(entity_hash.value()),
-            EntityKindTag::Account => EntityAddr::new_account(entity_hash.value()),
-            EntityKindTag::SmartContract => EntityAddr::new_smart_contract(entity_hash.value()),
-        };
 
         let entity_key: Key = entity_addr.into();
 

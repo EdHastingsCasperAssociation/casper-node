@@ -24,10 +24,10 @@ use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionThresholds, AssociatedKeys, NamedKeyAddr},
     bytesrepr::ToBytes,
-    AddressableEntity, AddressableEntityHash, BlockHash, ByteCode, ByteCodeAddr, ByteCodeHash,
-    ByteCodeKind, CLType, ContractRuntimeTag, Digest, EntityAddr, EntityEntryPoint, EntityKind,
-    EntryPointAccess, EntryPointAddr, EntryPointPayment, EntryPointType, EntryPointValue, Groups,
-    HashAddr, Key, Package, PackageHash, PackageStatus, ProtocolVersion, StoredValue, URef, U512,
+    AddressableEntity, BlockHash, ByteCode, ByteCodeAddr, ByteCodeHash, ByteCodeKind, CLType,
+    ContractRuntimeTag, Digest, EntityAddr, EntityEntryPoint, EntityKind, EntryPointAccess,
+    EntryPointAddr, EntryPointPayment, EntryPointType, EntryPointValue, Groups, HashAddr, Key,
+    Package, PackageHash, PackageStatus, ProtocolVersion, StoredValue, URef, U512,
 };
 use either::Either;
 use num_derive::FromPrimitive;
@@ -504,7 +504,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
 
     smart_contract_package.insert_entity_version(
         protocol_version.value().major,
-        AddressableEntityHash::new(contract_hash),
+        EntityAddr::SmartContract(contract_hash),
     );
 
     assert!(

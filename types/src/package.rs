@@ -26,7 +26,7 @@ use crate::{
     checksummed_hex,
     crypto::{self, PublicKey},
     uref::URef,
-    AddressableEntityHash, CLType, CLTyped, HashAddr, BLAKE2B_DIGEST_LENGTH, KEY_HASH_LENGTH,
+    CLType, CLTyped, EntityAddr, HashAddr, BLAKE2B_DIGEST_LENGTH, KEY_HASH_LENGTH,
 };
 
 const PACKAGE_STRING_PREFIX: &str = "package-";
@@ -186,10 +186,8 @@ pub const ENTITY_VERSION_KEY_SERIALIZED_LENGTH: usize =
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 #[serde(transparent, deny_unknown_fields)]
 pub struct EntityVersions(
-    #[serde(
-        with = "BTreeMapToArray::<EntityVersionKey, AddressableEntityHash, EntityVersionLabels>"
-    )]
-    BTreeMap<EntityVersionKey, AddressableEntityHash>,
+    #[serde(with = "BTreeMapToArray::<EntityVersionKey, EntityAddr, EntityVersionLabels>")]
+    BTreeMap<EntityVersionKey, EntityAddr>,
 );
 
 impl EntityVersions {
@@ -199,17 +197,17 @@ impl EntityVersions {
     }
 
     /// Returns an iterator over the `AddressableEntityHash`s (i.e. the map's values).
-    pub fn contract_hashes(&self) -> impl Iterator<Item = &AddressableEntityHash> {
+    pub fn contract_hashes(&self) -> impl Iterator<Item = &EntityAddr> {
         self.0.values()
     }
 
     /// Returns the `AddressableEntityHash` under the key
-    pub fn get(&self, key: &EntityVersionKey) -> Option<&AddressableEntityHash> {
+    pub fn get(&self, key: &EntityVersionKey) -> Option<&EntityAddr> {
         self.0.get(key)
     }
 
     /// Retrieve the first entity version key if it exists
-    pub fn maybe_first(&mut self) -> Option<(EntityVersionKey, AddressableEntityHash)> {
+    pub fn maybe_first(&mut self) -> Option<(EntityVersionKey, EntityAddr)> {
         if let Some((entity_version_key, entity_hash)) = self.0.iter().next() {
             Some((*entity_version_key, *entity_hash))
         } else {
@@ -223,7 +221,7 @@ impl EntityVersions {
     }
 
     /// Returns the latest entity version key if it exists.
-    pub fn latest(&self) -> Option<&AddressableEntityHash> {
+    pub fn latest(&self) -> Option<&EntityAddr> {
         let (_, value) = self.0.last_key_value()?;
         Some(value)
     }
@@ -245,14 +243,13 @@ impl ToBytes for EntityVersions {
 
 impl FromBytes for EntityVersions {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        let (versions, remainder) =
-            BTreeMap::<EntityVersionKey, AddressableEntityHash>::from_bytes(bytes)?;
+        let (versions, remainder) = BTreeMap::<EntityVersionKey, EntityAddr>::from_bytes(bytes)?;
         Ok((EntityVersions(versions), remainder))
     }
 }
 
-impl From<BTreeMap<EntityVersionKey, AddressableEntityHash>> for EntityVersions {
-    fn from(value: BTreeMap<EntityVersionKey, AddressableEntityHash>) -> Self {
+impl From<BTreeMap<EntityVersionKey, EntityAddr>> for EntityVersions {
+    fn from(value: BTreeMap<EntityVersionKey, EntityAddr>) -> Self {
         EntityVersions(value)
     }
 }
@@ -261,7 +258,7 @@ struct EntityVersionLabels;
 
 impl KeyValueLabels for EntityVersionLabels {
     const KEY: &'static str = "entity_version_key";
-    const VALUE: &'static str = "addressable_entity_hash";
+    const VALUE: &'static str = "entity_addr";
 }
 
 #[cfg(feature = "json-schema")]
@@ -649,9 +646,9 @@ impl Package {
     }
 
     /// Enable the entity version corresponding to the given hash (if it exists).
-    pub fn enable_version(&mut self, entity_hash: AddressableEntityHash) -> Result<(), Error> {
+    pub fn enable_version(&mut self, entity_addr: EntityAddr) -> Result<(), Error> {
         let entity_version_key = self
-            .find_entity_version_key_by_hash(&entity_hash)
+            .find_entity_version_key_by_hash(&entity_addr)
             .copied()
             .ok_or(Error::EntityNotFound)?;
 
@@ -677,10 +674,7 @@ impl Package {
     }
 
     /// Lookup the entity hash for a given entity version (if present)
-    pub fn lookup_entity_hash(
-        &self,
-        entity_version_key: EntityVersionKey,
-    ) -> Option<&AddressableEntityHash> {
+    pub fn lookup_entity_hash(&self, entity_version_key: EntityVersionKey) -> Option<&EntityAddr> {
         self.versions.0.get(&entity_version_key)
     }
 
@@ -696,7 +690,7 @@ impl Package {
     }
 
     /// Returns `true` if the given entity hash exists and is enabled.
-    pub fn is_entity_enabled(&self, entity_hash: &AddressableEntityHash) -> bool {
+    pub fn is_entity_enabled(&self, entity_hash: &EntityAddr) -> bool {
         match self.find_entity_version_key_by_hash(entity_hash) {
             Some(version_key) => !self.disabled_versions.contains(version_key),
             None => false,
@@ -707,7 +701,7 @@ impl Package {
     pub fn insert_entity_version(
         &mut self,
         protocol_version_major: ProtocolVersionMajor,
-        entity_hash: AddressableEntityHash,
+        entity_hash: EntityAddr,
     ) -> EntityVersionKey {
         let contract_version = self.next_entity_version_for(protocol_version_major);
         let key = EntityVersionKey::new(protocol_version_major, contract_version);
@@ -716,10 +710,7 @@ impl Package {
     }
 
     /// Disable the entity version corresponding to the given hash (if it exists).
-    pub fn disable_entity_version(
-        &mut self,
-        entity_hash: AddressableEntityHash,
-    ) -> Result<(), Error> {
+    pub fn disable_entity_version(&mut self, entity_hash: EntityAddr) -> Result<(), Error> {
         let entity_version_key = self
             .versions
             .0
@@ -737,7 +728,7 @@ impl Package {
 
     fn find_entity_version_key_by_hash(
         &self,
-        entity_hash: &AddressableEntityHash,
+        entity_hash: &EntityAddr,
     ) -> Option<&EntityVersionKey> {
         self.versions
             .0
@@ -813,7 +804,7 @@ impl Package {
     }
 
     /// Return the entity hash for the newest enabled entity version.
-    pub fn current_entity_hash(&self) -> Option<AddressableEntityHash> {
+    pub fn current_entity_hash(&self) -> Option<EntityAddr> {
         self.enabled_versions().0.values().next_back().copied()
     }
 
@@ -888,8 +879,8 @@ mod tests {
     };
     use alloc::borrow::ToOwned;
 
-    const ENTITY_HASH_V1: AddressableEntityHash = AddressableEntityHash::new([42; 32]);
-    const ENTITY_HASH_V2: AddressableEntityHash = AddressableEntityHash::new([84; 32]);
+    const ENTITY_HASH_V1: EntityAddr = EntityAddr::new_smart_contract([42; 32]);
+    const ENTITY_HASH_V2: EntityAddr = EntityAddr::new_smart_contract([84; 32]);
 
     fn make_package_with_two_versions() -> Package {
         let mut package = Package::new(
@@ -960,15 +951,18 @@ mod tests {
         );
         assert_eq!(package.next_entity_version_for(major), 1);
 
-        let next_version = package.insert_entity_version(major, [123; 32].into());
+        let next_version =
+            package.insert_entity_version(major, EntityAddr::SmartContract([123; 32]));
         assert_eq!(next_version, EntityVersionKey::new(major, 1));
         assert_eq!(package.next_entity_version_for(major), 2);
-        let next_version_2 = package.insert_entity_version(major, [124; 32].into());
+        let next_version_2 =
+            package.insert_entity_version(major, EntityAddr::SmartContract([124; 32]));
         assert_eq!(next_version_2, EntityVersionKey::new(major, 2));
 
         let major = 2;
         assert_eq!(package.next_entity_version_for(major), 1);
-        let next_version_3 = package.insert_entity_version(major, [42; 32].into());
+        let next_version_3 =
+            package.insert_entity_version(major, EntityAddr::SmartContract([42; 32]));
         assert_eq!(next_version_3, EntityVersionKey::new(major, 1));
     }
 
@@ -992,7 +986,7 @@ mod tests {
 
     #[test]
     fn should_disable_and_enable_entity_version() {
-        const ENTITY_HASH: AddressableEntityHash = AddressableEntityHash::new([123; 32]);
+        const ENTITY_HASH: EntityAddr = EntityAddr::new_smart_contract([123; 32]);
 
         let mut package = make_package_with_two_versions();
 
@@ -1169,7 +1163,7 @@ mod tests {
         let mut package = make_package_with_two_versions();
 
         assert_eq!(
-            package.enable_version(AddressableEntityHash::default()),
+            package.enable_version(EntityAddr::SmartContract(HashAddr::default())),
             Err(Error::EntityNotFound),
         );
     }

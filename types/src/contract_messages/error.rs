@@ -17,7 +17,7 @@ pub enum FromStrError {
     /// String not formatted correctly.
     Formatting,
     /// Cannot parse entity hash.
-    EntityAddrParseError(String),
+    EntityAddrParseError(crate::addressable_entity::FromStrError),
     /// Cannot parse message topic hash.
     MessageTopicParseError(String),
     /// Failed to decode address portion of URef.

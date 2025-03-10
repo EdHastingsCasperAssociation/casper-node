@@ -1,19 +1,19 @@
-use casper_types::{addressable_entity::MessageTopics, Digest, HashAddr};
+use casper_types::{addressable_entity::MessageTopics, Digest, EntityAddr};
 
 use crate::tracking_copy::TrackingCopyError;
 
 /// Request for a message topics.
 pub struct MessageTopicsRequest {
     state_hash: Digest,
-    hash_addr: HashAddr,
+    entity_addr: EntityAddr,
 }
 
 impl MessageTopicsRequest {
     /// Creates new request object.
-    pub fn new(state_hash: Digest, hash_addr: HashAddr) -> Self {
+    pub fn new(state_hash: Digest, entity_addr: EntityAddr) -> Self {
         Self {
             state_hash,
-            hash_addr,
+            entity_addr,
         }
     }
 
@@ -23,8 +23,8 @@ impl MessageTopicsRequest {
     }
 
     /// Returns the hash addr.
-    pub fn hash_addr(&self) -> HashAddr {
-        self.hash_addr
+    pub fn entity_addr(&self) -> EntityAddr {
+        self.entity_addr
     }
 }
 
