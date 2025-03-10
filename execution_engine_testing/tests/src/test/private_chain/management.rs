@@ -17,8 +17,8 @@ use casper_types::{
         mint,
         standard_payment::{self, ARG_AMOUNT},
     },
-    AddressableEntityHash, ApiError, CLType, CLValue, CoreConfig, GenesisAccount, Key, Package,
-    PackageHash, RuntimeArgs, U512,
+    AddressableEntityHash, ApiError, CLType, CLValue, CoreConfig, EntityAddr, GenesisAccount, Key,
+    Package, PackageHash, RuntimeArgs, U512,
 };
 use tempfile::TempDir;
 
@@ -488,9 +488,12 @@ fn administrator_account_should_disable_any_contract_used_as_session() {
             .expect("should query"),
     )
     .expect("should be contract package");
+
     let stored_entity_addr = stored_entity_key
-        .into_entity_addr()
+        .into_hash_addr()
+        .map(|addr| EntityAddr::SmartContract(addr))
         .expect("must get entity addr");
+
     assert!(
         contract_package_before.is_entity_enabled(&stored_entity_addr),
         "newly stored contract should be enabled"

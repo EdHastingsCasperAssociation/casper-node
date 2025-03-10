@@ -1,6 +1,10 @@
 //! Support for applying upgrades on the execution engine.
 use num_rational::Ratio;
-use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
+};
 
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
@@ -10,7 +14,7 @@ use casper_types::{
         ActionThresholds, AssociatedKeys, EntityKind, NamedKeyAddr, NamedKeyValue, Weight,
     },
     bytesrepr::{self, ToBytes},
-    contracts::{ContractHash, NamedKeys},
+    contracts::{ContractHash, ContractPackageStatus, NamedKeys},
     system::{
         auction::{
             BidAddr, BidKind, DelegatorBid, DelegatorKind, SeigniorageRecipientsSnapshotV1,
@@ -27,10 +31,10 @@ use casper_types::{
         SystemEntityType, AUCTION, HANDLE_PAYMENT, MINT,
     },
     AccessRights, AddressableEntity, AddressableEntityHash, ByteCode, ByteCodeAddr, ByteCodeHash,
-    ByteCodeKind, CLValue, CLValueError, Contract, Digest, EntityAddr, EntityVersions,
-    EntryPointAddr, EntryPointValue, EntryPoints, FeeHandling, Groups, HashAddr, Key, KeyTag,
-    Motes, Package, PackageHash, PackageStatus, Phase, ProtocolUpgradeConfig, ProtocolVersion,
-    PublicKey, StoredValue, SystemHashRegistry, URef, U512,
+    ByteCodeKind, CLValue, CLValueError, Contract, Digest, EntityAddr, EntityVersionKey,
+    EntityVersions, EntryPointAddr, EntryPointValue, EntryPoints, FeeHandling, Groups, HashAddr,
+    Key, KeyTag, Motes, Package, PackageHash, PackageStatus, Phase, ProtocolUpgradeConfig,
+    ProtocolVersion, PublicKey, StoredValue, SystemHashRegistry, URef, U512,
 };
 
 use crate::{
@@ -495,9 +499,40 @@ where
                 )
             })?
         {
-            let package: Package = contract_package.into();
+            let versions: BTreeMap<EntityVersionKey, EntityAddr> = contract_package
+                .versions()
+                .into_iter()
+                .map(|(version, contract_hash)| {
+                    let entity_version = EntityVersionKey::new(2, version.contract_version());
+                    let entity_hash = EntityAddr::System(contract_hash.value());
+                    (entity_version, entity_hash)
+                })
+                .collect();
 
-            return Ok(package);
+            let disabled_versions = contract_package
+                .disabled_versions()
+                .into_iter()
+                .map(|contract_versions| {
+                    EntityVersionKey::new(
+                        contract_versions.protocol_version_major(),
+                        contract_versions.contract_version(),
+                    )
+                })
+                .collect();
+
+            let lock_status = if contract_package.lock_status() == ContractPackageStatus::Locked {
+                PackageStatus::Locked
+            } else {
+                PackageStatus::Unlocked
+            };
+
+            let groups = contract_package.take_groups();
+            return Ok(Package::new(
+                versions.into(),
+                disabled_versions,
+                groups,
+                lock_status,
+            ));
         }
 
         Err(ProtocolUpgradeError::UnableToRetrieveSystemContractPackage(

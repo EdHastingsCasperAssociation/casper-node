@@ -752,6 +752,11 @@ impl ContractPackage {
         self.versions
     }
 
+    /// Consumes the object and returns all the groups of the contract package.
+    pub fn take_groups(self) -> Groups {
+        self.groups
+    }
+
     /// Returns all of this contract's disabled versions.
     pub fn disabled_versions(&self) -> &DisabledVersions {
         &self.disabled_versions
