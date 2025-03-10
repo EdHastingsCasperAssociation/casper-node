@@ -54,7 +54,10 @@ use crate::{
             ForcedUndelegateError, ForcedUndelegateRequest, ForcedUndelegateResult,
         },
         handle_fee::{HandleFeeMode, HandleFeeRequest, HandleFeeResult},
-        mint::{TransferRequest, TransferRequestArgs, TransferResult},
+        mint::{
+            BurnRequest, BurnRequestArgs, BurnResult, TransferRequest, TransferRequestArgs,
+            TransferResult,
+        },
         prefixed_values::{PrefixedValuesRequest, PrefixedValuesResult},
         tagged_values::{TaggedValuesRequest, TaggedValuesResult},
         AddressableEntityRequest, AddressableEntityResult, AuctionMethod, BalanceHoldError,
@@ -87,6 +90,7 @@ use crate::{
     },
     system::{
         auction::{self, Auction},
+        burn::{BurnError, BurnRuntimeArgsBuilder},
         genesis::{GenesisError, GenesisInstaller},
         handle_payment::HandlePayment,
         mint::Mint,
@@ -2298,6 +2302,98 @@ pub trait StateProvider: Send + Sync + Sized {
             effects,
             cache,
         }
+    }
+
+    /// Direct burn.
+    fn burn(&self, request: BurnRequest) -> BurnResult {
+        let state_hash = request.state_hash();
+        let tc = match self.tracking_copy(state_hash) {
+            Ok(Some(tc)) => Rc::new(RefCell::new(tc)),
+            Ok(None) => return BurnResult::RootNotFound,
+            Err(err) => {
+                return BurnResult::Failure(BurnError::TrackingCopy(TrackingCopyError::Storage(
+                    err,
+                )));
+            }
+        };
+
+        let source_account_hash = request.initiator().account_hash();
+        let protocol_version = request.protocol_version();
+        if let Err(tce) = tc
+            .borrow_mut()
+            .migrate_account(source_account_hash, protocol_version)
+        {
+            return BurnResult::Failure(tce.into());
+        }
+
+        let authorization_keys = request.authorization_keys();
+
+        let config = request.config();
+
+        let runtime_args = match request.args() {
+            BurnRequestArgs::Raw(runtime_args) => runtime_args.clone(),
+            BurnRequestArgs::Explicit(transfer_args) => {
+                match RuntimeArgs::try_from(*transfer_args) {
+                    Ok(runtime_args) => runtime_args,
+                    Err(cve) => return BurnResult::Failure(BurnError::CLValue(cve)),
+                }
+            }
+        };
+
+        let runtime_args_builder = BurnRuntimeArgsBuilder::new(runtime_args);
+
+        let (entity_addr, runtime_footprint, entity_access_rights) = match tc
+            .borrow_mut()
+            .authorized_runtime_footprint_with_access_rights(
+                protocol_version,
+                source_account_hash,
+                authorization_keys,
+                &BTreeSet::default(),
+            ) {
+            Ok(ret) => ret,
+            Err(tce) => {
+                return BurnResult::Failure(BurnError::TrackingCopy(tce));
+            }
+        };
+        let entity_key = if config.enable_addressable_entity() {
+            Key::AddressableEntity(entity_addr)
+        } else {
+            match entity_addr {
+                EntityAddr::System(hash) | EntityAddr::SmartContract(hash) => Key::Hash(hash),
+                EntityAddr::Account(hash) => Key::Account(AccountHash::new(hash)),
+            }
+        };
+        let id = Id::Transaction(request.transaction_hash());
+        let phase = Phase::Session;
+        let address_generator = AddressGenerator::new(&id.seed(), phase);
+        let burn_args = match runtime_args_builder.build(&runtime_footprint, Rc::clone(&tc)) {
+            Ok(burn_args) => burn_args,
+            Err(error) => return BurnResult::Failure(error),
+        };
+
+        // IMPORTANT: this runtime _must_ use the payer's context.
+        let mut runtime = RuntimeNative::new(
+            config.clone(),
+            protocol_version,
+            id,
+            Arc::new(RwLock::new(address_generator)),
+            Rc::clone(&tc),
+            source_account_hash,
+            entity_key,
+            runtime_footprint.clone(),
+            entity_access_rights,
+            burn_args.amount(),
+            phase,
+        );
+
+        if let Err(mint_error) = runtime.burn(burn_args.source(), burn_args.amount()) {
+            return BurnResult::Failure(BurnError::Mint(mint_error));
+        }
+
+        let effects = tc.borrow_mut().effects();
+        let cache = tc.borrow_mut().cache();
+
+        BurnResult::Success { effects, cache }
     }
 
     /// Gets all values under a given key tag.

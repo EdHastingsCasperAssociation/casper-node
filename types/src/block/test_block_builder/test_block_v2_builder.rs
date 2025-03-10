@@ -256,7 +256,7 @@ fn simplified_calculate_transaction_lane_from_values(
 ) -> u8 {
     match target {
         TransactionTarget::Native => match entry_point {
-            TransactionEntryPoint::Transfer => MINT_LANE_ID,
+            TransactionEntryPoint::Transfer | TransactionEntryPoint::Burn => MINT_LANE_ID,
             TransactionEntryPoint::AddBid
             | TransactionEntryPoint::WithdrawBid
             | TransactionEntryPoint::Delegate
@@ -273,6 +273,7 @@ fn simplified_calculate_transaction_lane_from_values(
             TransactionEntryPoint::Custom(_) => LARGE_WASM_LANE_ID,
             TransactionEntryPoint::Call
             | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
             | TransactionEntryPoint::AddBid
             | TransactionEntryPoint::WithdrawBid
             | TransactionEntryPoint::Delegate
@@ -297,6 +298,7 @@ fn simplified_calculate_transaction_lane_from_values(
             }
             TransactionEntryPoint::Custom(_)
             | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
             | TransactionEntryPoint::AddBid
             | TransactionEntryPoint::WithdrawBid
             | TransactionEntryPoint::Delegate

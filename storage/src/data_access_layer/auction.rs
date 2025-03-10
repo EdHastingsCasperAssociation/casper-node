@@ -140,7 +140,8 @@ impl AuctionMethod {
         match entry_point {
             TransactionEntryPoint::Call
             | TransactionEntryPoint::Custom(_)
-            | TransactionEntryPoint::Transfer => {
+            | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn => {
                 Err(AuctionMethodError::InvalidEntryPoint(entry_point))
             }
             TransactionEntryPoint::ActivateBid => Self::new_activate_bid(runtime_args),

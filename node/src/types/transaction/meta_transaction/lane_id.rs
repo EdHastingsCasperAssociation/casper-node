@@ -14,7 +14,7 @@ pub(crate) fn calculate_transaction_lane(
 ) -> Result<u8, InvalidTransactionV1> {
     match target {
         TransactionTarget::Native => match entry_point {
-            TransactionEntryPoint::Transfer => Ok(MINT_LANE_ID),
+            TransactionEntryPoint::Transfer | TransactionEntryPoint::Burn => Ok(MINT_LANE_ID),
             TransactionEntryPoint::AddBid
             | TransactionEntryPoint::WithdrawBid
             | TransactionEntryPoint::Delegate
@@ -40,6 +40,7 @@ pub(crate) fn calculate_transaction_lane(
             ),
             TransactionEntryPoint::Call
             | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
             | TransactionEntryPoint::AddBid
             | TransactionEntryPoint::WithdrawBid
             | TransactionEntryPoint::Delegate
@@ -73,6 +74,7 @@ pub(crate) fn calculate_transaction_lane(
             }
             TransactionEntryPoint::Custom(_)
             | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
             | TransactionEntryPoint::AddBid
             | TransactionEntryPoint::WithdrawBid
             | TransactionEntryPoint::Delegate
@@ -105,6 +107,7 @@ pub(crate) fn calculate_transaction_lane(
                 }
             }
             TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
             | TransactionEntryPoint::AddBid
             | TransactionEntryPoint::WithdrawBid
             | TransactionEntryPoint::Delegate

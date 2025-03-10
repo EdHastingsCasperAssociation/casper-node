@@ -18,6 +18,9 @@ const TRANSFER_ARG_TARGET: &str = "target";
 // "id" for legacy reasons, if the argument is passed it is [Option]
 const TRANSFER_ARG_ID: OptionalArg<Option<u64>> = OptionalArg::new("id");
 
+const BURN_ARG_AMOUNT: RequiredArg<U512> = RequiredArg::new("amount");
+const BURN_ARG_SOURCE: OptionalArg<URef> = OptionalArg::new("source");
+
 const ADD_BID_ARG_PUBLIC_KEY: RequiredArg<PublicKey> = RequiredArg::new("public_key");
 const ADD_BID_ARG_DELEGATION_RATE: RequiredArg<u8> = RequiredArg::new("delegation_rate");
 const ADD_BID_ARG_AMOUNT: RequiredArg<U512> = RequiredArg::new("amount");
@@ -229,6 +232,29 @@ pub fn has_valid_transfer_args(
     }
 
     let _maybe_id = TRANSFER_ARG_ID.get(args)?;
+    Ok(())
+}
+
+/// Checks the given `RuntimeArgs` are suitable for use in a transfer transaction.
+pub fn has_valid_burn_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
+    let native_burn_minimum_motes = 1;
+    let args = args
+        .as_named()
+        .ok_or(InvalidTransactionV1::ExpectedNamedArguments)?;
+
+    let amount = BURN_ARG_AMOUNT.get(args)?;
+    if amount < U512::from(native_burn_minimum_motes) {
+        debug!(
+            minimum = %native_burn_minimum_motes,
+            %amount,
+            "insufficient burn amount"
+        );
+        return Err(InvalidTransactionV1::InsufficientBurnAmount {
+            minimum: native_burn_minimum_motes,
+            attempted: amount,
+        });
+    }
+    let _source = BURN_ARG_SOURCE.get(args)?;
     Ok(())
 }
 

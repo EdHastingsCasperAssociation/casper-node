@@ -300,7 +300,7 @@ async fn run_reward_network_highway_all_finality_zero_finders() {
 }
 
 #[tokio::test]
-//#[cfg_attr(not(feature = "failpoints"), ignore)]
+#[cfg_attr(not(feature = "failpoints"), ignore)]
 async fn run_reward_network_highway_no_finality() {
     run_rewards_network_scenario(
         [
