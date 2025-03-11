@@ -32,10 +32,10 @@ use casper_storage::{
 use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionThresholds, AssociatedKeys},
-    bytesrepr, AddressableEntity, AddressableEntityHash, ByteCode, ByteCodeAddr, ByteCodeHash,
-    ByteCodeKind, ContractRuntimeTag, Digest, EntityAddr, EntityKind, Gas, Groups, InitiatorAddr,
-    Key, MessageLimits, Package, PackageHash, PackageStatus, Phase, ProtocolVersion, StorageCosts,
-    StoredValue, TransactionInvocationTarget, URef, WasmV2Config, U512,
+    bytesrepr, AddressableEntity, ByteCode, ByteCodeAddr, ByteCodeHash, ByteCodeKind,
+    ContractRuntimeTag, Digest, EntityAddr, EntityKind, Gas, Groups, InitiatorAddr, Key, Package,
+    PackageHash, PackageStatus, Phase, ProtocolVersion, StorageCosts, StoredValue,
+    TransactionInvocationTarget, URef, WasmV2Config, U512,
 };
 use either::Either;
 use install::{InstallContractError, InstallContractRequest, InstallContractResult};
@@ -204,7 +204,7 @@ impl ExecutorV2 {
             chain_utils::compute_next_contract_hash_version(smart_contract_addr, next_version);
         let entity_version_key = smart_contract.insert_entity_version(
             protocol_version_major,
-            AddressableEntityHash::new(entity_hash),
+            EntityAddr::SmartContract(entity_hash),
         );
         debug_assert_eq!(entity_version_key.entity_version(), next_version);
 

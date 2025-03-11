@@ -748,7 +748,7 @@ pub trait StateProvider: Send + Sync + Sized {
             Err(err) => return MessageTopicsResult::Failure(err.into()),
         };
 
-        match tc.get_message_topics(message_topics_request.hash_addr()) {
+        match tc.get_message_topics(message_topics_request.entity_addr()) {
             Ok(message_topics) => MessageTopicsResult::Success { message_topics },
             Err(tce) => MessageTopicsResult::Failure(tce),
         }

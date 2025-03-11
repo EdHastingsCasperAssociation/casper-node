@@ -449,7 +449,7 @@ where
 
     pub(crate) fn get_message_topics(
         &mut self,
-        hash_addr: HashAddr,
+        hash_addr: EntityAddr,
     ) -> Result<MessageTopics, ExecError> {
         self.tracking_copy
             .borrow_mut()
@@ -1614,7 +1614,7 @@ where
             let mut message_topics = self
                 .tracking_copy
                 .borrow_mut()
-                .get_message_topics(entity_addr.value())?;
+                .get_message_topics(entity_addr)?;
 
             let max_topics_per_contract = self
                 .engine_config
@@ -1631,10 +1631,7 @@ where
             }
         }
 
-        let topic_key = Key::Message(MessageAddr::new_topic_addr(
-            entity_addr.value(),
-            topic_name_hash,
-        ));
+        let topic_key = Key::Message(MessageAddr::new_topic_addr(entity_addr, topic_name_hash));
         let block_time = self.block_info.block_time();
         let summary = StoredValue::MessageTopic(MessageTopicSummary::new(
             0,

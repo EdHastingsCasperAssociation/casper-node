@@ -13,9 +13,9 @@ use casper_types::{
         BidAddr, BidKind, BidsExt, DelegatorKind, SeigniorageRecipientsSnapshotV2, Unbond,
         UnbondEra, UnbondKind, UnbondingPurse, WithdrawPurse, WithdrawPurses,
     },
-    AccessRights, AddressableEntity, AddressableEntityHash, ByteCodeHash, CLValue, EntityKind,
-    EntityVersions, Groups, Key, Package, PackageHash, PackageStatus, ProtocolVersion, PublicKey,
-    StoredValue, URef, U512,
+    AccessRights, AddressableEntity, AddressableEntityHash, ByteCodeHash, CLValue, EntityAddr,
+    EntityKind, EntityVersions, Groups, Key, Package, PackageHash, PackageStatus, ProtocolVersion,
+    PublicKey, StoredValue, URef, U512,
 };
 
 use super::{config::Transfer, state_reader::StateReader};
@@ -180,7 +180,10 @@ impl<T: StateReader> StateTracker<T> {
             PackageStatus::Locked,
         );
 
-        contract_package.insert_entity_version(self.protocol_version.value().major, entity_hash);
+        contract_package.insert_entity_version(
+            self.protocol_version.value().major,
+            EntityAddr::Account(account_hash.value()),
+        );
         self.write_entry(
             package_hash.into(),
             StoredValue::SmartContract(contract_package.clone()),

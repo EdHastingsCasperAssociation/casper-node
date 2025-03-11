@@ -67,8 +67,8 @@ use casper_types::{
     },
     AccessRights, Account, AddressableEntity, AddressableEntityHash, AuctionCosts, BlockGlobalAddr,
     BlockTime, ByteCode, ByteCodeAddr, ByteCodeHash, CLTyped, CLValue, Contract, Digest,
-    EntityAddr, EntryPoints, EraId, FeeHandling, Gas, HandlePaymentCosts, HashAddr,
-    HoldBalanceHandling, InitiatorAddr, Key, KeyTag, MintCosts, Motes, Package, PackageHash, Phase,
+    EntityAddr, EntryPoints, EraId, FeeHandling, Gas, HandlePaymentCosts, HoldBalanceHandling,
+    InitiatorAddr, Key, KeyTag, MintCosts, Motes, Package, PackageHash, Phase,
     ProtocolUpgradeConfig, ProtocolVersion, PublicKey, RefundHandling, StoredValue,
     SystemHashRegistry, TransactionHash, TransactionV1Hash, URef, OS_PAGE_SIZE, U512,
 };
@@ -648,13 +648,13 @@ where
     pub fn message_topics(
         &self,
         maybe_post_state: Option<Digest>,
-        hash_addr: HashAddr,
+        entity_addr: EntityAddr,
     ) -> Result<MessageTopics, String> {
         let post_state = maybe_post_state
             .or(self.post_state_hash)
             .expect("builder must have a post-state hash");
 
-        let request = MessageTopicsRequest::new(post_state, hash_addr);
+        let request = MessageTopicsRequest::new(post_state, entity_addr);
         let result = self.data_access_layer.message_topics(request);
         if let MessageTopicsResult::Success { message_topics } = result {
             return Ok(message_topics);

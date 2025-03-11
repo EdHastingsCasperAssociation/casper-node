@@ -646,6 +646,7 @@ where
             EntityKind::Account(account_hash),
         );
 
+        let entity_addr = EntityAddr::new_account(entity_hash.value());
         let package = {
             let mut package = Package::new(
                 EntityVersions::default(),
@@ -653,11 +654,10 @@ where
                 Groups::default(),
                 PackageStatus::Locked,
             );
-            package.insert_entity_version(protocol_version.value().major, entity_hash);
+            package.insert_entity_version(protocol_version.value().major, entity_addr);
             package
         };
 
-        let entity_addr = EntityAddr::new_account(entity_hash.value());
         let entity_key = Key::AddressableEntity(entity_addr);
 
         self.write(entity_key, entity.into());
@@ -706,7 +706,7 @@ where
                 Groups::default(),
                 PackageStatus::Locked,
             );
-            package.insert_entity_version(protocol_version.value().major, entity_hash);
+            package.insert_entity_version(protocol_version.value().major, entity_addr);
             self.write(package_hash.into(), package.into());
             package_hash
         };
