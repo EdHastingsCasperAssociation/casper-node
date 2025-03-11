@@ -1943,7 +1943,7 @@ async fn only_refunds_are_burnt_no_fee_custom_payment() {
     let initial_total_supply = test.get_total_supply(None);
     let (_txn_hash, block_height, exec_result) = test.send_transaction(txn).await;
 
-    match exec_result {
+    match &exec_result {
         ExecutionResult::V2(exec_result_v2) => {
             assert_eq!(exec_result_v2.cost, expected_transaction_cost.into());
         }
@@ -1952,8 +1952,7 @@ async fn only_refunds_are_burnt_no_fee_custom_payment() {
         }
     }
 
-    // This transaction consumed all the gas so there should be no refund.
-    let refund_amount = U512::from(848_105_290);
+    let refund_amount = exec_result.refund().expect("should have refund");
 
     // Expect that the fees are burnt.
     assert_eq!(

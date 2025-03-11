@@ -38,9 +38,9 @@ use casper_types::{
     },
     addressable_entity::{
         self, ActionThresholds, ActionType, AddressableEntity, AddressableEntityHash,
-        AssociatedKeys, ContractRuntimeTag, EntityEntryPoint, EntityKindTag, EntryPointAccess,
-        EntryPointType, EntryPoints, MessageTopicError, MessageTopics, NamedKeyAddr, NamedKeyValue,
-        Parameter, Weight, DEFAULT_ENTRY_POINT_NAME,
+        AssociatedKeys, ContractRuntimeTag, EntityEntryPoint, EntryPointAccess, EntryPointType,
+        EntryPoints, MessageTopicError, MessageTopics, NamedKeyAddr, NamedKeyValue, Parameter,
+        Weight, DEFAULT_ENTRY_POINT_NAME,
     },
     bytesrepr::{self, Bytes, FromBytes, ToBytes},
     contract_messages::{
@@ -772,6 +772,11 @@ where
 
         let mint_hash = self.context.get_system_contract(MINT)?;
         let mint_addr = EntityAddr::new_system(mint_hash.value());
+        let mint_key = if self.context.engine_config().enable_entity {
+            Key::AddressableEntity(EntityAddr::System(mint_hash.value()))
+        } else {
+            Key::Hash(mint_hash.value())
+        };
 
         let mint_named_keys = self
             .context
@@ -782,7 +787,7 @@ where
         let mut named_keys = mint_named_keys;
 
         let runtime_context = self.context.new_from_self(
-            mint_addr.into(),
+            mint_key,
             EntryPointType::Called,
             &mut named_keys,
             access_rights,
@@ -1007,14 +1012,18 @@ where
     ) -> Result<CLValue, ExecError> {
         let gas_counter = self.gas_counter();
 
-        let entity_hash = self.context.get_system_contract(AUCTION)?;
-        let auction_key = Key::addressable_entity_key(EntityKindTag::System, entity_hash);
+        let auction_hash = self.context.get_system_contract(AUCTION)?;
+        let auction_key = if self.context.engine_config().enable_entity {
+            Key::AddressableEntity(EntityAddr::System(auction_hash.value()))
+        } else {
+            Key::Hash(auction_hash.value())
+        };
 
         let auction_named_keys = self
             .context
             .state()
             .borrow_mut()
-            .get_named_keys(EntityAddr::System(entity_hash.value()))?;
+            .get_named_keys(EntityAddr::System(auction_hash.value()))?;
 
         let mut named_keys = auction_named_keys;
 

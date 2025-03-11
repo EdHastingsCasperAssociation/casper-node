@@ -116,7 +116,7 @@ impl TryFrom<BurnArgs> for RuntimeArgs {
 
 /// State of a builder of a `BurnArgs`.
 ///
-/// Purpose of this builder is to resolve native burn args into [`BurnTargetMode`] and a
+/// Purpose of this builder is to resolve native burn args into BurnTargetMode and a
 /// [`BurnArgs`] instance to execute actual token burn on the mint contract.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BurnRuntimeArgsBuilder {

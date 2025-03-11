@@ -104,6 +104,11 @@ pub struct ExecutionResultV2 {
 }
 
 impl ExecutionResultV2 {
+    /// The refunded amount, if any.
+    pub fn refund(&self) -> U512 {
+        self.refund
+    }
+
     // This method is not intended to be used by third party crates.
     #[doc(hidden)]
     #[cfg(feature = "json-schema")]
