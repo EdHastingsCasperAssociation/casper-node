@@ -1,6 +1,10 @@
 //! Support for applying upgrades on the execution engine.
 use num_rational::Ratio;
-use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
+};
 
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
@@ -10,7 +14,7 @@ use casper_types::{
         ActionThresholds, AssociatedKeys, EntityKind, NamedKeyAddr, NamedKeyValue, Weight,
     },
     bytesrepr::{self, ToBytes},
-    contracts::{ContractHash, NamedKeys},
+    contracts::{ContractHash, ContractPackageStatus, NamedKeys},
     system::{
         auction::{
             BidAddr, BidKind, DelegatorBid, DelegatorKind, SeigniorageRecipientsSnapshotV1,
@@ -27,10 +31,10 @@ use casper_types::{
         SystemEntityType, AUCTION, HANDLE_PAYMENT, MINT,
     },
     AccessRights, AddressableEntity, AddressableEntityHash, ByteCode, ByteCodeAddr, ByteCodeHash,
-    ByteCodeKind, CLValue, CLValueError, Contract, Digest, EntityAddr, EntityVersions,
-    EntryPointAddr, EntryPointValue, EntryPoints, FeeHandling, Groups, HashAddr, Key, KeyTag,
-    Motes, Package, PackageHash, PackageStatus, Phase, ProtocolUpgradeConfig, ProtocolVersion,
-    PublicKey, StoredValue, SystemHashRegistry, URef, U512,
+    ByteCodeKind, CLValue, CLValueError, Contract, Digest, EntityAddr, EntityVersionKey,
+    EntityVersions, EntryPointAddr, EntryPointValue, EntryPoints, FeeHandling, Groups, HashAddr,
+    Key, KeyTag, Motes, Package, PackageHash, PackageStatus, Phase, ProtocolUpgradeConfig,
+    ProtocolVersion, PublicKey, StoredValue, SystemHashRegistry, URef, U512,
 };
 
 use crate::{
@@ -371,7 +375,8 @@ where
             self.retrieve_system_package(entity.package_hash(), system_entity_type)?;
 
         let entity_hash = AddressableEntityHash::new(hash_addr);
-        package.disable_entity_version(entity_hash).map_err(|_| {
+        let entity_addr = EntityAddr::new_system(entity_hash.value());
+        package.disable_entity_version(entity_addr).map_err(|_| {
             ProtocolUpgradeError::FailedToDisablePreviousVersion(entity_name.to_string())
         })?;
 
@@ -397,8 +402,6 @@ where
 
         self.tracking_copy
             .write(entity_key, StoredValue::AddressableEntity(new_entity));
-
-        let entity_addr = EntityAddr::new_system(entity_hash.value());
 
         if let Some(named_keys) = maybe_named_keys {
             for (string, key) in named_keys.into_inner().into_iter() {
@@ -429,7 +432,7 @@ where
 
         package.insert_entity_version(
             self.config.new_protocol_version().value().major,
-            entity_hash,
+            entity_addr,
         );
 
         self.tracking_copy.write(
@@ -496,9 +499,40 @@ where
                 )
             })?
         {
-            let package: Package = contract_package.into();
+            let versions: BTreeMap<EntityVersionKey, EntityAddr> = contract_package
+                .versions()
+                .iter()
+                .map(|(version, contract_hash)| {
+                    let entity_version = EntityVersionKey::new(2, version.contract_version());
+                    let entity_hash = EntityAddr::System(contract_hash.value());
+                    (entity_version, entity_hash)
+                })
+                .collect();
 
-            return Ok(package);
+            let disabled_versions = contract_package
+                .disabled_versions()
+                .iter()
+                .map(|contract_versions| {
+                    EntityVersionKey::new(
+                        contract_versions.protocol_version_major(),
+                        contract_versions.contract_version(),
+                    )
+                })
+                .collect();
+
+            let lock_status = if contract_package.lock_status() == ContractPackageStatus::Locked {
+                PackageStatus::Locked
+            } else {
+                PackageStatus::Unlocked
+            };
+
+            let groups = contract_package.take_groups();
+            return Ok(Package::new(
+                versions.into(),
+                disabled_versions,
+                groups,
+                lock_status,
+            ));
         }
 
         Err(ProtocolUpgradeError::UnableToRetrieveSystemContractPackage(
@@ -685,7 +719,7 @@ where
             );
             package.insert_entity_version(
                 self.config.new_protocol_version().value().major,
-                entity_hash,
+                EntityAddr::Account(entity_hash.value()),
             );
             package
         };

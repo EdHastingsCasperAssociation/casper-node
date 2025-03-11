@@ -17,8 +17,8 @@ use casper_types::{
         mint,
         standard_payment::{self, ARG_AMOUNT},
     },
-    AddressableEntityHash, ApiError, CLType, CLValue, CoreConfig, GenesisAccount, Key, Package,
-    PackageHash, RuntimeArgs, U512,
+    AddressableEntityHash, ApiError, CLType, CLValue, CoreConfig, EntityAddr, GenesisAccount, Key,
+    Package, PackageHash, RuntimeArgs, U512,
 };
 use tempfile::TempDir;
 
@@ -488,8 +488,14 @@ fn administrator_account_should_disable_any_contract_used_as_session() {
             .expect("should query"),
     )
     .expect("should be contract package");
+
+    let stored_entity_addr = stored_entity_key
+        .into_hash_addr()
+        .map(EntityAddr::SmartContract)
+        .expect("must get entity addr");
+
     assert!(
-        contract_package_before.is_entity_enabled(&stored_entity_hash),
+        contract_package_before.is_entity_enabled(&stored_entity_addr),
         "newly stored contract should be enabled"
     );
 
@@ -530,7 +536,7 @@ fn administrator_account_should_disable_any_contract_used_as_session() {
         contract_package_before, contract_package_after_disable,
         "contract package should be disabled"
     );
-    assert!(!contract_package_after_disable.is_entity_enabled(&stored_entity_hash),);
+    assert!(!contract_package_after_disable.is_entity_enabled(&stored_entity_addr),);
 
     let call_delegate_requests_1 = {
         // Unable to call disabled stored contract directly
@@ -684,8 +690,11 @@ fn administrator_account_should_disable_any_contract_used_as_payment() {
             .expect("should query"),
     )
     .expect("should be contract package");
+    let stored_entity_addr = stored_entity_key
+        .into_entity_addr()
+        .expect("must get entity addr");
     assert!(
-        contract_package_before.is_entity_enabled(&stored_entity_hash),
+        contract_package_before.is_entity_enabled(&stored_entity_addr),
         "newly stored contract should be enabled"
     );
 
@@ -733,7 +742,7 @@ fn administrator_account_should_disable_any_contract_used_as_payment() {
         contract_package_before, contract_package_after_disable,
         "contract package should be disabled"
     );
-    assert!(!contract_package_after_disable.is_entity_enabled(&stored_entity_hash),);
+    assert!(!contract_package_after_disable.is_entity_enabled(&stored_entity_addr),);
 
     let payment_args = runtime_args! {
         standard_payment::ARG_AMOUNT => *DEFAULT_PAYMENT,

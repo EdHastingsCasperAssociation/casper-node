@@ -2,7 +2,7 @@ use casper_sdk::prelude::*;
 
 use casper_macros::casper;
 use casper_sdk::{
-    host::{self, Entity},
+    casper::{self, Entity},
     log, revert,
     types::{Address, CallError},
     ContractHandle,
@@ -56,7 +56,7 @@ impl TokenOwnerContract {
     #[casper(constructor, payable)]
     pub fn token_owner_initialize() -> Self {
         Self {
-            initial_balance: host::get_value(),
+            initial_balance: casper::transferred_value(),
             received_tokens: 0,
             fallback_handler: FallbackHandler::AcceptTokens,
         }
@@ -68,7 +68,7 @@ impl TokenOwnerContract {
         contract_address: Address,
         amount: u128,
     ) -> Result<(), TokenOwnerError> {
-        let self_balance = host::get_balance_of(&Entity::Contract(self_address));
+        let self_balance = casper::get_balance_of(&Entity::Contract(self_address));
         let res = ContractHandle::<HarnessRef>::from_address(contract_address)
             .build_call()
             .with_transferred_value(amount)
@@ -88,7 +88,7 @@ impl TokenOwnerContract {
         amount: u128,
     ) -> Result<(), TokenOwnerError> {
         let self_entity = Entity::Contract(self_address);
-        let self_balance = host::get_balance_of(&self_entity);
+        let self_balance = casper::get_balance_of(&self_entity);
 
         let res = ContractHandle::<HarnessRef>::from_address(contract_address)
             .build_call()
@@ -107,7 +107,7 @@ impl TokenOwnerContract {
             Ok(()) => {
                 log!("Token owner withdrew {amount} from {contract_address:?}");
                 assert_eq!(
-                    host::get_balance_of(&self_entity),
+                    casper::get_balance_of(&self_entity),
                     self_balance + amount,
                     "Balance should change"
                 );
@@ -115,7 +115,7 @@ impl TokenOwnerContract {
             Err(e) => {
                 log!("Token owner failed to withdraw {amount} from {contract_address:?}: {e:?}");
                 assert_eq!(
-                    host::get_balance_of(&self_entity),
+                    casper::get_balance_of(&self_entity),
                     self_balance,
                     "Balance should NOT change"
                 );
@@ -140,12 +140,12 @@ impl Deposit for TokenOwnerContract {
     fn deposit(&mut self) {
         log!(
             "Received deposit with value = {} current handler is {:?}",
-            host::get_value(),
+            casper::transferred_value(),
             self.fallback_handler
         );
         match std::mem::replace(&mut self.fallback_handler, FallbackHandler::AcceptTokens) {
             FallbackHandler::AcceptTokens => {
-                let value = host::get_value();
+                let value = casper::transferred_value();
                 log!(
                     "TokenOwnerContract received fallback entrypoint with value={}",
                     value

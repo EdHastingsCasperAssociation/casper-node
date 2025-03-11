@@ -17,11 +17,11 @@ use casper_types::{
         },
         mint::BalanceHoldAddr,
     },
-    AccessRights, AddressableEntityHash, BlockTime, ByteCode, ByteCodeHash, ByteCodeKind, CLType,
-    CLTyped, CLValue, ContractRuntimeTag, DeployHash, DeployInfo, EntityEntryPoint,
-    EntityVersionKey, EntityVersions, EntryPointAccess, EntryPointPayment, EntryPointType,
-    EntryPointValue, EraId, Group, Groups, Key, Package, PackageHash, PackageStatus, Parameter,
-    ProtocolVersion, PublicKey, SecretKey, StoredValue, TransferAddr, TransferV1, URef, U512,
+    AccessRights, BlockTime, ByteCode, ByteCodeHash, ByteCodeKind, CLType, CLTyped, CLValue,
+    ContractRuntimeTag, DeployHash, DeployInfo, EntityAddr, EntityEntryPoint, EntityVersionKey,
+    EntityVersions, EntryPointAccess, EntryPointPayment, EntryPointType, EntryPointValue, EraId,
+    Group, Groups, Key, Package, PackageHash, PackageStatus, Parameter, ProtocolVersion, PublicKey,
+    SecretKey, StoredValue, TransferAddr, TransferV1, URef, U512,
 };
 use casper_validation::{
     abi::{ABIFixture, ABITestCase},
@@ -410,8 +410,8 @@ pub fn make_abi_test_fixtures() -> Result<TestFixtures, Error> {
         );
 
         let mut active_versions = BTreeMap::new();
-        let v1_hash = AddressableEntityHash::new([99; 32]);
-        let v2_hash = AddressableEntityHash::new([100; 32]);
+        let v1_hash = EntityAddr::SmartContract([99; 32]);
+        let v2_hash = EntityAddr::SmartContract([100; 32]);
         active_versions.insert(EntityVersionKey::new(1, 2), v1_hash);
         let v1 = EntityVersionKey::new(1, 1);
         active_versions.insert(v1, v2_hash);

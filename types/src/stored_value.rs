@@ -33,7 +33,7 @@ pub use global_state_identifier::GlobalStateIdentifier;
 pub use type_mismatch::TypeMismatch;
 
 /// Tag used to discriminate between different variants of `StoredValue`.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum StoredValueTag {
     /// A CLValue.

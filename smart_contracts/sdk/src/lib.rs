@@ -12,8 +12,8 @@ pub use linkme;
 
 #[cfg(feature = "__abi_generator")]
 pub mod abi_generator;
+pub mod casper;
 pub mod collections;
-pub mod host;
 #[cfg(feature = "std")]
 pub mod schema;
 pub mod types;
@@ -21,9 +21,10 @@ pub mod types;
 use crate::prelude::{marker::PhantomData, ptr::NonNull};
 
 use crate::serializers::borsh::{BorshDeserialize, BorshSerialize};
+use casper::{CallResult, Entity};
 pub use casper_executor_wasm_common;
+pub use casper_macros as macros;
 pub use casper_sdk_sys as sys;
-use host::{CallResult, Entity};
 use types::{Address, CallError};
 
 cfg_if::cfg_if! {
@@ -34,7 +35,7 @@ cfg_if::cfg_if! {
             SET_HOOK.call_once(|| {
                 std::panic::set_hook(Box::new(|panic_info| {
                     let msg = panic_info.to_string();
-                    host::casper_print(&msg);
+                    casper::print(&msg);
                 }));
             });
         }
@@ -96,7 +97,7 @@ pub enum Access {
 #[macro_export]
 macro_rules! log {
     ($($arg:tt)*) => ({
-        $crate::host::casper_print(&$crate::prelude::format!($($arg)*));
+        $crate::prelude::casper::print(&$crate::prelude::format!($($arg)*));
     })
 }
 
@@ -111,7 +112,7 @@ macro_rules! log {
 #[macro_export]
 macro_rules! revert {
     () => {{
-        $crate::host::casper_return(
+        $crate::casper::ret(
             $crate::casper_executor_wasm_common::flags::ReturnFlags::REVERT,
             None,
         );
@@ -121,7 +122,7 @@ macro_rules! revert {
         let value = $arg;
         let data =
             $crate::serializers::borsh::to_vec(&value).expect("Revert value should serialize");
-        $crate::host::casper_return(
+        $crate::casper::ret(
             $crate::casper_executor_wasm_common::flags::ReturnFlags::REVERT,
             Some(data.as_slice()),
         );
@@ -131,7 +132,7 @@ macro_rules! revert {
 }
 
 pub trait UnwrapOrRevert<T> {
-    /// Unwraps the value into its inner type or calls [`crate::host::casper_return`] with a
+    /// Unwraps the value into its inner type or calls [`crate::casper::ret`] with a
     /// predetermined error code on failure.
     fn unwrap_or_revert(self) -> T;
 }
@@ -143,7 +144,7 @@ where
     fn unwrap_or_revert(self) -> T {
         self.unwrap_or_else(|error| {
             let error_data = borsh::to_vec(&error).expect("Revert value should serialize");
-            host::casper_return(
+            casper::ret(
                 casper_executor_wasm_common::flags::ReturnFlags::REVERT,
                 Some(error_data.as_slice()),
             );
@@ -205,7 +206,7 @@ impl<T: ContractRef> ContractHandle<T> {
 
     /// Returns the balance of the contract.
     pub fn balance(&self) -> u128 {
-        host::get_balance_of(&Entity::Contract(self.contract_address))
+        casper::get_balance_of(&Entity::Contract(self.contract_address))
     }
 }
 
@@ -244,7 +245,7 @@ impl<T: ContractRef> CallBuilder<T> {
     ) -> Result<CallResult<CallData>, CallError> {
         let inst = T::new();
         let call_data = func(inst);
-        host::call(
+        casper::call(
             &self.address,
             self.transferred_value.unwrap_or(0),
             call_data,
@@ -260,7 +261,7 @@ impl<T: ContractRef> CallBuilder<T> {
     {
         let inst = T::new();
         let call_data = func(inst);
-        let call_result = host::call(
+        let call_result = casper::call(
             &self.address,
             self.transferred_value.unwrap_or(0),
             call_data,
@@ -318,7 +319,7 @@ impl<'a, T: ContractRef> ContractBuilder<'a, T> {
         let call_data = func();
         let input_data = call_data.input_data();
         let seed = self.seed;
-        let create_result = host::casper_create(
+        let create_result = casper::create(
             self.code,
             value,
             Some(call_data.entry_point()),
@@ -335,32 +336,20 @@ impl<'a, T: ContractRef> ContractBuilder<'a, T> {
 
         let value = self.transferred_value.unwrap_or(0);
         let seed = self.seed;
-        let create_result = host::casper_create(self.code, value, None, None, seed)?;
+        let create_result = casper::create(self.code, value, None, None, seed)?;
         Ok(ContractHandle::from_address(create_result.contract_address))
     }
 }
 
+/// Trait for converting a message data to a string.
+pub trait Message: BorshSerialize {
+    const TOPIC: &'static str;
+    /// Converts the message data to a string.
+    fn payload(&self) -> Vec<u8>;
+}
+
 #[cfg(test)]
 mod tests {
-    // impl ToCallData for DoSomethingArg {
-    //     const SELECTOR: Selector = Selector::new(1);
-    //     type Return<'a> = ();
-    //     fn input_data(&self) -> Option<Vec<u8>> {
-    //         Some(borsh::to_vec(self).expect("Serialization should work"))
-    //     }
-    // }
-
-    // impl MyContract {
-    //     #[allow(dead_code)]
-    //     fn do_something(&mut self, foo: u64) -> impl ToCallData {
-    //         DoSomethingArg { foo }
-    //     }
-    // }
-
     #[test]
-    fn test_call_builder() {
-        // let contract = MyContract;
-        // let do_something = CallBuilder::<MyContract>::new([0;
-        // 32]).with_value(5).call(|my_contract| my_contract.do_something(43));
-    }
+    fn test_call_builder() {}
 }

@@ -171,6 +171,7 @@ impl ContractRuntime {
                 .with_executor_kind(ExecutorKind::Compiled)
                 .with_wasm_config(*chainspec.wasm_config.v2())
                 .with_storage_costs(chainspec.storage_costs)
+                .with_message_limits(chainspec.wasm_config.messages_limits())
                 .build()
                 .expect("Should build");
             ExecutorV2::new(executor_config, Arc::clone(&execution_engine_v1))

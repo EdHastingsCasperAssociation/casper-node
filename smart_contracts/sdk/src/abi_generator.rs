@@ -15,6 +15,12 @@ pub struct EntryPoint {
     pub result_decl: Declaration,
 }
 
+#[derive(Debug, Clone)]
+pub struct Message {
+    pub name: &'static str,
+    pub decl: &'static str,
+}
+
 pub struct Manifest {
     pub name: &'static str,
     pub entry_points: &'static [EntryPoint],
@@ -28,6 +34,10 @@ pub static ENTRYPOINTS: [fn() -> crate::schema::SchemaEntryPoint] = [..];
 #[distributed_slice]
 #[linkme(crate = crate::linkme)]
 pub static ABI_COLLECTORS: [fn(&mut crate::abi::Definitions)] = [..];
+
+#[distributed_slice]
+#[linkme(crate = crate::linkme)]
+pub static MESSAGES: [Message] = [..];
 
 #[no_mangle]
 pub extern "C" fn __cargo_casper_load_entrypoints(
@@ -48,4 +58,13 @@ pub extern "C" fn __cargo_casper_collect_abi(definitions: *mut crate::abi::Defin
     for collector in ABI_COLLECTORS {
         collector(unsafe { ptr.as_mut() });
     }
+}
+
+#[no_mangle]
+pub extern "C" fn __cargo_casper_collect_messages(
+    callback: extern "C" fn(*const Message, usize, *mut c_void),
+    ctx: *mut c_void,
+) {
+    let mut ctx = NonNull::new(ctx).expect("non-null pointer");
+    callback(MESSAGES.as_ptr(), MESSAGES.len(), unsafe { ctx.as_mut() });
 }

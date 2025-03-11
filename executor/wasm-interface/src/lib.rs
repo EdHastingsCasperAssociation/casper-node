@@ -1,7 +1,6 @@
 pub mod executor;
 
 use bytes::Bytes;
-use casper_types::{HostFunction, HostFunctionCost};
 use thiserror::Error;
 
 use casper_executor_wasm_common::flags::ReturnFlags;
@@ -227,7 +226,7 @@ impl ConfigBuilder {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MeteringPoints {
     Remaining(u64),
     Exhausted,
@@ -272,15 +271,7 @@ pub trait Caller {
     /// Returns the amount of gas used.
     fn gas_consumed(&mut self) -> MeteringPoints;
     /// Set the amount of gas used.
-    fn consume_gas(&mut self, value: u64) -> MeteringPoints;
-    /// Consumes a set amount of gas for the specified host function and weights
-    fn charge_host_function_call<T>(
-        &mut self,
-        host_function: &HostFunction<T>,
-        weights: T,
-    ) -> MeteringPoints
-    where
-        T: AsRef<[HostFunctionCost]> + Copy;
+    fn consume_gas(&mut self, value: u64) -> VMResult<()>;
 }
 
 #[derive(Debug, Error)]

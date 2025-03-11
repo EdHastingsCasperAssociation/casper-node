@@ -3,7 +3,7 @@ use casper_types::{
     bytesrepr::{self, FromBytes, ToBytes, U8_SERIALIZED_LENGTH},
     contract_messages::TopicNameHash,
     system::{auction::BidAddrTag, mint::BalanceHoldAddrTag},
-    EntityAddr, HashAddr, KeyTag, URefAddr,
+    EntityAddr, KeyTag, URefAddr,
 };
 
 /// Key prefixes used for querying the global state.
@@ -12,9 +12,9 @@ pub enum KeyPrefix {
     /// Retrieves all delegator bid addresses for a given validator.
     DelegatorBidAddrsByValidator(AccountHash),
     /// Retrieves all entries for a given hash addr.
-    MessageEntriesByEntity(HashAddr),
+    MessageEntriesByEntity(EntityAddr),
     /// Retrieves all messages for a given hash addr and topic.
-    MessagesByEntityAndTopic(HashAddr, TopicNameHash),
+    MessagesByEntityAndTopic(EntityAddr, TopicNameHash),
     /// Retrieves all named keys for a given entity.
     NamedKeysByEntity(EntityAddr),
     /// Retrieves all gas balance holds for a given purse.
@@ -123,7 +123,7 @@ impl FromBytes for KeyPrefix {
                 }
             }
             tag if tag == KeyTag::Message as u8 => {
-                let (hash_addr, remainder) = HashAddr::from_bytes(remainder)?;
+                let (hash_addr, remainder) = EntityAddr::from_bytes(remainder)?;
                 if remainder.is_empty() {
                     (KeyPrefix::MessageEntriesByEntity(hash_addr), remainder)
                 } else {
@@ -185,9 +185,9 @@ mod tests {
     pub fn key_prefix_arb() -> impl Strategy<Value = KeyPrefix> {
         prop_oneof![
             account_hash_arb().prop_map(KeyPrefix::DelegatorBidAddrsByValidator),
-            u8_slice_32().prop_map(KeyPrefix::MessageEntriesByEntity),
-            (u8_slice_32(), topic_name_hash_arb()).prop_map(|(hash_addr, topic)| {
-                KeyPrefix::MessagesByEntityAndTopic(hash_addr, topic)
+            entity_addr_arb().prop_map(KeyPrefix::MessageEntriesByEntity),
+            (entity_addr_arb(), topic_name_hash_arb()).prop_map(|(entity_addr, topic)| {
+                KeyPrefix::MessagesByEntityAndTopic(entity_addr, topic)
             }),
             entity_addr_arb().prop_map(KeyPrefix::NamedKeysByEntity),
             u8_slice_32().prop_map(KeyPrefix::GasBalanceHoldsByPurse),
@@ -222,11 +222,14 @@ mod tests {
             ),
             (
                 Key::Message(MessageAddr::new_message_addr(
-                    hash1,
+                    EntityAddr::SmartContract(hash1),
                     TopicNameHash::new(hash2),
                     0,
                 )),
-                KeyPrefix::MessagesByEntityAndTopic(hash1, TopicNameHash::new(hash2)),
+                KeyPrefix::MessagesByEntityAndTopic(
+                    EntityAddr::SmartContract(hash1),
+                    TopicNameHash::new(hash2),
+                ),
             ),
             (
                 Key::NamedKey(NamedKeyAddr::new_named_key_entry(

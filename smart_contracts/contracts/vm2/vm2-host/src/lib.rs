@@ -1,9 +1,7 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 
-use casper_macros::casper;
 use casper_sdk::{
     casper_executor_wasm_common::{flags::ReturnFlags, keyspace::Keyspace},
-    host::{self, Entity},
     prelude::*,
 };
 
@@ -37,7 +35,7 @@ impl MinHostWrapper {
                 ret.get_block_time();
             }
             "get_value" => {
-                ret.get_value();
+                ret.get_transferred_value();
             }
             "get_balance_of" => {
                 ret.get_balance_of();
@@ -94,59 +92,59 @@ impl MinHostWrapper {
     }
 
     pub fn get_caller(&self) -> Entity {
-        host::get_caller()
+        casper::get_caller()
     }
 
     pub fn get_block_time(&self) -> u64 {
-        host::get_block_time()
+        casper::get_block_time()
     }
 
-    pub fn get_value(&self) -> u128 {
-        host::get_value()
+    pub fn get_transferred_value(&self) -> u128 {
+        casper::transferred_value()
     }
 
     pub fn get_balance_of(&self) -> u128 {
-        host::get_balance_of(&Entity::Account([0u8; 32]))
+        casper::get_balance_of(&Entity::Account([0u8; 32]))
     }
 
     pub fn call(&self) {
-        host::casper_call(&[0u8; 32], 0, "", &[]).1.ok();
+        casper::casper_call(&[0u8; 32], 0, "", &[]).1.ok();
     }
 
     pub fn input(&self) {
-        host::casper_copy_input();
+        casper::copy_input();
     }
 
     pub fn create(&self) {
-        host::casper_create(None, 0, None, None, None).ok();
+        casper::create(None, 0, None, None, None).ok();
     }
 
     pub fn print(&self) {
-        host::casper_print("");
+        casper::print("");
     }
 
     pub fn read(&self) {
-        host::casper_read(Keyspace::Context(&[]), |_| None).ok();
+        casper::read(Keyspace::Context(&[]), |_| None).ok();
     }
 
     pub fn ret(&self) {
-        host::casper_return(ReturnFlags::empty(), None);
+        casper::ret(ReturnFlags::empty(), None);
     }
 
     pub fn transfer(&self) {
-        host::casper_transfer(&[0; 32], 0).ok();
+        casper::transfer(&[0; 32], 0).ok();
     }
 
     pub fn upgrade(&self) {
-        host::casper_upgrade(&[], None, None).ok();
+        casper::upgrade(&[], None, None).ok();
     }
 
     pub fn write(&self) {
-        host::casper_write(Keyspace::Context(&[]), &[]).ok();
+        casper::write(Keyspace::Context(&[]), &[]).ok();
     }
 
     pub fn write_n_bytes(&self, n: u64) {
         let buffer = vec![0; n as usize];
-        host::casper_write(Keyspace::Context(&[0]), &buffer).ok();
+        casper::write(Keyspace::Context(&[0]), &buffer).ok();
     }
 }

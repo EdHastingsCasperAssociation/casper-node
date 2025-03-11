@@ -8,8 +8,8 @@ use casper_storage::{
     AddressGenerator, TrackingCopy,
 };
 use casper_types::{
-    account::AccountHash, execution::Effects, BlockHash, BlockTime, Digest, HashAddr, Key,
-    TransactionHash,
+    account::AccountHash, contract_messages::Messages, execution::Effects, BlockHash, BlockTime,
+    Digest, HashAddr, Key, TransactionHash,
 };
 use parking_lot::RwLock;
 use thiserror::Error;
@@ -223,39 +223,8 @@ pub struct ExecuteResult {
     pub effects: Effects,
     /// Cache of tracking copy effects produced by the execution.
     pub cache: TrackingCopyCache,
-}
-
-/// Result of executing a Wasm contract on a state provider.
-#[derive(Debug)]
-pub struct ExecuteWithProviderResult {
-    /// Error while executing Wasm: traps, memory access errors, etc.
-    pub host_error: Option<HostError>,
-    /// Output produced by the Wasm contract.
-    pub output: Option<Bytes>,
-    /// Gas usage.
-    pub gas_usage: GasUsage,
-    /// Effects produced by the execution.
-    pub effects: Effects,
-    /// Post state hash.
-    pub post_state_hash: Digest,
-}
-
-impl ExecuteWithProviderResult {
-    pub fn output(&self) -> Option<&Bytes> {
-        self.output.as_ref()
-    }
-
-    pub fn gas_usage(&self) -> &GasUsage {
-        &self.gas_usage
-    }
-
-    pub fn effects(&self) -> &Effects {
-        &self.effects
-    }
-
-    pub fn post_state_hash(&self) -> Digest {
-        self.post_state_hash
-    }
+    /// Messages produced by the execution.
+    pub messages: Messages,
 }
 
 impl ExecuteResult {
@@ -278,6 +247,45 @@ impl ExecuteResult {
 
     pub fn gas_usage(&self) -> &GasUsage {
         &self.gas_usage
+    }
+}
+
+/// Result of executing a Wasm contract on a state provider.
+#[derive(Debug)]
+pub struct ExecuteWithProviderResult {
+    /// Error while executing Wasm: traps, memory access errors, etc.
+    pub host_error: Option<HostError>,
+    /// Output produced by the Wasm contract.
+    pub output: Option<Bytes>,
+    /// Gas usage.
+    pub gas_usage: GasUsage,
+    /// Effects produced by the execution.
+    pub effects: Effects,
+    /// Post state hash.
+    pub post_state_hash: Digest,
+    /// Messages produced by the execution.
+    pub messages: Messages,
+}
+
+impl ExecuteWithProviderResult {
+    pub fn output(&self) -> Option<&Bytes> {
+        self.output.as_ref()
+    }
+
+    pub fn gas_usage(&self) -> &GasUsage {
+        &self.gas_usage
+    }
+
+    pub fn effects(&self) -> &Effects {
+        &self.effects
+    }
+
+    pub fn post_state_hash(&self) -> Digest {
+        self.post_state_hash
+    }
+
+    pub fn messages(&self) -> &Messages {
+        &self.messages
     }
 }
 
