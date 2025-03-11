@@ -249,7 +249,7 @@ pub fn new_burn_args<A: Into<U512>>(
     Ok(args)
 }
 
-/// Checks the given `RuntimeArgs` are suitable for use in a transfer transaction.
+/// Checks the given `RuntimeArgs` are suitable for use in a burn transaction.
 pub fn has_valid_burn_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
     let native_burn_minimum_motes = 1;
     let args = args
