@@ -4550,7 +4550,7 @@ async fn should_not_allow_unverified_native_burn() {
     let burn_amount = U512::from(100);
 
     let alice_uref_addr =
-        get_main_purse(&mut test.fixture, &*ALICE_PUBLIC_KEY).expect("should have main purse");
+        get_main_purse(&mut test.fixture, &ALICE_PUBLIC_KEY).expect("should have main purse");
     let alice_purse = URef::new(alice_uref_addr, AccessRights::all());
 
     let txn_v1 = TransactionV1Builder::new_burn(burn_amount, Some(alice_purse))
