@@ -3343,9 +3343,11 @@
       "required": [
         "consumed",
         "cost",
+        "current_price",
         "effects",
         "initiator",
         "limit",
+        "refund",
         "size_estimate",
         "transfers"
       ],
@@ -3365,8 +3367,14 @@
             "null"
           ]
         },
+        "current_price": {
+          "description": "The current gas price. I.e. how many motes are charged for each unit of computation.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
         "limit": {
-          "description": "What was the maximum allowed gas limit for this transaction?.",
+          "description": "The maximum allowed gas limit for this transaction",
           "allOf": [
             {
               "$ref": "#/definitions/Gas"
@@ -3383,6 +3391,14 @@
         },
         "cost": {
           "description": "How much was paid for this transaction.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/U512"
+            }
+          ]
+        },
+        "refund": {
+          "description": "How much unconsumed gas was refunded (if any)?",
           "allOf": [
             {
               "$ref": "#/definitions/U512"

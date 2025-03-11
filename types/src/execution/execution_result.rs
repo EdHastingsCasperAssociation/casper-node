@@ -16,7 +16,7 @@ use super::{ExecutionResultV1, ExecutionResultV2};
 use crate::testing::TestRng;
 use crate::{
     bytesrepr::{self, FromBytes, ToBytes, U8_SERIALIZED_LENGTH},
-    U512,
+    Transfer, U512,
 };
 
 const V1_TAG: u8 = 0;
@@ -37,6 +37,14 @@ pub enum ExecutionResult {
 }
 
 impl ExecutionResult {
+    /// Returns refund amount.
+    pub fn refund(&self) -> Option<U512> {
+        match self {
+            ExecutionResult::V1(_) => None,
+            ExecutionResult::V2(result) => Some(result.refund),
+        }
+    }
+
     /// Returns consumed amount.
     pub fn consumed(&self) -> U512 {
         match self {
@@ -63,6 +71,16 @@ impl ExecutionResult {
                 ExecutionResultV1::Success { .. } => None,
             },
             ExecutionResult::V2(v2) => v2.error_message.clone(),
+        }
+    }
+
+    /// Returns transfers, if any.
+    pub fn transfers(&self) -> Vec<Transfer> {
+        match self {
+            ExecutionResult::V1(_) => {
+                vec![]
+            }
+            ExecutionResult::V2(execution_result) => execution_result.transfers.clone(),
         }
     }
 }

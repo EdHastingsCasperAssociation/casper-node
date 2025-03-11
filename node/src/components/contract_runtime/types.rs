@@ -11,8 +11,8 @@ use casper_execution_engine::engine_state::{
 use casper_storage::{
     block_store::types::ApprovalsHashes,
     data_access_layer::{
-        auction::AuctionMethodError, BalanceHoldResult, BalanceResult, BiddingResult,
-        EraValidatorsRequest, HandleFeeResult, HandleRefundResult, TransferResult,
+        auction::AuctionMethodError, mint::BurnResult, BalanceHoldResult, BalanceResult,
+        BiddingResult, EraValidatorsRequest, HandleFeeResult, HandleRefundResult, TransferResult,
     },
 };
 use casper_types::{
@@ -75,15 +75,17 @@ pub(crate) struct ExecutionArtifactBuilder {
     messages: Messages,
     transfers: Vec<Transfer>,
     initiator: InitiatorAddr,
+    current_price: u8,
     cost: U512,
     limit: Gas,
     consumed: Gas,
+    refund: U512,
     size_estimate: u64,
-    baseline_amount: U512,
+    min_cost: U512,
 }
 
 impl ExecutionArtifactBuilder {
-    pub fn new(transaction: &Transaction, baseline_amount: U512) -> Self {
+    pub fn new(transaction: &Transaction, min_cost: U512, current_price: u8) -> Self {
         ExecutionArtifactBuilder {
             effects: Effects::new(),
             hash: transaction.hash(),
@@ -92,11 +94,13 @@ impl ExecutionArtifactBuilder {
             transfers: vec![],
             messages: Default::default(),
             initiator: transaction.initiator_addr(),
+            current_price,
             cost: U512::zero(),
             limit: Gas::zero(),
             consumed: Gas::zero(),
+            refund: U512::zero(),
             size_estimate: transaction.size_estimate() as u64,
-            baseline_amount,
+            min_cost,
         }
     }
 
@@ -105,12 +109,17 @@ impl ExecutionArtifactBuilder {
     }
 
     pub fn consumed(&self) -> U512 {
-        // to prevent do-nothing exhaustion, if consumed == 0 we raise consumed to baseline
-        let consumed = self.consumed;
-        if consumed == Gas::zero() {
-            self.baseline_amount
+        self.consumed.value()
+    }
+
+    pub fn cost_to_use(&self) -> U512 {
+        // to prevent do-nothing exhaustion and other 0 cost scenarios,
+        // we raise cost to min_cost if less than that
+        let cost = self.cost;
+        if cost < self.min_cost {
+            self.min_cost
         } else {
-            consumed.value()
+            cost
         }
     }
 
@@ -197,7 +206,13 @@ impl ExecutionArtifactBuilder {
         if let HandleRefundResult::RootNotFound = handle_refund_result {
             return Err(true);
         }
-        self.with_appended_effects(handle_refund_result.effects());
+        if let HandleRefundResult::Success {
+            effects, transfers, ..
+        } = handle_refund_result
+        {
+            self.with_appended_transfers(&mut transfers.clone())
+                .with_appended_effects(effects.clone());
+        }
         if let (None, HandleRefundResult::Failure(_)) = (&self.error_message, handle_refund_result)
         {
             self.error_message = handle_refund_result.error_message();
@@ -213,7 +228,13 @@ impl ExecutionArtifactBuilder {
         if let HandleRefundResult::RootNotFound = handle_refund_result {
             return Err(true);
         }
-        self.with_appended_effects(handle_refund_result.effects());
+        if let HandleRefundResult::Success {
+            effects, transfers, ..
+        } = handle_refund_result
+        {
+            self.with_appended_transfers(&mut transfers.clone())
+                .with_appended_effects(effects.clone());
+        }
         if let (None, HandleRefundResult::Failure(_)) = (&self.error_message, handle_refund_result)
         {
             self.error_message = handle_refund_result.error_message();
@@ -229,12 +250,18 @@ impl ExecutionArtifactBuilder {
         if let HandleRefundResult::RootNotFound = handle_refund_result {
             return Err(());
         }
+        if let HandleRefundResult::Success {
+            effects, transfers, ..
+        } = handle_refund_result
+        {
+            self.with_appended_transfers(&mut transfers.clone())
+                .with_appended_effects(effects.clone());
+        }
         if let (None, HandleRefundResult::Failure(_)) = (&self.error_message, handle_refund_result)
         {
             self.error_message = handle_refund_result.error_message();
             return Ok(self);
         }
-        self.with_appended_effects(handle_refund_result.effects());
         Ok(self)
     }
 
@@ -273,8 +300,18 @@ impl ExecutionArtifactBuilder {
         self
     }
 
+    pub fn with_min_cost(&mut self, min_cost: U512) -> &mut Self {
+        self.min_cost = min_cost;
+        self
+    }
+
     pub fn with_gas_limit(&mut self, limit: Gas) -> &mut Self {
         self.limit = limit;
+        self
+    }
+
+    pub fn with_refund_amount(&mut self, refund: U512) -> &mut Self {
+        self.refund = refund;
         self
     }
 
@@ -319,13 +356,26 @@ impl ExecutionArtifactBuilder {
             self.error_message = Some(format!("{}", err));
         }
         if let TransferResult::Success {
-            mut transfers,
             effects,
+            transfers,
             cache: _,
         } = transfer_result
         {
-            self.with_appended_transfers(&mut transfers)
+            self.with_appended_transfers(&mut transfers.clone())
                 .with_appended_effects(effects);
+        }
+        Ok(self)
+    }
+
+    pub fn with_burn_result(&mut self, burn_result: BurnResult) -> Result<&mut Self, ()> {
+        if let BurnResult::RootNotFound = burn_result {
+            return Err(());
+        }
+        if let (None, BurnResult::Failure(err)) = (&self.error_message, &burn_result) {
+            self.error_message = Some(format!("{}", err));
+        }
+        if let BurnResult::Success { effects, cache: _ } = burn_result {
+            self.with_appended_effects(effects);
         }
         Ok(self)
     }
@@ -337,8 +387,12 @@ impl ExecutionArtifactBuilder {
         if let (None, BiddingResult::Failure(err)) = (&self.error_message, &bidding_result) {
             self.error_message = Some(format!("{}", err));
         }
-        if let BiddingResult::Success { effects, .. } = bidding_result {
-            self.with_appended_effects(effects);
+        if let BiddingResult::Success {
+            effects, transfers, ..
+        } = bidding_result
+        {
+            self.with_appended_transfers(&mut transfers.clone())
+                .with_appended_effects(effects);
         }
         Ok(self)
     }
@@ -350,14 +404,16 @@ impl ExecutionArtifactBuilder {
     }
 
     pub(crate) fn build(self) -> ExecutionArtifact {
-        let consumed = Gas::new(self.consumed());
+        let actual_cost = self.cost_to_use();
         let result = ExecutionResultV2 {
             effects: self.effects,
             transfers: self.transfers,
             initiator: self.initiator,
+            refund: self.refund,
             limit: self.limit,
-            consumed,
-            cost: self.cost,
+            consumed: self.consumed,
+            cost: actual_cost,
+            current_price: self.current_price,
             size_estimate: self.size_estimate,
             error_message: self.error_message,
         };
@@ -435,7 +491,7 @@ impl ExecutionArtifact {
 pub struct BlockAndExecutionArtifacts {
     /// The [`Block`] the contract runtime executed.
     pub(crate) block: Arc<BlockV2>,
-    /// The [`ApprovalsHashes`] for the deploys in this block.
+    /// The [`ApprovalsHashes`] for the transactions in this block.
     pub(crate) approvals_hashes: Box<ApprovalsHashes>,
     /// The results from executing the transactions in the block.
     pub(crate) execution_artifacts: Vec<ExecutionArtifact>,

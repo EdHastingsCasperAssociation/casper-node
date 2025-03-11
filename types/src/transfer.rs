@@ -16,9 +16,12 @@ use rand::Rng;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::bytesrepr::{self, FromBytes, ToBytes, U8_SERIALIZED_LENGTH};
 #[cfg(feature = "json-schema")]
-use crate::{account::AccountHash, transaction::TransactionV1Hash, URef, U512};
+use crate::{account::AccountHash, transaction::TransactionV1Hash, URef};
+use crate::{
+    bytesrepr::{self, FromBytes, ToBytes, U8_SERIALIZED_LENGTH},
+    U512,
+};
 #[cfg(any(feature = "testing", feature = "json-schema", test))]
 use crate::{transaction::TransactionHash, Gas, InitiatorAddr};
 pub use error::TransferFromStrError;
@@ -70,6 +73,14 @@ pub enum Transfer {
 }
 
 impl Transfer {
+    /// Transfer amount.
+    pub fn amount(&self) -> U512 {
+        match self {
+            Transfer::V1(transfer_v1) => transfer_v1.amount,
+            Transfer::V2(transfer_v2) => transfer_v2.amount,
+        }
+    }
+
     // This method is not intended to be used by third party crates.
     #[doc(hidden)]
     #[cfg(feature = "json-schema")]
@@ -121,19 +132,6 @@ impl From<TransferV2> for Transfer {
 }
 
 impl ToBytes for Transfer {
-    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
-        match self {
-            Transfer::V1(transfer) => {
-                V1_TAG.write_bytes(writer)?;
-                transfer.write_bytes(writer)
-            }
-            Transfer::V2(transfer) => {
-                V2_TAG.write_bytes(writer)?;
-                transfer.write_bytes(writer)
-            }
-        }
-    }
-
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         let mut buffer = bytesrepr::allocate_buffer(self)?;
         self.write_bytes(&mut buffer)?;
@@ -146,6 +144,19 @@ impl ToBytes for Transfer {
                 Transfer::V1(transfer) => transfer.serialized_length(),
                 Transfer::V2(transfer) => transfer.serialized_length(),
             }
+    }
+
+    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
+        match self {
+            Transfer::V1(transfer) => {
+                V1_TAG.write_bytes(writer)?;
+                transfer.write_bytes(writer)
+            }
+            Transfer::V2(transfer) => {
+                V2_TAG.write_bytes(writer)?;
+                transfer.write_bytes(writer)
+            }
+        }
     }
 }
 

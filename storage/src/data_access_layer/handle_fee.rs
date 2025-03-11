@@ -4,7 +4,7 @@ use crate::{
 };
 use casper_types::{
     execution::Effects, Digest, EraId, InitiatorAddr, ProtocolVersion, PublicKey, TransactionHash,
-    U512,
+    Transfer, U512,
 };
 
 /// Handle fee mode.
@@ -141,6 +141,8 @@ pub enum HandleFeeResult {
     RootNotFound,
     /// Handle request succeeded.
     Success {
+        /// Transfers.
+        transfers: Vec<Transfer>,
         /// Handle fee effects.
         effects: Effects,
     },

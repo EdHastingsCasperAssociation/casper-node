@@ -1557,10 +1557,14 @@ where
 
     pub(crate) fn get_system_entity_key(&self, name: &str) -> Result<Key, ExecError> {
         let system_entity_hash = self.get_system_contract(name)?;
-        Ok(Key::addressable_entity_key(
-            EntityKindTag::System,
-            system_entity_hash,
-        ))
+        if self.engine_config.enable_entity {
+            Ok(Key::addressable_entity_key(
+                EntityKindTag::System,
+                system_entity_hash,
+            ))
+        } else {
+            Ok(Key::Hash(system_entity_hash.value()))
+        }
     }
 
     /// Returns system entity registry by querying the global state.

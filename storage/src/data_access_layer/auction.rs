@@ -13,7 +13,7 @@ use casper_types::{
         auction::{DelegationRate, DelegatorKind, Reservation},
     },
     CLTyped, CLValue, CLValueError, Chainspec, Digest, InitiatorAddr, ProtocolVersion, PublicKey,
-    RuntimeArgs, TransactionEntryPoint, TransactionHash, URefAddr, U512,
+    RuntimeArgs, TransactionEntryPoint, TransactionHash, Transfer, URefAddr, U512,
 };
 
 use crate::{
@@ -140,7 +140,8 @@ impl AuctionMethod {
         match entry_point {
             TransactionEntryPoint::Call
             | TransactionEntryPoint::Custom(_)
-            | TransactionEntryPoint::Transfer => {
+            | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn => {
                 Err(AuctionMethodError::InvalidEntryPoint(entry_point))
             }
             TransactionEntryPoint::ActivateBid => Self::new_activate_bid(runtime_args),
@@ -424,10 +425,12 @@ pub enum BiddingResult {
     RootNotFound,
     /// Bidding request succeeded
     Success {
-        /// The ret value, if any.
-        ret: AuctionMethodRet,
+        /// Transfer records.
+        transfers: Vec<Transfer>,
         /// Effects of bidding interaction.
         effects: Effects,
+        /// The ret value, if any.
+        ret: AuctionMethodRet,
     },
     /// Bidding request failed.
     Failure(TrackingCopyError),
