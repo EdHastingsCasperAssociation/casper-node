@@ -629,34 +629,6 @@ pub fn dispatch_with<T>(stub: Environment, f: impl FnOnce() -> T) -> Result<T, N
     result
 }
 
-// macro_rules! define_symbols {
-
-//     ( @optional $ty:ty ) => { $ty };
-//     ( @optional ) => { () };
-
-//     ( $( $(#[$cfg:meta])? $vis:vis fn $name:ident $(( $($arg:ident: $argty:ty,)* ))? $(->
-// $ret:ty)?;)+) => {         $(
-//             mod $name {
-//                 type Ret = define_symbols!(@optional $($ret)?);
-
-//                 #[no_mangle]
-//                 $(#[$cfg])? pub extern "C"  fn $name($($($arg: $argty,)*)?) -> Ret {
-//                     let _name = stringify!($name);
-//                     let _args = ($($(&$arg,)*)?);
-
-//                     let _call_result = $crate::host::native::STUB.with(|stub| {
-//                         let stub = stub.borrow();
-//                         stub.$name($($($arg,)*)?)
-//                     });
-
-//                     $crate::host::native::handle_ret(_call_result)
-//                 }
-//             }
-
-//         )*
-//     }
-// }
-
 mod symbols {
     // TODO: Figure out how to use for_each_host_function macro here and deal with never type in
     // casper_return
@@ -675,7 +647,7 @@ mod symbols {
         let _call_result = with_current_environment(|stub| {
             stub.casper_read(key_space, key_ptr, key_size, info, alloc, alloc_ctx)
         });
-        crate::host::native::handle_ret(_call_result)
+        crate::casper::native::handle_ret(_call_result)
     }
 
     #[no_mangle]
@@ -691,7 +663,7 @@ mod symbols {
         let _call_result = with_current_environment(|stub| {
             stub.casper_write(key_space, key_ptr, key_size, value_ptr, value_size)
         });
-        crate::host::native::handle_ret(_call_result)
+        crate::casper::native::handle_ret(_call_result)
     }
 
     #[no_mangle]
@@ -699,10 +671,10 @@ mod symbols {
         let _name = "casper_print";
         let _args = (&msg_ptr, &msg_size);
         let _call_result = with_current_environment(|stub| stub.casper_print(msg_ptr, msg_size));
-        crate::host::native::handle_ret(_call_result)
+        crate::casper::native::handle_ret(_call_result)
     }
 
-    use crate::host::native::LAST_TRAP;
+    use crate::casper::native::LAST_TRAP;
 
     #[no_mangle]
     pub extern "C" fn casper_return(flags: u32, data_ptr: *const u8, data_len: usize) {
@@ -723,7 +695,7 @@ mod symbols {
         let _args = (&alloc, &alloc_ctx);
         let _call_result =
             with_current_environment(|stub| stub.casper_copy_input(alloc, alloc_ctx));
-        crate::host::native::handle_ret_with(_call_result, ptr::null_mut)
+        crate::casper::native::handle_ret_with(_call_result, ptr::null_mut)
     }
 
     #[no_mangle]
@@ -749,7 +721,7 @@ mod symbols {
                 result_ptr,
             )
         });
-        crate::host::native::handle_ret(_call_result)
+        crate::casper::native::handle_ret(_call_result)
     }
 
     #[no_mangle]
@@ -778,7 +750,7 @@ mod symbols {
                 alloc_ctx,
             )
         });
-        crate::host::native::handle_ret(_call_result)
+        crate::casper::native::handle_ret(_call_result)
     }
 
     #[no_mangle]
@@ -809,7 +781,7 @@ mod symbols {
         let _call_result = with_current_environment(|stub| {
             stub.casper_env_read(env_path, env_path_size, alloc, alloc_ctx)
         });
-        crate::host::native::handle_ret_with(_call_result, ptr::null_mut)
+        crate::casper::native::handle_ret_with(_call_result, ptr::null_mut)
     }
 
     #[no_mangle]
@@ -822,14 +794,14 @@ mod symbols {
         let _args = (&dest, &dest_len);
         let _call_result =
             with_current_environment(|stub| stub.casper_env_caller(dest, dest_len, entity));
-        crate::host::native::handle_ret_with(_call_result, ptr::null)
+        crate::casper::native::handle_ret_with(_call_result, ptr::null)
     }
     #[no_mangle]
     pub extern "C" fn casper_env_transferred_value(dest: *mut core::ffi::c_void) {
         let _name = "casper_env_transferred_value";
         let _args = ();
         let _call_result = with_current_environment(|stub| stub.casper_env_transferred_value(dest));
-        crate::host::native::handle_ret(_call_result)
+        crate::casper::native::handle_ret(_call_result)
     }
     #[no_mangle]
     pub extern "C" fn casper_env_balance(
@@ -852,6 +824,16 @@ mod symbols {
     #[no_mangle]
     pub extern "C" fn casper_env_block_time() -> u64 {
         0
+    }
+
+    #[no_mangle]
+    pub extern "C" fn casper_emit(
+        _topic_ptr: *const u8,
+        _topic_size: usize,
+        _data_ptr: *const u8,
+        _data_size: usize,
+    ) -> u32 {
+        todo!()
     }
 }
 

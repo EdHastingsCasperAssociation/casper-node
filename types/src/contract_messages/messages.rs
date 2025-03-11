@@ -372,7 +372,7 @@ impl Message {
     }
 
     /// Returns a reference to the name of the topic on which the message was emitted on.
-    pub fn topic_name(&self) -> &String {
+    pub fn topic_name(&self) -> &str {
         &self.topic_name
     }
 

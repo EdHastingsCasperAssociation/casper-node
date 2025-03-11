@@ -1,4 +1,5 @@
 use anyhow::{bail, Context};
+use casper_sdk::{abi_generator::Message, schema::SchemaMessage};
 
 use std::{ffi::c_void, fs, path::PathBuf, ptr::NonNull};
 
@@ -29,6 +30,10 @@ type CasperLoadEntrypoints = unsafe extern "C" fn(
     *mut c_void,
 );
 type CollectABI = unsafe extern "C" fn(*mut casper_sdk::abi::Definitions);
+type CollectMessages = unsafe extern "C" fn(
+    callback: unsafe extern "C" fn(*const Message, usize, *mut c_void),
+    ctx: *mut c_void,
+);
 
 unsafe extern "C" fn load_entrypoints_cb(
     entrypoint: *const casper_sdk::schema::SchemaEntryPoint,
@@ -39,6 +44,20 @@ unsafe extern "C" fn load_entrypoints_cb(
     // pass it to ctx
     let ctx = unsafe { &mut *(ctx as *mut Vec<casper_sdk::schema::SchemaEntryPoint>) };
     ctx.extend_from_slice(slice);
+}
+
+unsafe extern "C" fn collect_messages_cb(messages: *const Message, count: usize, ctx: *mut c_void) {
+    let slice = unsafe { std::slice::from_raw_parts(messages, count) };
+    // pass it to ctx
+    let ctx = unsafe { &mut *(ctx as *mut Vec<SchemaMessage>) };
+
+    for message in slice {
+        let schema_message = SchemaMessage {
+            name: message.name.to_string(),
+            decl: message.decl.to_string(),
+        };
+        ctx.push(schema_message);
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -60,10 +79,7 @@ fn main() -> anyhow::Result<()> {
 
             let package_name = workspace.package.first().expect("no package");
 
-            let extra_features = [
-                "casper-sdk/__abi_generator".to_string(),
-                "casper-macros/__abi_generator".to_string(),
-            ];
+            let extra_features = ["casper-sdk/__abi_generator".to_string()];
             features.features.extend(extra_features);
 
             let features_str = features.features.join(",");
@@ -122,10 +138,13 @@ fn main() -> anyhow::Result<()> {
                 unsafe { lib.get(b"__cargo_casper_load_entrypoints").unwrap() };
             let collect_abi: libloading::Symbol<CollectABI> =
                 unsafe { lib.get(b"__cargo_casper_collect_abi").unwrap() };
+            let collect_messages: libloading::Symbol<CollectMessages> =
+                unsafe { lib.get(b"__cargo_casper_collect_messages").unwrap() };
 
             let entry_points = {
                 let mut entrypoints: Vec<casper_sdk::schema::SchemaEntryPoint> = Vec::new();
-                let ctx = NonNull::from(&mut entrypoints);
+                let ctx: NonNull<Vec<casper_sdk::schema::SchemaEntryPoint>> =
+                    NonNull::from(&mut entrypoints);
                 unsafe { load_entrypoints(load_entrypoints_cb, ctx.as_ptr() as _) };
                 entrypoints
             };
@@ -139,6 +158,17 @@ fn main() -> anyhow::Result<()> {
                 defs
             };
 
+            let messages = {
+                let mut messages: Vec<SchemaMessage> = Vec::new();
+                unsafe {
+                    collect_messages(
+                        collect_messages_cb,
+                        NonNull::from(&mut messages).as_ptr() as _,
+                    );
+                }
+                messages
+            };
+
             // TODO: Move schema outside sdk to avoid importing unnecessary deps into wasm build
 
             let schema = casper_sdk::schema::Schema {
@@ -150,6 +180,7 @@ fn main() -> anyhow::Result<()> {
                 },
                 definitions: defs,
                 entry_points,
+                messages,
             };
 
             if let Some(output) = output_path {

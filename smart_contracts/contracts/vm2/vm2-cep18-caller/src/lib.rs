@@ -1,8 +1,7 @@
 #![cfg_attr(target_family = "wasm", no_main)]
 
 pub mod exports {
-    use casper_macros::casper;
-    use casper_sdk::{log, types::Address, ContractHandle};
+    use casper_sdk::{prelude::*, types::Address, ContractHandle};
 
     use vm2_cep18::{
         contract::TokenContractRef,
@@ -11,7 +10,7 @@ pub mod exports {
 
     #[casper(export)]
     pub fn call(address: Address) -> String {
-        use casper_sdk::host::Entity;
+        use casper_sdk::casper::Entity;
 
         log!("Hello {address:?}");
         let handle = ContractHandle::<TokenContractRef>::from_address(address);
@@ -32,6 +31,11 @@ pub mod exports {
             .call(|contract| contract.name())
             .expect("Should call");
         log!("Name: {name_result:?}");
+        let transfer_result = handle
+            .call(|contract| contract.transfer(Entity::Account([100; 32]), 100))
+            .expect("Should call");
+
+        log!("Transfer: {transfer_result:?}");
 
         log!("Success");
 

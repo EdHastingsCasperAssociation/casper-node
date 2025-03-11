@@ -769,6 +769,7 @@ dependencies = [
  "digest 0.10.7",
  "either",
  "fs_extra",
+ "itertools 0.14.0",
  "once_cell",
  "parking_lot",
  "serde_json",
@@ -846,7 +847,7 @@ name = "casper-macros"
 version = "0.1.0"
 dependencies = [
  "blake2-rfc",
- "casper-sdk",
+ "casper-executor-wasm-common",
  "casper-sdk-sys",
  "darling",
  "paste",
@@ -960,6 +961,7 @@ dependencies = [
  "borsh",
  "bytes",
  "casper-executor-wasm-common",
+ "casper-macros",
  "casper-sdk-sys",
  "cfg-if 1.0.0",
  "clap 4.5.27",
@@ -3454,6 +3456,15 @@ name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
 dependencies = [
  "either",
 ]
@@ -6602,7 +6613,6 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vm2-cep18"
 version = "0.1.0"
 dependencies = [
- "casper-macros",
  "casper-sdk",
  "casper-sdk-codegen",
  "serde_json",
@@ -6613,7 +6623,6 @@ name = "vm2-cep18-caller"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "casper-macros",
  "casper-sdk",
  "vm2-cep18",
 ]
@@ -6622,7 +6631,6 @@ dependencies = [
 name = "vm2-flipper"
 version = "0.1.0"
 dependencies = [
- "casper-macros",
  "casper-sdk",
 ]
 

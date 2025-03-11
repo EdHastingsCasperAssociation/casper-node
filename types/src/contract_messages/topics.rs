@@ -161,8 +161,8 @@ impl MessageTopicSummary {
     }
 
     /// Returns the topic name.
-    pub fn topic_name(&self) -> String {
-        self.topic_name.clone()
+    pub fn topic_name(&self) -> &str {
+        &self.topic_name
     }
 }
 

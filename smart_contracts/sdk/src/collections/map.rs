@@ -1,6 +1,6 @@
 use crate::{
     abi::{CasperABI, Declaration, Definition, StructField},
-    host::{self, read_into_vec},
+    casper::{self, read_into_vec},
     serializers::borsh::{BorshDeserialize, BorshSerialize},
 };
 use casper_executor_wasm_common::keyspace::Keyspace;
@@ -41,7 +41,7 @@ where
         // the wasm.
         key.serialize(&mut context_key).unwrap();
         let prefix = Keyspace::Context(&context_key);
-        host::casper_write(prefix, &borsh::to_vec(value).unwrap()).unwrap();
+        casper::write(prefix, &borsh::to_vec(value).unwrap()).unwrap();
     }
 
     pub fn get(&self, key: &K) -> Option<V> {

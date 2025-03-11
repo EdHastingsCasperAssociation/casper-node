@@ -1,7 +1,7 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 
 use casper_macros::casper;
-use casper_sdk::{host, host::Entity, log, prelude::*};
+use casper_sdk::{casper, casper::Entity, log, prelude::*};
 
 const CURRENT_VERSION: &str = "v1";
 
@@ -29,7 +29,7 @@ impl Default for UpgradableContract {
 impl UpgradableContract {
     #[casper(constructor)]
     pub fn new(initial_value: u8) -> Self {
-        let caller = host::get_caller();
+        let caller = casper::get_caller();
         Self {
             value: initial_value,
             owner: caller,
@@ -66,13 +66,13 @@ impl UpgradableContract {
 
     #[skip_arg_parsing]
     pub fn perform_upgrade(&self, new_code: Vec<u8>) {
-        if host::get_caller() != self.owner {
+        if casper::get_caller() != self.owner {
             panic!("Only the owner can perform upgrades");
         }
         log!("V1: starting upgrade process current value={}", self.value);
         log!("New code length: {}", new_code.len());
         log!("New code first 10 bytes: {:?}", &new_code[..10]);
         // TODO: Enforce valid wasm validation
-        host::casper_upgrade(&new_code, Some("migrate"), None).unwrap();
+        casper::upgrade(&new_code, Some("migrate"), None).unwrap();
     }
 }

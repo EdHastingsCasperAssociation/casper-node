@@ -1,3 +1,4 @@
+use core::panic;
 use std::{borrow::Cow, cmp, num::NonZeroU32, sync::Arc};
 
 use crate::system::{self, MintArgs, MintTransferArgs};
@@ -10,7 +11,12 @@ use casper_executor_wasm_common::{
         ENTRY_POINT_PAYMENT_CALLER, ENTRY_POINT_PAYMENT_DIRECT_INVOCATION_ONLY,
         ENTRY_POINT_PAYMENT_SELF_ONWARD,
     },
-    error::{HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT, HOST_ERROR_NOT_FOUND},
+    error::{
+        HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT,
+        HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED, HOST_ERROR_MESSAGE_TOPIC_FULL,
+        HOST_ERROR_NOT_FOUND, HOST_ERROR_PAYLOAD_TOO_LONG, HOST_ERROR_SUCCEED,
+        HOST_ERROR_TOO_MANY_TOPICS, HOST_ERROR_TOPIC_TOO_LONG,
+    },
     flags::ReturnFlags,
     keyspace::{Keyspace, KeyspaceTag},
 };
@@ -22,12 +28,14 @@ use casper_storage::{
 
 use casper_types::{
     account::AccountHash,
-    addressable_entity::{ActionThresholds, AssociatedKeys, NamedKeyAddr},
+    addressable_entity::{ActionThresholds, AssociatedKeys, MessageTopicError, NamedKeyAddr},
     bytesrepr::ToBytes,
-    AddressableEntity, BlockHash, ByteCode, ByteCodeAddr, ByteCodeHash, ByteCodeKind, CLType,
-    ContractRuntimeTag, Digest, EntityAddr, EntityEntryPoint, EntityKind, EntryPointAccess,
-    EntryPointAddr, EntryPointPayment, EntryPointType, EntryPointValue, Groups, HashAddr, Key,
-    Package, PackageHash, PackageStatus, ProtocolVersion, StoredValue, URef, U512,
+    contract_messages::{Message, MessageAddr, MessagePayload, MessageTopicSummary},
+    AddressableEntity, BlockGlobalAddr, BlockHash, BlockTime, ByteCode, ByteCodeAddr, ByteCodeHash,
+    ByteCodeKind, CLType, CLValue, ContractRuntimeTag, Digest, EntityAddr, EntityEntryPoint,
+    EntityKind, EntryPointAccess, EntryPointAddr, EntryPointPayment, EntryPointType,
+    EntryPointValue, Groups, HashAddr, HostFunction, HostFunctionCost, Key, Package, PackageHash,
+    PackageStatus, ProtocolVersion, StoredValue, URef, U512,
 };
 use either::Either;
 use num_derive::FromPrimitive;
@@ -36,7 +44,7 @@ use tracing::{error, info, warn};
 
 use casper_executor_wasm_interface::{
     executor::{ExecuteError, ExecuteRequestBuilder, ExecuteResult, ExecutionKind, Executor},
-    Caller, HostError, HostResult, MeteringPoints, TrapCode, VMError, VMResult,
+    Caller, HostError, HostResult, TrapCode, VMError, VMResult,
 };
 
 use crate::abi::ReadInfo;
@@ -47,16 +55,47 @@ enum EntityKindTag {
     Contract = 1,
 }
 
-fn tracking_copy_write_and_charge<S: GlobalStateReader, E: Executor>(
+/// Consumes a set amount of gas for the specified storage value.
+fn charge_gas_storage<S: GlobalStateReader, E: Executor>(
+    caller: &mut impl Caller<Context = Context<S, E>>,
+    size_bytes: usize,
+) -> VMResult<()> {
+    let storage_costs = &caller.context().storage_costs;
+    let gas_cost = storage_costs.calculate_gas_cost(size_bytes);
+    let value: u64 = gas_cost.value().try_into().map_err(|_| VMError::OutOfGas)?;
+    caller.consume_gas(value)?;
+    Ok(())
+}
+
+/// Consumes a set amount of gas for the specified host function and weights
+fn charge_host_function_call<S, E, T>(
+    caller: &mut impl Caller<Context = Context<S, E>>,
+    host_function: &HostFunction<T>,
+    weights: T,
+) -> VMResult<()>
+where
+    S: GlobalStateReader,
+    E: Executor,
+    T: AsRef<[HostFunctionCost]> + Copy,
+{
+    let Some(cost) = host_function.calculate_gas_cost(weights) else {
+        // Overflowing gas calculation means gas limit was exceeded
+        return Err(VMError::OutOfGas);
+    };
+
+    caller.consume_gas(cost.value().as_u64())?;
+    Ok(())
+}
+
+/// Writes a message to the global state and charges for storage used.
+fn metered_write<S: GlobalStateReader, E: Executor>(
     caller: &mut impl Caller<Context = Context<S, E>>,
     key: Key,
     value: StoredValue,
-) {
-    let storage_costs = &caller.context().storage_costs;
-    let gas_cost = storage_costs.calculate_gas_cost(value.serialized_length());
-    caller.consume_gas(gas_cost.value().as_u64());
-
+) -> VMResult<()> {
+    charge_gas_storage(caller, value.serialized_length())?;
     caller.context_mut().tracking_copy.write(key, value);
+    Ok(())
 }
 
 /// Write value under a key.
@@ -69,10 +108,11 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
     value_size: u32,
 ) -> VMResult<i32> {
     let write_cost = caller.context().config.host_function_costs().write;
-    caller.charge_host_function_call(
+    charge_host_function_call(
+        &mut caller,
         &write_cost,
         [key_space as u32, key_ptr, key_size, value_ptr, value_size],
-    );
+    )?;
 
     let keyspace_tag = match KeyspaceTag::from_u64(key_space) {
         Some(keyspace_tag) => keyspace_tag,
@@ -155,7 +195,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
         }
     };
 
-    tracking_copy_write_and_charge(&mut caller, global_state_key, stored_value);
+    metered_write(&mut caller, global_state_key, stored_value)?;
 
     Ok(0)
 }
@@ -166,7 +206,7 @@ pub fn casper_print<S: GlobalStateReader, E: Executor>(
     message_size: u32,
 ) -> VMResult<()> {
     let print_cost = caller.context().config.host_function_costs().print;
-    caller.charge_host_function_call(&print_cost, [message_ptr, message_size]);
+    charge_host_function_call(&mut caller, &print_cost, [message_ptr, message_size])?;
 
     let vec = caller.memory_read(message_ptr, message_size.try_into().unwrap())?;
     let msg = String::from_utf8_lossy(&vec);
@@ -185,7 +225,8 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
     alloc_ctx: u32,
 ) -> Result<i32, VMError> {
     let read_cost = caller.context().config.host_function_costs().read;
-    caller.charge_host_function_call(
+    charge_host_function_call(
+        &mut caller,
         &read_cost,
         [
             key_tag as u32,
@@ -195,7 +236,7 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
             cb_alloc,
             alloc_ctx,
         ],
-    );
+    )?;
 
     let keyspace_tag = match KeyspaceTag::from_u64(key_tag) {
         Some(keyspace_tag) => keyspace_tag,
@@ -302,16 +343,7 @@ fn keyspace_to_global_state_key<S: GlobalStateReader, E: Executor>(
     context: &Context<S, E>,
     keyspace: Keyspace<'_>,
 ) -> Option<Key> {
-    let entity_addr = match context.callee {
-        Key::Account(account_hash) => EntityAddr::new_account(account_hash.value()),
-        Key::SmartContract(smart_contract_addr) => {
-            EntityAddr::new_smart_contract(smart_contract_addr)
-        }
-        _ => {
-            // This should never happen, as the caller is always an account or a smart contract.
-            panic!("Unexpected callee variant: {:?}", context.callee)
-        }
-    };
+    let entity_addr = context_to_entity_addr(context);
 
     match keyspace {
         Keyspace::State => Some(Key::State(entity_addr)),
@@ -335,6 +367,21 @@ fn keyspace_to_global_state_key<S: GlobalStateReader, E: Executor>(
     }
 }
 
+fn context_to_entity_addr<S: GlobalStateReader, E: Executor>(
+    context: &Context<S, E>,
+) -> EntityAddr {
+    match context.callee {
+        Key::Account(account_hash) => EntityAddr::new_account(account_hash.value()),
+        Key::SmartContract(smart_contract_addr) => {
+            EntityAddr::new_smart_contract(smart_contract_addr)
+        }
+        _ => {
+            // This should never happen, as the caller is always an account or a smart contract.
+            panic!("Unexpected callee variant: {:?}", context.callee)
+        }
+    }
+}
+
 pub fn casper_copy_input<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
     cb_alloc: u32,
@@ -350,7 +397,7 @@ pub fn casper_copy_input<S: GlobalStateReader, E: Executor>(
     };
 
     let copy_input_cost = caller.context().config.host_function_costs().copy_input;
-    caller.charge_host_function_call(&copy_input_cost, [out_ptr, input.len() as u32]);
+    charge_host_function_call(&mut caller, &copy_input_cost, [out_ptr, input.len() as u32])?;
 
     if out_ptr == 0 {
         Ok(out_ptr)
@@ -368,7 +415,7 @@ pub fn casper_return<S: GlobalStateReader, E: Executor>(
     data_len: u32,
 ) -> VMResult<()> {
     let ret_cost = caller.context().config.host_function_costs().ret;
-    caller.charge_host_function_call(&ret_cost, [data_ptr, data_len]);
+    charge_host_function_call(&mut caller, &ret_cost, [data_ptr, data_len])?;
 
     let flags = ReturnFlags::from_bits_retain(flags);
     let data = if data_ptr == 0 {
@@ -397,7 +444,8 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
     result_ptr: u32,
 ) -> VMResult<HostResult> {
     let create_cost = caller.context().config.host_function_costs().create;
-    caller.charge_host_function_call(
+    charge_host_function_call(
+        &mut caller,
         &create_cost,
         [
             code_ptr,
@@ -411,7 +459,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
             seed_len,
             result_ptr,
         ],
-    );
+    )?;
 
     let code = if code_ptr != 0 {
         caller
@@ -517,18 +565,18 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
         "TODO: Check if the contract already exists and fail"
     );
 
-    tracking_copy_write_and_charge(
+    metered_write(
         &mut caller,
         Key::SmartContract(smart_contract_addr),
         StoredValue::SmartContract(smart_contract_package),
-    );
+    )?;
 
     // 2. Store wasm
-    tracking_copy_write_and_charge(
+    metered_write(
         &mut caller,
         Key::ByteCode(bytecode_addr),
         StoredValue::ByteCode(bytecode),
-    );
+    )?;
 
     // 3. Store addressable entity
 
@@ -565,11 +613,11 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
         EntityKind::SmartContract(ContractRuntimeTag::VmCasperV2),
     );
 
-    tracking_copy_write_and_charge(
+    metered_write(
         &mut caller,
         addressable_entity_key,
         StoredValue::AddressableEntity(addressable_entity),
-    );
+    )?;
 
     let _initial_state = match constructor_entry_point {
         Some(entry_point_name) => {
@@ -614,10 +662,10 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
                     gas_usage,
                     effects,
                     cache,
+                    messages,
                 }) => {
                     // output
-
-                    caller.consume_gas(gas_usage.gas_spent());
+                    caller.consume_gas(gas_usage.gas_spent())?;
 
                     if let Some(host_error) = host_error {
                         return Ok(Err(host_error));
@@ -626,7 +674,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
                     caller
                         .context_mut()
                         .tracking_copy
-                        .apply_changes(effects, cache);
+                        .apply_changes(effects, cache, messages);
 
                     output
                 }
@@ -671,7 +719,8 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
     cb_ctx: u32,
 ) -> VMResult<HostResult> {
     let call_cost = caller.context().config.host_function_costs().call;
-    caller.charge_host_function_call(
+    charge_host_function_call(
+        &mut caller,
         &call_cost,
         [
             address_ptr,
@@ -684,7 +733,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
             cb_alloc,
             cb_ctx,
         ],
-    );
+    )?;
 
     // 1. Look up address in the storage
     // 1a. if it's legacy contract, wire up old EE, pretend you're 1.x. Input data would be
@@ -759,6 +808,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
             gas_usage,
             effects,
             cache,
+            messages,
         }) => {
             if let Some(output) = output {
                 let out_ptr: u32 = if cb_alloc != 0 {
@@ -779,7 +829,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
                     caller
                         .context_mut()
                         .tracking_copy
-                        .apply_changes(effects, cache);
+                        .apply_changes(effects, cache, messages);
                     Ok(())
                 }
             };
@@ -798,12 +848,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
         .checked_sub(gas_usage.remaining_points())
         .expect("remaining points always below or equal to the limit");
 
-    match caller.consume_gas(gas_spent) {
-        MeteringPoints::Remaining(_) => {}
-        MeteringPoints::Exhausted => {
-            todo!("exhausted")
-        }
-    }
+    caller.consume_gas(gas_spent)?;
 
     Ok(host_result)
 }
@@ -815,7 +860,11 @@ pub fn casper_env_caller<S: GlobalStateReader, E: Executor>(
     entity_kind_ptr: u32,
 ) -> VMResult<u32> {
     let caller_cost = caller.context().config.host_function_costs().env_caller;
-    caller.charge_host_function_call(&caller_cost, [dest_ptr, dest_len, entity_kind_ptr]);
+    charge_host_function_call(
+        &mut caller,
+        &caller_cost,
+        [dest_ptr, dest_len, entity_kind_ptr],
+    )?;
 
     // TODO: Decide whether we want to return the full address and entity kind or just the 32 bytes
     // "unified".
@@ -846,7 +895,7 @@ pub fn casper_env_transferred_value<S: GlobalStateReader, E: Executor>(
         .config
         .host_function_costs()
         .env_transferred_value;
-    caller.charge_host_function_call(&transferred_value_cost, [output]);
+    charge_host_function_call(&mut caller, &transferred_value_cost, [output])?;
 
     let result = caller.context().transferred_value;
     caller.memory_write(output, &result.to_le_bytes())?;
@@ -861,10 +910,11 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
     output_ptr: u32,
 ) -> VMResult<u32> {
     let balance_cost = caller.context().config.host_function_costs().env_balance;
-    caller.charge_host_function_call(
+    charge_host_function_call(
+        &mut caller,
         &balance_cost,
         [entity_kind, entity_addr_ptr, entity_addr_len, output_ptr],
-    );
+    )?;
 
     let entity_key = match EntityKindTag::from_u32(entity_kind) {
         Some(EntityKindTag::Account) => {
@@ -980,10 +1030,11 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
     amount_ptr: u32,
 ) -> VMResult<u32> {
     let transfer_cost = caller.context().config.host_function_costs().transfer;
-    caller.charge_host_function_call(
+    charge_host_function_call(
+        &mut caller,
         &transfer_cost,
         [entity_addr_ptr, entity_addr_len, amount_ptr],
-    );
+    )?;
 
     if entity_addr_len != 32 {
         // Invalid entity address; failing to proceed with the transfer
@@ -1134,7 +1185,8 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
     input_size: u32,
 ) -> VMResult<HostResult> {
     let upgrade_cost = caller.context().config.host_function_costs().upgrade;
-    caller.charge_host_function_call(
+    charge_host_function_call(
+        &mut caller,
         &upgrade_cost,
         [
             code_ptr,
@@ -1144,7 +1196,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
             input_ptr,
             input_size,
         ],
-    );
+    )?;
 
     let code = caller
         .memory_read(code_ptr, code_size as usize)
@@ -1241,14 +1293,14 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
     let bytecode_key = Key::ByteCode(ByteCodeAddr::V2CasperWasm(
         callee_addressable_entity.byte_code_addr(),
     ));
-    tracking_copy_write_and_charge(
+    metered_write(
         &mut caller,
         bytecode_key,
         StoredValue::ByteCode(ByteCode::new(
             ByteCodeKind::V2CasperWasm,
             code.clone().into(),
         )),
-    );
+    )?;
 
     // 3. Execute upgrade routine (if specified)
     // this code should handle reading old state, and saving new state
@@ -1297,10 +1349,10 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                 gas_usage,
                 effects,
                 cache,
+                messages,
             }) => {
                 // output
-
-                caller.consume_gas(gas_usage.gas_spent());
+                caller.consume_gas(gas_usage.gas_spent())?;
 
                 if let Some(host_error) = host_error {
                     return Ok(Err(host_error));
@@ -1309,7 +1361,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                 caller
                     .context_mut()
                     .tracking_copy
-                    .apply_changes(effects, cache);
+                    .apply_changes(effects, cache, messages);
 
                 if let Some(output) = output {
                     info!(
@@ -1339,8 +1391,202 @@ pub fn casper_env_block_time<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
 ) -> VMResult<u64> {
     let block_time_cost = caller.context().config.host_function_costs().env_block_time;
-    caller.charge_host_function_call(&block_time_cost, []);
+    charge_host_function_call(&mut caller, &block_time_cost, [])?;
 
     let block_time = caller.context().block_time;
     Ok(block_time.value())
+}
+
+pub fn casper_emit<S: GlobalStateReader, E: Executor>(
+    mut caller: impl Caller<Context = Context<S, E>>,
+    topic_name_ptr: u32,
+    topic_name_size: u32,
+    payload_ptr: u32,
+    payload_size: u32,
+) -> VMResult<i32> {
+    // Charge for parameter weights.
+    let emit_host_function = caller.context().config.host_function_costs().emit;
+
+    charge_host_function_call(
+        &mut caller,
+        &emit_host_function,
+        [topic_name_ptr, topic_name_size, payload_ptr, payload_size],
+    )?;
+
+    if topic_name_size > caller.context().message_limits.max_topic_name_size {
+        return Ok(HOST_ERROR_TOPIC_TOO_LONG);
+    }
+
+    if payload_size > caller.context().message_limits.max_message_size {
+        return Ok(HOST_ERROR_PAYLOAD_TOO_LONG);
+    }
+
+    let topic_name = {
+        let topic: Vec<u8> = caller.memory_read(topic_name_ptr, topic_name_size as usize)?;
+        let Ok(topic) = String::from_utf8(topic) else {
+            // Not a valid UTF-8 string
+            return Ok(HOST_ERROR_INVALID_DATA);
+        };
+        topic
+    };
+
+    let payload = caller.memory_read(payload_ptr, payload_size as usize)?;
+
+    let entity_addr = context_to_entity_addr(caller.context());
+
+    let mut message_topics = caller
+        .context_mut()
+        .tracking_copy
+        .get_message_topics(entity_addr)
+        .unwrap_or_else(|error| {
+            panic!("Error while reading from storage; aborting error={error:?}")
+        });
+
+    if message_topics.len() >= caller.context().message_limits.max_topics_per_contract as usize {
+        return Ok(HOST_ERROR_TOO_MANY_TOPICS);
+    }
+
+    let topic_name_hash = Digest::hash(&topic_name).value().into();
+
+    match message_topics.add_topic(&topic_name, topic_name_hash) {
+        Ok(()) => {
+            // New topic is created
+        }
+        Err(MessageTopicError::DuplicateTopic) => {
+            // We're lazily creating message topics and this operation is idempotent. Therefore
+            // already existing topic is not an issue.
+        }
+        Err(MessageTopicError::MaxTopicsExceeded) => {
+            // We're validating the size of topics before adding them
+            return Ok(HOST_ERROR_TOO_MANY_TOPICS);
+        }
+        Err(MessageTopicError::TopicNameSizeExceeded) => {
+            // We're validating the length of topic before adding it
+            return Ok(HOST_ERROR_TOPIC_TOO_LONG);
+        }
+        Err(error) => {
+            // These error variants are non_exhaustive, and we should handle them explicitly.
+            unreachable!("Unexpected error while adding a topic: {:?}", error);
+        }
+    };
+
+    let current_block_time = caller.context().block_time;
+    eprintln!("📩 {topic_name}: {payload:?} (at {current_block_time:?})");
+
+    let topic_key = Key::Message(MessageAddr::new_topic_addr(entity_addr, topic_name_hash));
+    let prev_topic_summary = match caller.context_mut().tracking_copy.read(&topic_key) {
+        Ok(Some(StoredValue::MessageTopic(message_topic_summary))) => message_topic_summary,
+        Ok(Some(stored_value)) => {
+            panic!("Unexpected stored value: {:?}", stored_value);
+        }
+        Ok(None) => {
+            let message_topic_summary =
+                MessageTopicSummary::new(0, current_block_time, topic_name.clone());
+            let summary = StoredValue::MessageTopic(message_topic_summary.clone());
+            caller.context_mut().tracking_copy.write(topic_key, summary);
+            message_topic_summary
+        }
+        Err(error) => panic!("Error while reading from storage; aborting error={error:?}"),
+    };
+
+    let topic_message_index = if prev_topic_summary.blocktime() != current_block_time {
+        for index in 1..prev_topic_summary.message_count() {
+            let message_key = Key::message(entity_addr, topic_name_hash, index);
+            debug_assert!(
+                {
+                    // NOTE: This assertion is to ensure that the message index is continuous, and
+                    // the previous messages are pruned properly.
+                    caller
+                        .context_mut()
+                        .tracking_copy
+                        .read(&message_key)
+                        .unwrap()
+                        .is_some()
+                },
+                "Message index is not continuous"
+            );
+
+            // Prune the previous messages
+            caller.context_mut().tracking_copy.prune(message_key);
+        }
+        0
+    } else {
+        prev_topic_summary.message_count()
+    };
+
+    // Data stored in the global state associated with the message block.
+    type MessageCountPair = (BlockTime, u64);
+
+    let block_message_index: u64 = match caller
+        .context_mut()
+        .tracking_copy
+        .read(&Key::BlockGlobal(BlockGlobalAddr::MessageCount))
+    {
+        Ok(Some(StoredValue::CLValue(value_pair))) => {
+            let (prev_block_time, prev_count): MessageCountPair =
+                CLValue::into_t(value_pair).expect("Tuple");
+            if prev_block_time == current_block_time {
+                prev_count
+            } else {
+                0
+            }
+        }
+        Ok(Some(other)) => panic!("Unexpected stored value: {:?}", other),
+        Ok(None) => {
+            // No messages in current block yet
+            0
+        }
+        Err(error) => {
+            panic!("Error while reading from storage; aborting error={error:?}")
+        }
+    };
+
+    let Some(topic_message_count) = topic_message_index.checked_add(1) else {
+        return Ok(HOST_ERROR_MESSAGE_TOPIC_FULL);
+    };
+
+    let Some(block_message_count) = block_message_index.checked_add(1) else {
+        return Ok(HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED);
+    };
+
+    // Under v2 runtime messages are only limited to bytes.
+    let message_payload = MessagePayload::Bytes(payload.into());
+
+    let message = Message::new(
+        entity_addr,
+        message_payload,
+        topic_name,
+        topic_name_hash,
+        topic_message_index,
+        block_message_index,
+    );
+    let topic_value = StoredValue::MessageTopic(MessageTopicSummary::new(
+        topic_message_count,
+        current_block_time,
+        message.topic_name().to_owned(),
+    ));
+
+    let message_key = message.message_key();
+    let message_value = StoredValue::Message(message.checksum().expect("Checksum"));
+    let message_count_pair: MessageCountPair = (current_block_time, block_message_count);
+    let block_message_count_value = StoredValue::CLValue(
+        CLValue::from_t(message_count_pair).expect("Serialize block message pair"),
+    );
+
+    // Charge for amount as measured by serialized length
+    let bytes_count = topic_value.serialized_length()
+        + message_value.serialized_length()
+        + block_message_count_value.serialized_length();
+    charge_gas_storage(&mut caller, bytes_count)?;
+
+    caller.context_mut().tracking_copy.emit_message(
+        topic_key,
+        topic_value,
+        message_key,
+        message_value,
+        block_message_count_value,
+        message,
+    );
+
+    Ok(HOST_ERROR_SUCCEED)
 }

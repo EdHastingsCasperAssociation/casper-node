@@ -8,6 +8,7 @@ use casper_types::{
         ActionThresholds, AddressableEntityHash, AssociatedKeys, NamedKeyAddr, NamedKeyValue,
         Weight,
     },
+    contract_messages::Messages,
     contracts::{EntryPoints as ContractEntryPoints, NamedKeys},
     execution::{Effects, TransformKindV2, TransformV2},
     gens::*,
@@ -1191,7 +1192,7 @@ fn add_should_work() {
     assert!(
         matches!(tc.get(&key), Ok(Some(StoredValue::CLValue(initial_value))) if initial_value.clone().into_t::<i32>().unwrap() == 1)
     );
-    tc.apply_changes(effects, cache);
+    tc.apply_changes(effects, cache, Messages::new());
     assert!(
         matches!(tc.get(&key), Ok(Some(StoredValue::CLValue(initial_value))) if initial_value.clone().into_t::<i32>().unwrap() == 2)
     );

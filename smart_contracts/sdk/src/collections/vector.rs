@@ -1,6 +1,6 @@
 use crate::{
     abi::{CasperABI, Declaration, Definition, Definitions, StructField},
-    host::{self, read_into_vec},
+    casper::{self, read_into_vec},
 };
 
 // use casper_macros::casper;
@@ -67,7 +67,7 @@ where
         let mut prefix_bytes = self.prefix.as_bytes().to_owned();
         prefix_bytes.extend(&self.length.to_le_bytes());
         let prefix = Keyspace::Context(&prefix_bytes);
-        host::casper_write(prefix, &borsh::to_vec(&value).unwrap()).unwrap();
+        casper::write(prefix, &borsh::to_vec(&value).unwrap()).unwrap();
         self.length += 1;
     }
 
@@ -205,13 +205,13 @@ where
     fn write(&self, index: u64, value: T) {
         let prefix_bytes = self.get_prefix_bytes(index);
         let prefix = Keyspace::Context(&prefix_bytes);
-        host::casper_write(prefix, &borsh::to_vec(&value).unwrap()).unwrap();
+        casper::write(prefix, &borsh::to_vec(&value).unwrap()).unwrap();
     }
 }
 
 #[cfg(all(test, feature = "std"))]
 pub(crate) mod tests {
-    use self::host::native::dispatch;
+    use self::casper::native::dispatch;
 
     use super::*;
 
