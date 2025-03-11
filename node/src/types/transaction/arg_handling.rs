@@ -235,6 +235,20 @@ pub fn has_valid_transfer_args(
     Ok(())
 }
 
+/// Creates a `RuntimeArgs` suitable for use in a burn transaction.
+#[cfg(test)]
+pub fn new_burn_args<A: Into<U512>>(
+    amount: A,
+    maybe_source: Option<URef>,
+) -> Result<RuntimeArgs, CLValueError> {
+    let mut args = RuntimeArgs::new();
+    if let Some(source) = maybe_source {
+        BURN_ARG_SOURCE.insert(&mut args, source)?;
+    }
+    BURN_ARG_AMOUNT.insert(&mut args, amount.into())?;
+    Ok(args)
+}
+
 /// Checks the given `RuntimeArgs` are suitable for use in a transfer transaction.
 pub fn has_valid_burn_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
     let native_burn_minimum_motes = 1;

@@ -2342,7 +2342,7 @@ pub trait StateProvider: Send + Sync + Sized {
 
         let runtime_args_builder = BurnRuntimeArgsBuilder::new(runtime_args);
 
-        let (entity_addr, runtime_footprint, entity_access_rights) = match tc
+        let (entity_addr, mut footprint, mut entity_access_rights) = match tc
             .borrow_mut()
             .authorized_runtime_footprint_with_access_rights(
                 protocol_version,
@@ -2363,10 +2363,36 @@ pub trait StateProvider: Send + Sync + Sized {
                 EntityAddr::Account(hash) => Key::Account(AccountHash::new(hash)),
             }
         };
+
+        // extend named keys with total supply
+        match tc
+            .borrow_mut()
+            .system_contract_named_key(MINT, TOTAL_SUPPLY_KEY)
+        {
+            Ok(Some(k)) => {
+                match k.as_uref() {
+                    Some(uref) => entity_access_rights.extend(&[*uref]),
+                    None => {
+                        return BurnResult::Failure(BurnError::TrackingCopy(
+                            TrackingCopyError::UnexpectedKeyVariant(k),
+                        ));
+                    }
+                }
+                footprint.insert_into_named_keys(TOTAL_SUPPLY_KEY.into(), k);
+            }
+            Ok(None) => {
+                return BurnResult::Failure(BurnError::TrackingCopy(
+                    TrackingCopyError::NamedKeyNotFound(TOTAL_SUPPLY_KEY.into()),
+                ));
+            }
+            Err(tce) => {
+                return BurnResult::Failure(BurnError::TrackingCopy(tce));
+            }
+        };
         let id = Id::Transaction(request.transaction_hash());
         let phase = Phase::Session;
         let address_generator = AddressGenerator::new(&id.seed(), phase);
-        let burn_args = match runtime_args_builder.build(&runtime_footprint, Rc::clone(&tc)) {
+        let burn_args = match runtime_args_builder.build(&footprint, Rc::clone(&tc)) {
             Ok(burn_args) => burn_args,
             Err(error) => return BurnResult::Failure(error),
         };
@@ -2380,7 +2406,7 @@ pub trait StateProvider: Send + Sync + Sized {
             Rc::clone(&tc),
             source_account_hash,
             entity_key,
-            runtime_footprint.clone(),
+            footprint.clone(),
             entity_access_rights,
             burn_args.amount(),
             phase,
