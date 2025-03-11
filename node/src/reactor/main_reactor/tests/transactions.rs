@@ -1,15 +1,16 @@
 use super::{fixture::TestFixture, *};
 use crate::{testing::LARGE_WASM_LANE_ID, types::MetaTransaction};
 use casper_storage::data_access_layer::{
-    AddressableEntityRequest, BalanceIdentifier, ProofHandling, QueryRequest, QueryResult,
+    AddressableEntityRequest, BalanceIdentifier, BalanceIdentifierPurseRequest,
+    BalanceIdentifierPurseResult, ProofHandling, QueryRequest, QueryResult,
 };
 use casper_types::{
     account::AccountHash,
     addressable_entity::NamedKeyAddr,
     runtime_args,
     system::mint::{ARG_AMOUNT, ARG_TARGET},
-    AddressableEntity, Digest, EntityAddr, ExecutableDeployItem, ExecutionInfo,
-    TransactionRuntimeParams,
+    AccessRights, AddressableEntity, Digest, EntityAddr, ExecutableDeployItem, ExecutionInfo,
+    TransactionRuntimeParams, URef, URefAddr,
 };
 use once_cell::sync::Lazy;
 
@@ -178,6 +179,36 @@ async fn send_wasm_transaction(
             .execution_result
             .expect("Exec result should have been stored."),
     )
+}
+
+fn get_main_purse(fixture: &mut TestFixture, account_key: &PublicKey) -> Result<URefAddr, ()> {
+    let (_node_id, runner) = fixture.network.nodes().iter().next().unwrap();
+    let block_height = runner
+        .main_reactor()
+        .storage()
+        .highest_complete_block_height()
+        .expect("missing highest completed block");
+    let block_header = runner
+        .main_reactor()
+        .storage()
+        .read_block_header_by_height(block_height, true)
+        .expect("failure to read block header")
+        .unwrap();
+    let state_hash = *block_header.state_root_hash();
+    let protocol_version = fixture.chainspec.protocol_version();
+    let identifier = BalanceIdentifier::Account(account_key.to_account_hash());
+    let request = BalanceIdentifierPurseRequest::new(state_hash, protocol_version, identifier);
+    match runner
+        .main_reactor()
+        .contract_runtime()
+        .data_access_layer()
+        .balance_purse(request)
+    {
+        BalanceIdentifierPurseResult::Success { purse_addr } => Ok(purse_addr),
+        BalanceIdentifierPurseResult::RootNotFound | BalanceIdentifierPurseResult::Failure(_) => {
+            Err(())
+        }
+    }
 }
 
 fn get_balance(
@@ -4491,5 +4522,55 @@ async fn should_allow_native_burn() {
     };
     let expected_cost: U512 = U512::from(price) * MIN_GAS_PRICE;
     assert_eq!(result.error_message.as_deref(), None);
+    assert_eq!(result.cost, expected_cost);
+}
+
+#[tokio::test]
+async fn should_not_allow_unverified_native_burn() {
+    let config = SingleTransactionTestCase::default_test_config()
+        .with_pricing_handling(PricingHandling::PaymentLimited)
+        .with_refund_handling(RefundHandling::Refund {
+            refund_ratio: Ratio::new(99, 100),
+        })
+        .with_fee_handling(FeeHandling::PayToProposer)
+        .with_gas_hold_balance_handling(HoldBalanceHandling::Accrued);
+
+    let mut test = SingleTransactionTestCase::new(
+        ALICE_SECRET_KEY.clone(),
+        BOB_SECRET_KEY.clone(),
+        CHARLIE_SECRET_KEY.clone(),
+        Some(config),
+    )
+    .await;
+
+    test.fixture
+        .run_until_consensus_in_era(ERA_ONE, ONE_MIN)
+        .await;
+
+    let burn_amount = U512::from(100);
+
+    let alice_uref_addr =
+        get_main_purse(&mut test.fixture, &*ALICE_PUBLIC_KEY).expect("should have main purse");
+    let alice_purse = URef::new(alice_uref_addr, AccessRights::all());
+
+    let txn_v1 = TransactionV1Builder::new_burn(burn_amount, Some(alice_purse))
+        .unwrap()
+        .with_chain_name(CHAIN_NAME)
+        .with_initiator_addr(PublicKey::from(&**BOB_SECRET_KEY))
+        .build()
+        .unwrap();
+    let price = txn_v1
+        .payment_amount()
+        .expect("must have payment amount as txns are using payment_limited");
+    let mut txn = Transaction::from(txn_v1);
+    txn.sign(&BOB_SECRET_KEY);
+
+    let (_txn_hash, _block_height, exec_result) = test.send_transaction(txn).await;
+    let ExecutionResult::V2(result) = exec_result else {
+        panic!("Expected ExecutionResult::V2 but got {:?}", exec_result);
+    };
+    let expected_cost: U512 = U512::from(price) * MIN_GAS_PRICE;
+    let expected_error = format!("Forged reference: {}", alice_purse);
+    assert_eq!(result.error_message, Some(expected_error));
     assert_eq!(result.cost, expected_cost);
 }
