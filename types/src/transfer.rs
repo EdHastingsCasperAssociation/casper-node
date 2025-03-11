@@ -70,6 +70,14 @@ pub enum Transfer {
 }
 
 impl Transfer {
+    /// Transfer amount.
+    pub fn amount(&self) -> U512 {
+        match self {
+            Transfer::V1(transfer_v1) => transfer_v1.amount,
+            Transfer::V2(transfer_v2) => transfer_v2.amount,
+        }
+    }
+
     // This method is not intended to be used by third party crates.
     #[doc(hidden)]
     #[cfg(feature = "json-schema")]

@@ -864,6 +864,18 @@ async fn add_bid_with_classic_pricing_no_fee_no_refund() {
     let expected_add_bid_cost = expected_add_bid_consumed * MIN_GAS_PRICE as u64;
 
     assert!(exec_result_is_success(&exec_result)); // transaction should have succeeded.
+
+    let transfers = exec_result.transfers();
+    assert!(!transfers.is_empty(), "transfers should not be empty");
+    assert!(transfers.len() == 1, "transfers should have 1 entry");
+    let transfer = transfers.first().expect("transfer entry should exist");
+    let transfer_amount = transfer.amount();
+    assert_eq!(
+        transfer_amount,
+        U512::from(bid_amount),
+        "transfer amount should match the bid amount"
+    );
+
     assert_exec_result_cost(
         exec_result,
         expected_add_bid_cost.into(),
