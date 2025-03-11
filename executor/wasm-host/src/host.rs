@@ -30,10 +30,12 @@ use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionThresholds, AssociatedKeys, MessageTopicError, NamedKeyAddr},
     bytesrepr::ToBytes,
-    AddressableEntity, BlockHash, ByteCode, ByteCodeAddr, ByteCodeHash, ByteCodeKind, CLType,
-    ContractRuntimeTag, Digest, EntityAddr, EntityEntryPoint, EntityKind, EntryPointAccess,
-    EntryPointAddr, EntryPointPayment, EntryPointType, EntryPointValue, Groups, HashAddr, Key,
-    Package, PackageHash, PackageStatus, ProtocolVersion, StoredValue, URef, U512,
+    contract_messages::{Message, MessageAddr, MessagePayload, MessageTopicSummary},
+    AddressableEntity, BlockGlobalAddr, BlockHash, BlockTime, ByteCode, ByteCodeAddr, ByteCodeHash,
+    ByteCodeKind, CLType, CLValue, ContractRuntimeTag, Digest, EntityAddr, EntityEntryPoint,
+    EntityKind, EntryPointAccess, EntryPointAddr, EntryPointPayment, EntryPointType,
+    EntryPointValue, Groups, HashAddr, HostFunction, HostFunctionCost, Key, Package, PackageHash,
+    PackageStatus, ProtocolVersion, StoredValue, URef, U512,
 };
 use either::Either;
 use num_derive::FromPrimitive;
@@ -1435,7 +1437,7 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
     let mut message_topics = caller
         .context_mut()
         .tracking_copy
-        .get_message_topics(entity_addr.value())
+        .get_message_topics(entity_addr)
         .unwrap_or_else(|error| {
             panic!("Error while reading from storage; aborting error={error:?}")
         });
@@ -1471,10 +1473,7 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
     let current_block_time = caller.context().block_time;
     eprintln!("📩 {topic_name}: {payload:?} (at {current_block_time:?})");
 
-    let topic_key = Key::Message(MessageAddr::new_topic_addr(
-        entity_addr.value(),
-        topic_name_hash,
-    ));
+    let topic_key = Key::Message(MessageAddr::new_topic_addr(entity_addr, topic_name_hash));
     let prev_topic_summary = match caller.context_mut().tracking_copy.read(&topic_key) {
         Ok(Some(StoredValue::MessageTopic(message_topic_summary))) => message_topic_summary,
         Ok(Some(stored_value)) => {
@@ -1492,7 +1491,7 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
 
     let topic_message_index = if prev_topic_summary.blocktime() != current_block_time {
         for index in 1..prev_topic_summary.message_count() {
-            let message_key = Key::message(entity_addr.value(), topic_name_hash, index);
+            let message_key = Key::message(entity_addr, topic_name_hash, index);
             debug_assert!(
                 {
                     // NOTE: This assertion is to ensure that the message index is continuous, and
@@ -1554,7 +1553,7 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
     let message_payload = MessagePayload::Bytes(payload.into());
 
     let message = Message::new(
-        entity_addr.value(),
+        entity_addr,
         message_payload,
         topic_name,
         topic_name_hash,

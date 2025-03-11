@@ -33,9 +33,9 @@ use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionThresholds, AssociatedKeys},
     bytesrepr, AddressableEntity, ByteCode, ByteCodeAddr, ByteCodeHash, ByteCodeKind,
-    ContractRuntimeTag, Digest, EntityAddr, EntityKind, Gas, Groups, InitiatorAddr, Key, Package,
-    PackageHash, PackageStatus, Phase, ProtocolVersion, StorageCosts, StoredValue,
-    TransactionInvocationTarget, URef, WasmV2Config, U512,
+    ContractRuntimeTag, Digest, EntityAddr, EntityKind, Gas, Groups, InitiatorAddr, Key,
+    MessageLimits, Package, PackageHash, PackageStatus, Phase, ProtocolVersion, StorageCosts,
+    StoredValue, TransactionInvocationTarget, URef, WasmV2Config, U512,
 };
 use either::Either;
 use install::{InstallContractError, InstallContractRequest, InstallContractResult};

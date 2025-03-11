@@ -29,10 +29,10 @@ use casper_storage::{
     AddressGenerator, KeyPrefix,
 };
 use casper_types::{
-    account::AccountHash, BlockHash, ChainspecRegistry, Digest, GenesisAccount, GenesisConfig,
-    HostFunction, HostFunctionCostsV2, Key, MessageLimits, Motes, Phase, ProtocolVersion,
-    PublicKey, SecretKey, StorageCosts, StoredValue, SystemConfig, Timestamp, TransactionHash,
-    TransactionV1Hash, WasmConfig, WasmV2Config, U512,
+    account::AccountHash, BlockHash, ChainspecRegistry, Digest, EntityAddr, GenesisAccount,
+    GenesisConfig, HostFunction, HostFunctionCostsV2, Key, MessageLimits, Motes, Phase,
+    ProtocolVersion, PublicKey, SecretKey, StorageCosts, StoredValue, SystemConfig, Timestamp,
+    TransactionHash, TransactionV1Hash, WasmConfig, WasmV2Config, U512,
 };
 use fs_extra::dir;
 use itertools::Itertools;
@@ -213,7 +213,7 @@ fn cep18() {
         create_request,
     );
 
-    let contract_hash = create_result.smart_contract_addr();
+    let contract_hash = EntityAddr::SmartContract(*create_result.smart_contract_addr());
 
     state_root_hash = global_state
         .commit_effects(state_root_hash, create_result.effects().clone())
@@ -221,7 +221,7 @@ fn cep18() {
 
     let msgs = global_state.prefixed_values(PrefixedValuesRequest::new(
         state_root_hash,
-        KeyPrefix::MessageEntriesByEntity(*contract_hash),
+        KeyPrefix::MessageEntriesByEntity(contract_hash),
     ));
     let PrefixedValuesResult::Success {
         key_prefix: _,
@@ -277,7 +277,7 @@ fn cep18() {
         .expect("Should commit");
 
     let MessageTopicsResult::Success { message_topics } =
-        global_state.message_topics(MessageTopicsRequest::new(state_root_hash, *contract_hash))
+        global_state.message_topics(MessageTopicsRequest::new(state_root_hash, contract_hash))
     else {
         panic!("Expected success")
     };
@@ -292,7 +292,7 @@ fn cep18() {
     {
         let msgs = global_state.prefixed_values(PrefixedValuesRequest::new(
             state_root_hash,
-            KeyPrefix::MessageEntriesByEntity(*contract_hash),
+            KeyPrefix::MessageEntriesByEntity(contract_hash),
         ));
         let PrefixedValuesResult::Success {
             key_prefix: _,
@@ -758,7 +758,6 @@ fn call_dummy_host_fn_by_name(
             default_wasm_config.max_memory(),
             default_wasm_config.opcode_costs(),
             HostFunctionCostsV2 {
-                cost_increase_per_message: 1,
                 read: HostFunction::fixed(1),
                 write: HostFunction::fixed(1),
                 copy_input: HostFunction::fixed(1),
@@ -852,7 +851,6 @@ fn write_n_bytes_at_limit(
             default_wasm_config.max_memory(),
             default_wasm_config.opcode_costs(),
             HostFunctionCostsV2 {
-                cost_increase_per_message: 0,
                 read: HostFunction::fixed(0),
                 write: HostFunction::fixed(0),
                 copy_input: HostFunction::fixed(0),
