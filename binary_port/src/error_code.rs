@@ -362,7 +362,7 @@ impl TryFrom<u16> for ErrorCode {
     type Error = UnknownErrorCode;
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
-        FromPrimitive::from_usize(value as usize).ok_or(UnknownErrorCode)
+        FromPrimitive::from_u16(value).ok_or(UnknownErrorCode)
     }
 }
 
