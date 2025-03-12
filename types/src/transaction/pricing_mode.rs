@@ -151,23 +151,27 @@ impl PricingMode {
             PricingMode::Fixed { .. } => {
                 let computation_limit = {
                     if lane_id == MINT_LANE_ID {
-                        // Because we currently only support one native mint interaction,
-                        // native transfer, we can short circuit to return that value.
-                        // However if other direct mint interactions are supported
-                        // in the future (such as the upcoming burn feature),
-                        // this logic will need to be expanded to self.mint_costs().field?
-                        // for the value for each verb...see how auction is set up below.
-                        costs.mint_costs().transfer as u64
-                    } else if lane_id == AUCTION_LANE_ID {
                         let amount = match entry_point {
+                            TransactionEntryPoint::Transfer => costs.mint_costs().transfer,
+                            TransactionEntryPoint::Burn => costs.mint_costs().burn,
                             TransactionEntryPoint::Call => {
                                 return Err(PricingModeError::EntryPointCannotBeCall)
                             }
-                            TransactionEntryPoint::Custom(_) | TransactionEntryPoint::Transfer => {
+                            TransactionEntryPoint::Custom(_) => {
                                 return Err(PricingModeError::EntryPointCannotBeCustom {
                                     entry_point: entry_point.clone(),
                                 });
                             }
+                            _ => {
+                                return Err(PricingModeError::UnexpectedEntryPoint {
+                                    entry_point: entry_point.clone(),
+                                    lane_id,
+                                })
+                            }
+                        };
+                        amount.into()
+                    } else if lane_id == AUCTION_LANE_ID {
+                        let amount = match entry_point {
                             TransactionEntryPoint::AddBid | TransactionEntryPoint::ActivateBid => {
                                 costs.auction_costs().add_bid
                             }
@@ -185,6 +189,20 @@ impl PricingMode {
                             }
                             TransactionEntryPoint::CancelReservations => {
                                 costs.auction_costs().cancel_reservations
+                            }
+                            TransactionEntryPoint::Call => {
+                                return Err(PricingModeError::EntryPointCannotBeCall)
+                            }
+                            TransactionEntryPoint::Custom(_) => {
+                                return Err(PricingModeError::EntryPointCannotBeCustom {
+                                    entry_point: entry_point.clone(),
+                                });
+                            }
+                            _ => {
+                                return Err(PricingModeError::UnexpectedEntryPoint {
+                                    entry_point: entry_point.clone(),
+                                    lane_id,
+                                })
                             }
                         };
                         amount
@@ -256,6 +274,11 @@ pub enum PricingModeError {
     },
     /// Unable to calculate gas cost.
     UnableToCalculateGasCost,
+    /// Unexpected entry point.
+    UnexpectedEntryPoint {
+        entry_point: TransactionEntryPoint,
+        lane_id: u8,
+    },
 }
 
 impl From<PricingModeError> for InvalidTransaction {
@@ -279,6 +302,13 @@ impl From<PricingModeError> for InvalidTransactionV1 {
             PricingModeError::UnableToCalculateGasCost => {
                 InvalidTransactionV1::UnableToCalculateGasCost
             }
+            PricingModeError::UnexpectedEntryPoint {
+                entry_point,
+                lane_id,
+            } => InvalidTransactionV1::UnexpectedEntryPoint {
+                entry_point,
+                lane_id,
+            },
         }
     }
 }

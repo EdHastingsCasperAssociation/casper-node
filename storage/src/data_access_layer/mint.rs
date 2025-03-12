@@ -2,15 +2,17 @@ use std::collections::BTreeSet;
 
 use crate::{
     data_access_layer::BalanceIdentifier,
-    system::runtime_native::{Config as NativeRuntimeConfig, TransferConfig},
+    system::{
+        burn::{BurnArgs, BurnError},
+        runtime_native::{Config as NativeRuntimeConfig, TransferConfig},
+        transfer::{TransferArgs, TransferError},
+    },
     tracking_copy::TrackingCopyCache,
 };
 use casper_types::{
     account::AccountHash, execution::Effects, Digest, InitiatorAddr, ProtocolVersion, RuntimeArgs,
     TransactionHash, Transfer, U512,
 };
-
-use crate::system::transfer::{TransferArgs, TransferError};
 
 /// Transfer arguments using balance identifiers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -258,6 +260,164 @@ impl TransferResult {
 
     /// Returns transfer error, if any.
     pub fn error(&self) -> Option<TransferError> {
+        if let Self::Failure(error) = self {
+            Some(error.clone())
+        } else {
+            None
+        }
+    }
+}
+
+/// Burn details.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BurnRequestArgs {
+    /// Provides opaque arguments in runtime format.
+    Raw(RuntimeArgs),
+    /// Provides explicit structured args.
+    Explicit(BurnArgs),
+}
+
+/// Request for motes burn.
+pub struct BurnRequest {
+    /// Config.
+    config: NativeRuntimeConfig,
+    /// State root hash.
+    state_hash: Digest,
+    /// Protocol version.
+    protocol_version: ProtocolVersion,
+    /// Transaction hash.
+    transaction_hash: TransactionHash,
+    /// Base account.
+    initiator: InitiatorAddr,
+    /// List of authorizing accounts.
+    authorization_keys: BTreeSet<AccountHash>,
+    /// Args.
+    args: BurnRequestArgs,
+}
+
+impl BurnRequest {
+    /// Creates new request object.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        config: NativeRuntimeConfig,
+        state_hash: Digest,
+        protocol_version: ProtocolVersion,
+        transaction_hash: TransactionHash,
+        initiator: InitiatorAddr,
+        authorization_keys: BTreeSet<AccountHash>,
+        args: BurnArgs,
+    ) -> Self {
+        let args = BurnRequestArgs::Explicit(args);
+        Self {
+            config,
+            state_hash,
+            protocol_version,
+            transaction_hash,
+            initiator,
+            authorization_keys,
+            args,
+        }
+    }
+
+    /// Creates new request instance with runtime args.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_runtime_args(
+        config: NativeRuntimeConfig,
+        state_hash: Digest,
+        protocol_version: ProtocolVersion,
+        transaction_hash: TransactionHash,
+        initiator: InitiatorAddr,
+        authorization_keys: BTreeSet<AccountHash>,
+        args: RuntimeArgs,
+    ) -> Self {
+        let args = BurnRequestArgs::Raw(args);
+        Self {
+            config,
+            state_hash,
+            protocol_version,
+            transaction_hash,
+            initiator,
+            authorization_keys,
+            args,
+        }
+    }
+
+    /// Returns a reference to the runtime config.
+    pub fn config(&self) -> &NativeRuntimeConfig {
+        &self.config
+    }
+
+    /// Returns state root hash.
+    pub fn state_hash(&self) -> Digest {
+        self.state_hash
+    }
+
+    /// Returns initiator.
+    pub fn initiator(&self) -> &InitiatorAddr {
+        &self.initiator
+    }
+
+    /// Returns authorization keys.
+    pub fn authorization_keys(&self) -> &BTreeSet<AccountHash> {
+        &self.authorization_keys
+    }
+
+    /// Returns protocol version.
+    pub fn protocol_version(&self) -> ProtocolVersion {
+        self.protocol_version
+    }
+
+    /// Returns transaction hash.
+    pub fn transaction_hash(&self) -> TransactionHash {
+        self.transaction_hash
+    }
+
+    /// Returns transfer args.
+    pub fn args(&self) -> &BurnRequestArgs {
+        &self.args
+    }
+
+    /// Into args.
+    pub fn into_args(self) -> BurnRequestArgs {
+        self.args
+    }
+
+    /// Used by `WasmTestBuilder` to set the appropriate state root hash and runtime config before
+    /// executing the burn.
+    #[doc(hidden)]
+    pub fn set_state_hash_and_config(&mut self, state_hash: Digest, config: NativeRuntimeConfig) {
+        self.state_hash = state_hash;
+        self.config = config;
+    }
+}
+
+/// Burn result.
+#[derive(Debug, Clone)]
+pub enum BurnResult {
+    /// Invalid state root hash.
+    RootNotFound,
+    /// Transfer succeeded
+    Success {
+        /// Effects of transfer.
+        effects: Effects,
+        /// Cached tracking copy operations.
+        cache: TrackingCopyCache,
+    },
+    /// Burn failed
+    Failure(BurnError),
+}
+
+impl BurnResult {
+    /// Returns the effects, if any.
+    pub fn effects(&self) -> Effects {
+        match self {
+            BurnResult::RootNotFound | BurnResult::Failure(_) => Effects::new(),
+            BurnResult::Success { effects, .. } => effects.clone(),
+        }
+    }
+
+    /// Returns burn error, if any.
+    pub fn error(&self) -> Option<BurnError> {
         if let Self::Failure(error) = self {
             Some(error.clone())
         } else {

@@ -635,7 +635,7 @@ dependencies = [
 
 [[package]]
 name = "casper-contract"
-version = "4.0.0"
+version = "5.0.0"
 dependencies = [
  "casper-types",
  "hex_fmt",
@@ -645,7 +645,7 @@ dependencies = [
 
 [[package]]
 name = "casper-engine-test-support"
-version = "7.0.1"
+version = "8.0.0"
 dependencies = [
  "blake2 0.9.2",
  "casper-execution-engine",
@@ -704,7 +704,7 @@ dependencies = [
 
 [[package]]
 name = "casper-execution-engine"
-version = "7.0.1"
+version = "8.0.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -769,6 +769,7 @@ dependencies = [
  "digest 0.10.7",
  "either",
  "fs_extra",
+ "itertools 0.14.0",
  "once_cell",
  "parking_lot",
  "serde_json",
@@ -846,7 +847,7 @@ name = "casper-macros"
 version = "0.1.0"
 dependencies = [
  "blake2-rfc",
- "casper-sdk",
+ "casper-executor-wasm-common",
  "casper-sdk-sys",
  "darling",
  "paste",
@@ -960,6 +961,7 @@ dependencies = [
  "borsh",
  "bytes",
  "casper-executor-wasm-common",
+ "casper-macros",
  "casper-sdk-sys",
  "cfg-if 1.0.0",
  "clap 4.5.27",
@@ -3459,6 +3461,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4479,7 +4490,6 @@ dependencies = [
  "lazy_static",
  "memchr",
  "parking_lot",
- "protobuf",
  "thiserror",
 ]
 
@@ -4524,12 +4534,6 @@ dependencies = [
  "quote",
  "syn 2.0.98",
 ]
-
-[[package]]
-name = "protobuf"
-version = "2.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
 
 [[package]]
 name = "ptr_meta"
@@ -6609,7 +6613,6 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vm2-cep18"
 version = "0.1.0"
 dependencies = [
- "casper-macros",
  "casper-sdk",
  "casper-sdk-codegen",
  "serde_json",
@@ -6620,7 +6623,6 @@ name = "vm2-cep18-caller"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "casper-macros",
  "casper-sdk",
  "vm2-cep18",
 ]
@@ -6629,7 +6631,6 @@ dependencies = [
 name = "vm2-flipper"
 version = "0.1.0"
 dependencies = [
- "casper-macros",
  "casper-sdk",
 ]
 

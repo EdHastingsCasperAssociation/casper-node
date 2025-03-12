@@ -97,7 +97,7 @@ pub trait TrackingCopyExt<R> {
     ) -> Result<BTreeMap<BlockTime, BalanceHoldsWithProof>, Self::Error>;
 
     /// Returns the collection of message topics (if any) for a given HashAddr.
-    fn get_message_topics(&self, hash_addr: HashAddr) -> Result<MessageTopics, Self::Error>;
+    fn get_message_topics(&self, entity_addr: EntityAddr) -> Result<MessageTopics, Self::Error>;
 
     /// Returns the collection of named keys for a given AddressableEntity.
     fn get_named_keys(&self, entity_addr: EntityAddr) -> Result<NamedKeys, Self::Error>;
@@ -552,19 +552,19 @@ where
         Ok(ret)
     }
 
-    fn get_message_topics(&self, hash_addr: HashAddr) -> Result<MessageTopics, Self::Error> {
+    fn get_message_topics(&self, hash_addr: EntityAddr) -> Result<MessageTopics, Self::Error> {
         let keys = self.get_keys_by_prefix(&KeyPrefix::MessageEntriesByEntity(hash_addr))?;
 
         let mut topics: BTreeMap<String, TopicNameHash> = BTreeMap::new();
 
         for entry_key in &keys {
             if let Some(topic_name_hash) = entry_key.as_message_topic_name_hash() {
-                match self.read(entry_key)? {
+                match self.read(entry_key)?.as_ref() {
                     Some(StoredValue::Message(_)) => {
                         continue;
                     }
                     Some(StoredValue::MessageTopic(summary)) => {
-                        topics.insert(summary.topic_name(), topic_name_hash);
+                        topics.insert(summary.topic_name().to_owned(), topic_name_hash);
                     }
                     Some(other) => {
                         return Err(TrackingCopyError::TypeMismatch(
@@ -579,7 +579,7 @@ where
                             continue;
                         }
                         Some(StoredValue::MessageTopic(summary)) => {
-                            topics.insert(summary.topic_name(), topic_name_hash);
+                            topics.insert(summary.topic_name().to_owned(), topic_name_hash);
                         }
                         Some(_) | None => {
                             return Err(TrackingCopyError::KeyNotFound(*entry_key));

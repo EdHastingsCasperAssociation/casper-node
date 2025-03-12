@@ -14,7 +14,7 @@ use casper_storage::{
     data_access_layer::{
         balance::BalanceHandling,
         forced_undelegate::{ForcedUndelegateRequest, ForcedUndelegateResult},
-        mint::BalanceIdentifierTransferArgs,
+        mint::{BalanceIdentifierTransferArgs, BurnRequest},
         AuctionMethod, BalanceHoldKind, BalanceHoldRequest, BalanceIdentifier,
         BalanceIdentifierPurseRequest, BalanceIdentifierPurseResult, BalanceRequest,
         BiddingRequest, BlockGlobalRequest, BlockGlobalResult, BlockRewardsRequest,
@@ -36,7 +36,8 @@ use casper_types::{
     system::handle_payment::ARG_AMOUNT,
     BlockHash, BlockHeader, BlockTime, BlockV2, CLValue, Chainspec, ChecksumRegistry, Digest,
     EntityAddr, EraEndV2, EraId, FeeHandling, Gas, InvalidTransaction, InvalidTransactionV1, Key,
-    ProtocolVersion, PublicKey, RefundHandling, Transaction, AUCTION_LANE_ID, MINT_LANE_ID, U512,
+    ProtocolVersion, PublicKey, RefundHandling, Transaction, TransactionEntryPoint,
+    AUCTION_LANE_ID, MINT_LANE_ID, U512,
 };
 
 use super::{
@@ -209,8 +210,11 @@ pub fn execute_finalized_block(
     let transaction_config = &chainspec.transaction_config;
 
     for stored_transaction in executable_block.transactions {
-        let mut artifact_builder =
-            ExecutionArtifactBuilder::new(&stored_transaction, baseline_motes_amount);
+        let mut artifact_builder = ExecutionArtifactBuilder::new(
+            &stored_transaction,
+            baseline_motes_amount, // <-- default minimum cost, may be overridden later in logic
+            current_gas_price,
+        );
         let transaction =
             MetaTransaction::from_transaction(&stored_transaction, transaction_config)
                 .map_err(|err| BlockExecutionError::TransactionConversion(err.to_string()))?;
@@ -513,8 +517,27 @@ pub fn execute_finalized_block(
                     let runtime_args = transaction_args
                         .as_named()
                         .ok_or(BlockExecutionError::InvalidTransactionArgs)?;
-                    let transfer_result =
-                        scratch_state.transfer(TransferRequest::with_runtime_args(
+                    let entry_point = transaction.entry_point();
+                    if let TransactionEntryPoint::Transfer = entry_point {
+                        let transfer_result =
+                            scratch_state.transfer(TransferRequest::with_runtime_args(
+                                native_runtime_config.clone(),
+                                state_root_hash,
+                                protocol_version,
+                                transaction_hash,
+                                initiator_addr.clone(),
+                                authorization_keys,
+                                runtime_args.clone(),
+                            ));
+                        state_root_hash = scratch_state
+                            .commit_effects(state_root_hash, transfer_result.effects().clone())?;
+                        artifact_builder
+                            .with_min_cost(gas_limit.value())
+                            .with_added_consumed(gas_limit)
+                            .with_transfer_result(transfer_result)
+                            .map_err(|_| BlockExecutionError::RootNotFound(state_root_hash))?;
+                    } else if let TransactionEntryPoint::Burn = entry_point {
+                        let burn_result = scratch_state.burn(BurnRequest::with_runtime_args(
                             native_runtime_config.clone(),
                             state_root_hash,
                             protocol_version,
@@ -523,13 +546,14 @@ pub fn execute_finalized_block(
                             authorization_keys,
                             runtime_args.clone(),
                         ));
-                    let consumed = gas_limit;
-                    state_root_hash = scratch_state
-                        .commit_effects(state_root_hash, transfer_result.effects().clone())?;
-                    artifact_builder
-                        .with_added_consumed(consumed)
-                        .with_transfer_result(transfer_result)
-                        .map_err(|_| BlockExecutionError::RootNotFound(state_root_hash))?;
+                        state_root_hash = scratch_state
+                            .commit_effects(state_root_hash, burn_result.effects().clone())?;
+                        artifact_builder
+                            .with_min_cost(gas_limit.value())
+                            .with_added_consumed(gas_limit)
+                            .with_burn_result(burn_result)
+                            .map_err(|_| BlockExecutionError::RootNotFound(state_root_hash))?;
+                    }
                 }
                 lane_id if lane_id == AUCTION_LANE_ID => {
                     let runtime_args = transaction_args
@@ -546,13 +570,13 @@ pub fn execute_finalized_block(
                                 authorization_keys,
                                 auction_method,
                             ));
-                            let consumed = gas_limit;
                             state_root_hash = scratch_state.commit_effects(
                                 state_root_hash,
                                 bidding_result.effects().clone(),
                             )?;
                             artifact_builder
-                                .with_added_consumed(consumed)
+                                .with_min_cost(gas_limit.value())
+                                .with_added_consumed(gas_limit)
                                 .with_bidding_result(bidding_result)
                                 .map_err(|_| BlockExecutionError::RootNotFound(state_root_hash))?;
                         }
@@ -666,7 +690,12 @@ pub fn execute_finalized_block(
 
         // handle refunds per the chainspec determined setting.
         let refund_amount = {
-            let consumed = artifact_builder.consumed();
+            let consumed = if balance_identifier.is_penalty() {
+                artifact_builder.cost_to_use() // no refund for penalty
+            } else {
+                artifact_builder.consumed()
+            };
+
             let refund_mode = match refund_handling {
                 RefundHandling::NoRefund => {
                     if fee_handling.is_no_fee() && is_custom_payment {
@@ -762,7 +791,7 @@ pub fn execute_finalized_block(
                 None => U512::zero(),
             }
         };
-
+        artifact_builder.with_refund_amount(refund_amount);
         // handle fees per the chainspec determined setting.
         let handle_fee_result = match fee_handling {
             FeeHandling::NoFee => {

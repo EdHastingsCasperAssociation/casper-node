@@ -985,4 +985,15 @@ mod tests {
         serde_roundtrip(U128::from(u64::MAX));
         serde_roundtrip(U128::MAX);
     }
+
+    #[test]
+    fn safe_conversion_from_u512_to_u64() {
+        let mut value = U512::from(u64::MAX);
+        assert_eq!(value.try_into(), Ok(u64::MAX));
+        value += U512::one();
+        assert!(
+            matches!(value.try_into(), Result::<u64, _>::Err(_)),
+            "integer overflow when casting to u64"
+        );
+    }
 }

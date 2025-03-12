@@ -1,6 +1,6 @@
 use crate::{
     bytesrepr::{self, Bytes, FromBytes, ToBytes, U8_SERIALIZED_LENGTH},
-    checksummed_hex, crypto, HashAddr, Key,
+    checksummed_hex, crypto, EntityAddr, Key,
 };
 
 use alloc::{string::String, vec::Vec};
@@ -214,8 +214,7 @@ impl FromBytes for MessagePayload {
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 pub struct Message {
     /// The identity of the entity that produced the message.
-    #[cfg_attr(feature = "json-schema", schemars(with = "String"))]
-    hash_addr: HashAddr,
+    entity_addr: EntityAddr,
     /// The payload of the message.
     message: MessagePayload,
     /// The name of the topic on which the message was emitted on.
@@ -231,7 +230,7 @@ pub struct Message {
 #[cfg(any(feature = "std", test))]
 #[derive(Serialize, Deserialize)]
 struct HumanReadableMessage {
-    hash_addr: String,
+    entity_addr: String,
     message: MessagePayload,
     topic_name: String,
     topic_name_hash: TopicNameHash,
@@ -243,7 +242,7 @@ struct HumanReadableMessage {
 impl From<&Message> for HumanReadableMessage {
     fn from(message: &Message) -> Self {
         Self {
-            hash_addr: base16::encode_lower(&message.hash_addr),
+            entity_addr: message.entity_addr.to_formatted_string(),
             message: message.message.clone(),
             topic_name: message.topic_name.clone(),
             topic_name_hash: message.topic_name_hash,
@@ -257,7 +256,7 @@ impl From<&Message> for HumanReadableMessage {
 impl From<&Message> for NonHumanReadableMessage {
     fn from(message: &Message) -> Self {
         Self {
-            hash_addr: message.hash_addr,
+            entity_addr: message.entity_addr,
             message: message.message.clone(),
             topic_name: message.topic_name.clone(),
             topic_name_hash: message.topic_name_hash,
@@ -271,7 +270,7 @@ impl From<&Message> for NonHumanReadableMessage {
 impl From<NonHumanReadableMessage> for Message {
     fn from(message: NonHumanReadableMessage) -> Self {
         Self {
-            hash_addr: message.hash_addr,
+            entity_addr: message.entity_addr,
             message: message.message,
             topic_name: message.topic_name,
             topic_name_hash: message.topic_name_hash,
@@ -285,24 +284,18 @@ impl From<NonHumanReadableMessage> for Message {
 #[derive(Error, Debug)]
 enum MessageDeserializationError {
     #[error("{0}")]
-    Base16(String),
+    FailedToParseEntityAddr(crate::addressable_entity::FromStrError),
 }
 
 #[cfg(any(feature = "std", test))]
 impl TryFrom<HumanReadableMessage> for Message {
     type Error = MessageDeserializationError;
     fn try_from(message: HumanReadableMessage) -> Result<Self, Self::Error> {
-        let decoded = checksummed_hex::decode(message.hash_addr).map_err(|e| {
-            MessageDeserializationError::Base16(format!(
-                "Failed to decode hash addr checksummed: {}",
-                e
-            ))
-        })?;
-        let hash_addr = HashAddr::try_from(decoded.as_ref()).map_err(|e| {
-            MessageDeserializationError::Base16(format!("Failed to decode hash address: {}", e))
-        })?;
+        let entity_addr = EntityAddr::from_formatted_str(&message.entity_addr)
+            .map_err(Self::Error::FailedToParseEntityAddr)?;
+
         Ok(Self {
-            hash_addr,
+            entity_addr,
             message: message.message,
             topic_name: message.topic_name,
             topic_name_hash: message.topic_name_hash,
@@ -315,7 +308,7 @@ impl TryFrom<HumanReadableMessage> for Message {
 #[cfg(any(feature = "std", test))]
 #[derive(Serialize, Deserialize)]
 struct NonHumanReadableMessage {
-    hash_addr: HashAddr,
+    entity_addr: EntityAddr,
     message: MessagePayload,
     topic_name: String,
     topic_name_hash: TopicNameHash,
@@ -351,7 +344,7 @@ impl<'de> Deserialize<'de> for Message {
 impl Message {
     /// Creates new instance of [`Message`] with the specified source and message payload.
     pub fn new(
-        source: HashAddr,
+        source: EntityAddr,
         message: MessagePayload,
         topic_name: String,
         topic_name_hash: TopicNameHash,
@@ -359,7 +352,7 @@ impl Message {
         block_index: u64,
     ) -> Self {
         Self {
-            hash_addr: source,
+            entity_addr: source,
             message,
             topic_name,
             topic_name_hash,
@@ -369,8 +362,8 @@ impl Message {
     }
 
     /// Returns a reference to the identity of the entity that produced the message.
-    pub fn hash_addr(&self) -> &HashAddr {
-        &self.hash_addr
+    pub fn entity_addr(&self) -> &EntityAddr {
+        &self.entity_addr
     }
 
     /// Returns a reference to the payload of the message.
@@ -379,7 +372,7 @@ impl Message {
     }
 
     /// Returns a reference to the name of the topic on which the message was emitted on.
-    pub fn topic_name(&self) -> &String {
+    pub fn topic_name(&self) -> &str {
         &self.topic_name
     }
 
@@ -401,14 +394,14 @@ impl Message {
     /// Returns a new [`Key::Message`] based on the information in the message.
     /// This key can be used to query the checksum record for the message in global state.
     pub fn message_key(&self) -> Key {
-        Key::message(self.hash_addr, self.topic_name_hash, self.topic_index)
+        Key::message(self.entity_addr, self.topic_name_hash, self.topic_index)
     }
 
     /// Returns a new [`Key::Message`] based on the information in the message.
     /// This key can be used to query the control record for the topic of this message in global
     /// state.
     pub fn topic_key(&self) -> Key {
-        Key::message_topic(self.hash_addr, self.topic_name_hash)
+        Key::message_topic(self.entity_addr, self.topic_name_hash)
     }
 
     /// Returns the checksum of the message.
@@ -424,7 +417,7 @@ impl Message {
     pub fn random(rng: &mut TestRng) -> Self {
         let count = rng.gen_range(16..128);
         Self {
-            hash_addr: rng.gen(),
+            entity_addr: rng.gen(),
             message: MessagePayload::random(rng),
             topic_name: Alphanumeric.sample_string(rng, count),
             topic_name_hash: rng.gen(),
@@ -437,7 +430,7 @@ impl Message {
 impl ToBytes for Message {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         let mut buffer = bytesrepr::allocate_buffer(self)?;
-        buffer.append(&mut self.hash_addr.to_bytes()?);
+        buffer.append(&mut self.entity_addr.to_bytes()?);
         buffer.append(&mut self.message.to_bytes()?);
         buffer.append(&mut self.topic_name.to_bytes()?);
         buffer.append(&mut self.topic_name_hash.to_bytes()?);
@@ -447,7 +440,7 @@ impl ToBytes for Message {
     }
 
     fn serialized_length(&self) -> usize {
-        self.hash_addr.serialized_length()
+        self.entity_addr.serialized_length()
             + self.message.serialized_length()
             + self.topic_name.serialized_length()
             + self.topic_name_hash.serialized_length()
@@ -458,7 +451,7 @@ impl ToBytes for Message {
 
 impl FromBytes for Message {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
-        let (hash_addr, rem) = FromBytes::from_bytes(bytes)?;
+        let (entity_addr, rem) = FromBytes::from_bytes(bytes)?;
         let (message, rem) = FromBytes::from_bytes(rem)?;
         let (topic_name, rem) = FromBytes::from_bytes(rem)?;
         let (topic_name_hash, rem) = FromBytes::from_bytes(rem)?;
@@ -466,7 +459,7 @@ impl FromBytes for Message {
         let (block_index, rem) = FromBytes::from_bytes(rem)?;
         Ok((
             Message {
-                hash_addr,
+                entity_addr,
                 message,
                 topic_name,
                 topic_name_hash,
@@ -486,7 +479,7 @@ impl Distribution<Message> for Standard {
         let message = Alphanumeric.sample_string(rng, 64).into();
 
         Message {
-            hash_addr: rng.gen(),
+            entity_addr: rng.gen(),
             message,
             topic_name,
             topic_name_hash,

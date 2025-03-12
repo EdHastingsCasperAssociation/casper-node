@@ -444,9 +444,15 @@ where
     /// of this function is to apply the changes to the state from a forked tracking copy. Once
     /// caller decides that the changes are valid, they can be applied to the state and the
     /// processing can resume.
-    pub fn apply_changes(&mut self, effects: Effects, cache: TrackingCopyCache) {
+    pub fn apply_changes(
+        &mut self,
+        effects: Effects,
+        cache: TrackingCopyCache,
+        messages: Messages,
+    ) {
         self.effects = effects;
         self.cache = cache;
+        self.messages = messages;
     }
 
     /// Returns a copy of the execution effects cached by this instance.

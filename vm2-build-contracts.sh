@@ -13,6 +13,7 @@ VM2_LIBS=(
   "vm2-upgradable"
   "vm2-upgradable-v2"
   "vm2-legacy-counter-proxy"
+  "vm2-host"
 )
 
 
@@ -20,7 +21,7 @@ for contract in "${VM2_LIBS[@]}"
 do
   pushd smart_contracts/contracts/vm2/$contract/
   pwd
-  cargo +stable build --target wasm32-unknown-unknown -p $contract --release
+  cargo build --target wasm32-unknown-unknown -p $contract --release
   popd
 done
 
@@ -28,7 +29,7 @@ for contract in "${VM2_BINS[@]}"
 do
   pushd smart_contracts/contracts/vm2/$contract/
   pwd
-  cargo +stable build --target wasm32-unknown-unknown -p $contract --release
+  cargo build --target wasm32-unknown-unknown -p $contract --release
   popd
 done
 

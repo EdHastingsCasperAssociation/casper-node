@@ -54,7 +54,10 @@ use crate::{
             ForcedUndelegateError, ForcedUndelegateRequest, ForcedUndelegateResult,
         },
         handle_fee::{HandleFeeMode, HandleFeeRequest, HandleFeeResult},
-        mint::{TransferRequest, TransferRequestArgs, TransferResult},
+        mint::{
+            BurnRequest, BurnRequestArgs, BurnResult, TransferRequest, TransferRequestArgs,
+            TransferResult,
+        },
         prefixed_values::{PrefixedValuesRequest, PrefixedValuesResult},
         tagged_values::{TaggedValuesRequest, TaggedValuesResult},
         AddressableEntityRequest, AddressableEntityResult, AuctionMethod, BalanceHoldError,
@@ -87,6 +90,7 @@ use crate::{
     },
     system::{
         auction::{self, Auction},
+        burn::{BurnError, BurnRuntimeArgsBuilder},
         genesis::{GenesisError, GenesisInstaller},
         handle_payment::HandlePayment,
         mint::Mint,
@@ -748,7 +752,7 @@ pub trait StateProvider: Send + Sync + Sized {
             Err(err) => return MessageTopicsResult::Failure(err.into()),
         };
 
-        match tc.get_message_topics(message_topics_request.hash_addr()) {
+        match tc.get_message_topics(message_topics_request.entity_addr()) {
             Ok(message_topics) => MessageTopicsResult::Success { message_topics },
             Err(tce) => MessageTopicsResult::Failure(tce),
         }
@@ -1160,7 +1164,7 @@ pub trait StateProvider: Send + Sync + Sized {
                     //There is a chance that, when looking for systemic data, we could be using a
                     // state root hash from before the AddressableEntity
                     // migration boundary. In such a case, we should attempt to look up the data
-                    // under the Account/Contract model instead; e.g Key::Hash instead of
+                    // under the Account/Contract model instead; e.g. Key::Hash instead of
                     // Key::AddressableEntity
                     match get_snapshot_data(self, &scr, state_hash, false) {
                         SeigniorageRecipientsResult::ValueNotFound(_) => not_found,
@@ -1404,10 +1408,15 @@ pub trait StateProvider: Send + Sync + Sized {
                 }),
         };
 
+        let transfers = runtime.into_transfers();
         let effects = tc.borrow_mut().effects();
 
         match result {
-            Ok(ret) => BiddingResult::Success { ret, effects },
+            Ok(ret) => BiddingResult::Success {
+                ret,
+                effects,
+                transfers,
+            },
             Err(tce) => BiddingResult::Failure(tce),
         }
     }
@@ -1657,9 +1666,14 @@ pub trait StateProvider: Send + Sync + Sized {
         };
 
         let effects = tc.borrow_mut().effects();
+        let transfers = runtime.into_transfers();
 
         match result {
-            Ok(amount) => HandleRefundResult::Success { effects, amount },
+            Ok(amount) => HandleRefundResult::Success {
+                transfers,
+                effects,
+                amount,
+            },
             Err(tce) => HandleRefundResult::Failure(tce),
         }
     }
@@ -1754,9 +1768,10 @@ pub trait StateProvider: Send + Sync + Sized {
         };
 
         let effects = tc.borrow_mut().effects();
+        let transfers = runtime.into_transfers();
 
         match result {
-            Ok(_) => HandleFeeResult::Success { effects },
+            Ok(_) => HandleFeeResult::Success { transfers, effects },
             Err(tce) => HandleFeeResult::Failure(tce),
         }
     }
@@ -1991,7 +2006,7 @@ pub trait StateProvider: Send + Sync + Sized {
         }
     }
 
-    /// Gets an contract value.
+    /// Gets a contract value.
     fn contract(&self, request: ContractRequest) -> ContractResult {
         let query_request = QueryRequest::new(request.state_hash(), request.key(), vec![]);
 
@@ -2039,7 +2054,7 @@ pub trait StateProvider: Send + Sync + Sized {
                     //There is a chance that, when looking for systemic data, we could be using a
                     // state root hash from before the AddressableEntity
                     // migration boundary. In such a case, we should attempt to look up the data
-                    // under the Account/Contract model instead; e.g Key::Hash instead of
+                    // under the Account/Contract model instead; e.g. Key::Hash instead of
                     // Key::AddressableEntity
                     match get_total_supply_data(self, &scr, state_hash, false) {
                         TotalSupplyResult::ValueNotFound(_) => not_found,
@@ -2077,7 +2092,7 @@ pub trait StateProvider: Send + Sync + Sized {
                     //There is a chance that, when looking for systemic data, we could be using a
                     // state root hash from before the AddressableEntity
                     // migration boundary. In such a case, we should attempt to look up the data
-                    // under the Account/Contract model instead; e.g Key::Hash instead of
+                    // under the Account/Contract model instead; e.g. Key::Hash instead of
                     // Key::AddressableEntity
                     match get_round_seigniorage_rate_data(self, &scr, state_hash, false) {
                         RoundSeigniorageRateResult::ValueNotFound(_) => not_found,
@@ -2178,7 +2193,7 @@ pub trait StateProvider: Send + Sync + Sized {
         // This behavior is not used on public networks.
         if transfer_config.enforce_transfer_restrictions(&source_account_hash) {
             // if the source is an admin, enforce_transfer_restrictions == false
-            // if the source is not an admin, enforce_transfer_restrictions == true
+            // if the source is not an admin, enforce_transfer_restrictions == true,
             // and we must check to see if the target is an admin.
             // if the target is also not an admin, this transfer is not permitted.
             match transfer_target_mode.target_account_hash() {
@@ -2287,6 +2302,124 @@ pub trait StateProvider: Send + Sync + Sized {
             effects,
             cache,
         }
+    }
+
+    /// Direct burn.
+    fn burn(&self, request: BurnRequest) -> BurnResult {
+        let state_hash = request.state_hash();
+        let tc = match self.tracking_copy(state_hash) {
+            Ok(Some(tc)) => Rc::new(RefCell::new(tc)),
+            Ok(None) => return BurnResult::RootNotFound,
+            Err(err) => {
+                return BurnResult::Failure(BurnError::TrackingCopy(TrackingCopyError::Storage(
+                    err,
+                )));
+            }
+        };
+
+        let source_account_hash = request.initiator().account_hash();
+        let protocol_version = request.protocol_version();
+        if let Err(tce) = tc
+            .borrow_mut()
+            .migrate_account(source_account_hash, protocol_version)
+        {
+            return BurnResult::Failure(tce.into());
+        }
+
+        let authorization_keys = request.authorization_keys();
+
+        let config = request.config();
+
+        let runtime_args = match request.args() {
+            BurnRequestArgs::Raw(runtime_args) => runtime_args.clone(),
+            BurnRequestArgs::Explicit(transfer_args) => {
+                match RuntimeArgs::try_from(*transfer_args) {
+                    Ok(runtime_args) => runtime_args,
+                    Err(cve) => return BurnResult::Failure(BurnError::CLValue(cve)),
+                }
+            }
+        };
+
+        let runtime_args_builder = BurnRuntimeArgsBuilder::new(runtime_args);
+
+        let (entity_addr, mut footprint, mut entity_access_rights) = match tc
+            .borrow_mut()
+            .authorized_runtime_footprint_with_access_rights(
+                protocol_version,
+                source_account_hash,
+                authorization_keys,
+                &BTreeSet::default(),
+            ) {
+            Ok(ret) => ret,
+            Err(tce) => {
+                return BurnResult::Failure(BurnError::TrackingCopy(tce));
+            }
+        };
+        let entity_key = if config.enable_addressable_entity() {
+            Key::AddressableEntity(entity_addr)
+        } else {
+            match entity_addr {
+                EntityAddr::System(hash) | EntityAddr::SmartContract(hash) => Key::Hash(hash),
+                EntityAddr::Account(hash) => Key::Account(AccountHash::new(hash)),
+            }
+        };
+
+        // extend named keys with total supply
+        match tc
+            .borrow_mut()
+            .system_contract_named_key(MINT, TOTAL_SUPPLY_KEY)
+        {
+            Ok(Some(k)) => {
+                match k.as_uref() {
+                    Some(uref) => entity_access_rights.extend(&[*uref]),
+                    None => {
+                        return BurnResult::Failure(BurnError::TrackingCopy(
+                            TrackingCopyError::UnexpectedKeyVariant(k),
+                        ));
+                    }
+                }
+                footprint.insert_into_named_keys(TOTAL_SUPPLY_KEY.into(), k);
+            }
+            Ok(None) => {
+                return BurnResult::Failure(BurnError::TrackingCopy(
+                    TrackingCopyError::NamedKeyNotFound(TOTAL_SUPPLY_KEY.into()),
+                ));
+            }
+            Err(tce) => {
+                return BurnResult::Failure(BurnError::TrackingCopy(tce));
+            }
+        };
+        let id = Id::Transaction(request.transaction_hash());
+        let phase = Phase::Session;
+        let address_generator = AddressGenerator::new(&id.seed(), phase);
+        let burn_args = match runtime_args_builder.build(&footprint, Rc::clone(&tc)) {
+            Ok(burn_args) => burn_args,
+            Err(error) => return BurnResult::Failure(error),
+        };
+
+        // IMPORTANT: this runtime _must_ use the payer's context.
+        let mut runtime = RuntimeNative::new(
+            config.clone(),
+            protocol_version,
+            id,
+            Arc::new(RwLock::new(address_generator)),
+            Rc::clone(&tc),
+            source_account_hash,
+            entity_key,
+            footprint.clone(),
+            entity_access_rights,
+            burn_args.amount(),
+            phase,
+        );
+
+        if let Err(mint_error) = runtime.burn(burn_args.source(), burn_args.amount()) {
+            return BurnResult::Failure(BurnError::Mint(mint_error));
+        }
+
+        let effects = tc.borrow_mut().effects();
+        let cache = tc.borrow_mut().cache();
+
+        BurnResult::Success { effects, cache }
     }
 
     /// Gets all values under a given key tag.

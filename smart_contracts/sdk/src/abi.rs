@@ -304,6 +304,7 @@ impl CasperABI for Tuple {
         let items = <[_]>::into_vec(Box::new([for_tuples!( #( Tuple::declaration() ),* )]));
         format!("({})", items.join(", "))
     }
+
     fn definition() -> Definition {
         let items = <[_]>::into_vec(Box::new([for_tuples!( #( Tuple::declaration() ),* )]));
         Definition::Tuple { items }

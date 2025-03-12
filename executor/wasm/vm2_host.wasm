@@ -1,1 +1,1 @@
-/home/abcight/git/casper-node/target/wasm32-unknown-unknown/release/vm2_host.wasm
+../../target/wasm32-unknown-unknown/release/vm2_host.wasm

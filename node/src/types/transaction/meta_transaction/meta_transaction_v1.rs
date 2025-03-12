@@ -210,7 +210,7 @@ impl MetaTransactionV1 {
 
     /// Returns `Ok` if and only if:
     ///   * the transaction hash is correct (see [`TransactionV1::has_valid_hash`] for details)
-    ///   * approvals are non empty, and
+    ///   * approvals are non-empty, and
     ///   * all approvals are valid signatures of the signed hash
     pub fn verify(&self) -> Result<(), InvalidTransactionV1> {
         self.is_verified.get_or_init(|| self.do_verify()).clone()
@@ -385,7 +385,7 @@ impl MetaTransactionV1 {
                 }
             }
             None => {
-                // Native transactions are config compliant by default
+                // noop
             }
         }
 
@@ -426,6 +426,72 @@ impl MetaTransactionV1 {
                     return Err(InvalidTransactionV1::InvalidPaymentAmount);
                 }
                 if let PricingHandling::PaymentLimited = price_handling {
+                    if self.is_native_mint() {
+                        let entry_point = &self.entry_point;
+                        let expected_payment = match &entry_point {
+                            TransactionEntryPoint::Transfer => {
+                                chainspec.system_costs_config.mint_costs().transfer
+                            }
+                            TransactionEntryPoint::Burn => {
+                                chainspec.system_costs_config.mint_costs().burn
+                            }
+                            _ => {
+                                return Err(InvalidTransactionV1::UnexpectedEntryPoint {
+                                    entry_point: entry_point.clone(),
+                                    lane_id: self.lane_id,
+                                })
+                            }
+                        };
+                        if *payment_amount < expected_payment.into() {
+                            return Err(InvalidTransactionV1::InvalidPaymentAmount);
+                        }
+                    } else if self.is_native_auction() {
+                        let entry_point = &self.entry_point;
+                        let expected_payment = match &entry_point {
+                            TransactionEntryPoint::AddBid | TransactionEntryPoint::ActivateBid => {
+                                chainspec.system_costs_config.auction_costs().add_bid
+                            }
+                            TransactionEntryPoint::WithdrawBid => {
+                                chainspec.system_costs_config.auction_costs().withdraw_bid
+                            }
+                            TransactionEntryPoint::Delegate => {
+                                chainspec.system_costs_config.auction_costs().delegate
+                            }
+                            TransactionEntryPoint::Undelegate => {
+                                chainspec.system_costs_config.auction_costs().undelegate
+                            }
+                            TransactionEntryPoint::Redelegate => {
+                                chainspec.system_costs_config.auction_costs().redelegate
+                            }
+                            TransactionEntryPoint::ChangeBidPublicKey => {
+                                chainspec
+                                    .system_costs_config
+                                    .auction_costs()
+                                    .change_bid_public_key
+                            }
+                            TransactionEntryPoint::AddReservations => {
+                                chainspec
+                                    .system_costs_config
+                                    .auction_costs()
+                                    .add_reservations
+                            }
+                            TransactionEntryPoint::CancelReservations => {
+                                chainspec
+                                    .system_costs_config
+                                    .auction_costs()
+                                    .cancel_reservations
+                            }
+                            _ => {
+                                return Err(InvalidTransactionV1::UnexpectedEntryPoint {
+                                    entry_point: entry_point.clone(),
+                                    lane_id: self.lane_id,
+                                })
+                            }
+                        };
+                        if *payment_amount < expected_payment {
+                            return Err(InvalidTransactionV1::InvalidPaymentAmount);
+                        }
+                    }
                 } else {
                     return Err(InvalidTransactionV1::InvalidPricingMode {
                         price_mode: pricing_mode.clone(),
@@ -442,7 +508,7 @@ impl MetaTransactionV1 {
             }
             PricingMode::Prepaid { .. } => {
                 if !chainspec.core_config.allow_prepaid {
-                    // Currently Reserved isn't implemented and we should
+                    // Currently Prepaid isn't implemented, and we should
                     // not be accepting transactions with this mode.
                     return Err(InvalidTransactionV1::InvalidPricingMode {
                         price_mode: pricing_mode.clone(),
@@ -556,6 +622,7 @@ impl MetaTransactionV1 {
                     &self.args,
                     config.native_transfer_minimum_motes,
                 ),
+                TransactionEntryPoint::Burn => arg_handling::has_valid_burn_args(&self.args),
                 TransactionEntryPoint::AddBid => arg_handling::has_valid_add_bid_args(&self.args),
                 TransactionEntryPoint::WithdrawBid => {
                     arg_handling::has_valid_withdraw_bid_args(&self.args)
@@ -586,6 +653,7 @@ impl MetaTransactionV1 {
                 TransactionEntryPoint::Custom(_) => Ok(()),
                 TransactionEntryPoint::Call
                 | TransactionEntryPoint::Transfer
+                | TransactionEntryPoint::Burn
                 | TransactionEntryPoint::AddBid
                 | TransactionEntryPoint::WithdrawBid
                 | TransactionEntryPoint::Delegate
@@ -613,6 +681,7 @@ impl MetaTransactionV1 {
                     Ok(())
                 }
                 TransactionEntryPoint::Transfer
+                | TransactionEntryPoint::Burn
                 | TransactionEntryPoint::AddBid
                 | TransactionEntryPoint::WithdrawBid
                 | TransactionEntryPoint::Delegate

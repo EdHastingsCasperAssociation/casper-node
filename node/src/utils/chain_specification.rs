@@ -317,6 +317,7 @@ mod tests {
             upgrade: HostFunction::new(110, [0, 1, 2, 3, 4, 5]),
             call: HostFunction::new(111, [0, 1, 2, 3, 4, 5, 6, 7, 8]),
             print: HostFunction::new(112, [0, 1]),
+            emit: HostFunction::new(113, [0, 1, 2, 3]),
         });
     static EXPECTED_GENESIS_WASM_COSTS: Lazy<WasmConfig> = Lazy::new(|| {
         let wasm_v1_config = WasmV1Config::new(

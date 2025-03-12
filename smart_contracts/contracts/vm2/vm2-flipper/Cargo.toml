@@ -8,5 +8,4 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-casper-macros = { path = "../../../macros" }
 casper-sdk = { path = "../../../sdk" }

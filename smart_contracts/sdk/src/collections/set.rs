@@ -1,6 +1,6 @@
 use crate::prelude::marker::PhantomData;
 
-use crate::{host, serializers::borsh::BorshSerialize};
+use crate::{casper, serializers::borsh::BorshSerialize};
 use casper_executor_wasm_common::keyspace::Keyspace;
 
 use super::lookup_key::{Identity, LookupKey, LookupKeyOwned};
@@ -31,13 +31,12 @@ where
 
     pub fn insert(&mut self, key: T) {
         let lookup_key = self.lookup.lookup(self.prefix.as_bytes(), &key);
-        host::casper_write(Keyspace::Context(lookup_key.as_ref()), &[]).unwrap();
+        casper::write(Keyspace::Context(lookup_key.as_ref()), &[]).unwrap();
     }
 
     pub fn contains_key(&self, key: T) -> bool {
         let lookup_key = self.lookup.lookup(self.prefix.as_bytes(), &key);
-        let entry =
-            host::casper_read(Keyspace::Context(lookup_key.as_ref()), |_size| None).unwrap();
+        let entry = casper::read(Keyspace::Context(lookup_key.as_ref()), |_size| None).unwrap();
         entry.is_some()
     }
 }

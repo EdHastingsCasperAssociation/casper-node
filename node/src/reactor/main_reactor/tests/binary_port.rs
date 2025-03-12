@@ -46,7 +46,9 @@ use crate::{
     types::{transaction::transaction_v1_builder::TransactionV1Builder, NodeId},
 };
 
-use super::{InitialStakes, TestFixture, ERA_ONE};
+use crate::reactor::main_reactor::tests::{
+    fixture::TestFixture, initial_stakes::InitialStakes, ERA_ONE,
+};
 
 const GUARANTEED_BLOCK_HEIGHT: u64 = 4;
 

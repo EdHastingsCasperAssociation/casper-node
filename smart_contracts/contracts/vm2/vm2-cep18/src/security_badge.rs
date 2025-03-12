@@ -1,5 +1,4 @@
-use casper_macros::casper;
-use casper_sdk::host;
+use casper_sdk::prelude::*;
 
 #[derive(PartialEq, Debug)]
 #[casper]
@@ -10,7 +9,7 @@ pub enum SecurityBadge {
 }
 
 pub fn sec_check(_allowed_badge_list: &[SecurityBadge]) {
-    let _caller = host::get_caller();
+    let _caller = casper::get_caller();
 }
 
 #[cfg(test)]

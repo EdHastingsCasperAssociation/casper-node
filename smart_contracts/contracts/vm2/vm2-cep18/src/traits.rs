@@ -1,11 +1,10 @@
-use casper_macros::casper;
-use casper_sdk::{
-    collections::Map,
-    host::{self, Entity},
-    log,
-};
+use casper_sdk::{collections::Map, prelude::*};
 
-use crate::{error::Cep18Error, security_badge::SecurityBadge};
+use crate::{
+    error::Cep18Error,
+    messages::{Approve, Transfer},
+    security_badge::SecurityBadge,
+};
 
 #[derive(Debug)]
 #[casper]
@@ -22,7 +21,7 @@ pub struct CEP18State {
 
 impl CEP18State {
     pub(crate) fn sec_check(&self, allowed_badge_list: &[SecurityBadge]) -> Result<(), Cep18Error> {
-        let caller = host::get_caller();
+        let caller = casper::get_caller();
         let security_badge = self
             .security_badges
             .get(&caller)
@@ -113,18 +112,24 @@ pub trait CEP18 {
 
     #[casper(revert_on_error)]
     fn approve(&mut self, spender: Entity, amount: u64) -> Result<(), Cep18Error> {
-        let owner = host::get_caller();
+        let owner = casper::get_caller();
         if owner == spender {
             return Err(Cep18Error::CannotTargetSelfUser);
         }
         let lookup_key = (owner, spender);
         self.state_mut().allowances.insert(&lookup_key, &amount);
+        casper::emit(Approve {
+            owner,
+            spender,
+            amount,
+        })
+        .expect("failed to emit message");
         Ok(())
     }
 
     #[casper(revert_on_error)]
     fn decrease_allowance(&mut self, spender: Entity, amount: u64) -> Result<(), Cep18Error> {
-        let owner = host::get_caller();
+        let owner = casper::get_caller();
         if owner == spender {
             return Err(Cep18Error::CannotTargetSelfUser);
         }
@@ -137,7 +142,7 @@ pub trait CEP18 {
 
     #[casper(revert_on_error)]
     fn increase_allowance(&mut self, spender: Entity, amount: u64) -> Result<(), Cep18Error> {
-        let owner = host::get_caller();
+        let owner = casper::get_caller();
         if owner == spender {
             return Err(Cep18Error::CannotTargetSelfUser);
         }
@@ -150,12 +155,23 @@ pub trait CEP18 {
 
     #[casper(revert_on_error)]
     fn transfer(&mut self, recipient: Entity, amount: u64) -> Result<(), Cep18Error> {
-        let sender = host::get_caller();
+        let sender = casper::get_caller();
         if sender == recipient {
             return Err(Cep18Error::CannotTargetSelfUser);
         }
         self.state_mut()
             .transfer_balance(&sender, &recipient, amount)?;
+
+        // NOTE: This is operation is fallible, although it's not expected to fail under any
+        // circumstances (number of topics per contract, payload size, topic size, number of
+        // messages etc. are all under control).
+        casper::emit(Transfer {
+            from: Some(sender),
+            to: recipient,
+            amount,
+        })
+        .expect("failed to emit message");
+
         Ok(())
     }
 
@@ -166,7 +182,7 @@ pub trait CEP18 {
         recipient: Entity,
         amount: u64,
     ) -> Result<(), Cep18Error> {
-        let spender = host::get_caller();
+        let spender = casper::get_caller();
         if owner == recipient {
             return Err(Cep18Error::CannotTargetSelfUser);
         }
@@ -190,6 +206,13 @@ pub trait CEP18 {
         self.state_mut()
             .allowances
             .insert(&(owner, spender), &new_spender_allowance);
+
+        casper::emit(Transfer {
+            from: Some(owner),
+            to: recipient,
+            amount,
+        })
+        .expect("failed to emit message");
 
         Ok(())
     }
@@ -215,6 +238,14 @@ pub trait Mintable: CEP18 {
             .total_supply
             .checked_add(amount)
             .ok_or(Cep18Error::Overflow)?;
+
+        casper::emit(Transfer {
+            from: None,
+            to: owner,
+            amount,
+        })
+        .expect("failed to emit message");
+
         Ok(())
     }
 }
@@ -227,7 +258,7 @@ pub trait Burnable: CEP18 {
             return Err(Cep18Error::MintBurnDisabled);
         }
 
-        if owner != host::get_caller() {
+        if owner != casper::get_caller() {
             return Err(Cep18Error::InvalidBurnTarget);
         }
 
