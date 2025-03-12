@@ -7,7 +7,6 @@ use crate::{
         FromBytes, ToBytes,
     },
     transaction::serialization::CalltableSerializationEnvelopeBuilder,
-    EraId, Timestamp,
 };
 use alloc::vec::Vec;
 use core::fmt::{self, Display, Formatter};
@@ -50,7 +49,7 @@ impl TransactionScheduling {
     /// Returns a random `TransactionScheduling`.
     #[cfg(any(feature = "testing", test))]
     pub fn random(rng: &mut TestRng) -> Self {
-        match rng.gen_range(0..3) {
+        match rng.gen_range(0..1) {
             0 => TransactionScheduling::Standard,
             _ => unreachable!(),
         }
