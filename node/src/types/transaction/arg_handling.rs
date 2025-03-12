@@ -412,6 +412,14 @@ pub fn has_valid_redelegate_args(args: &TransactionArgs) -> Result<(), InvalidTr
     Ok(())
 }
 
+/// Creates a `RuntimeArgs` suitable for use in a delegate transaction.
+#[cfg(test)]
+pub fn new_activate_bid_args(validator: PublicKey) -> Result<RuntimeArgs, CLValueError> {
+    let mut args = RuntimeArgs::new();
+    ACTIVATE_BID_ARG_VALIDATOR.insert(&mut args, validator)?;
+    Ok(args)
+}
+
 /// Checks the given `RuntimeArgs` are suitable for use in an activate bid transaction.
 pub fn has_valid_activate_bid_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
     let args = args
