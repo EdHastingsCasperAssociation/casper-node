@@ -334,6 +334,26 @@ pub enum ErrorCode {
     /// Invalid runtime for Transaction::Deploy
     #[error("Invalid runtime for Transaction::Deploy")]
     InvalidDeployInvalidRuntime = 105,
+    /// Chainspec has no wasm lanes defined
+    #[error(
+        "Cannot execute wasm-based Transaction::Deploy due to no wasm lanes defined in chainspec"
+    )]
+    InvalidDeployChainspecHasNoWasmLanesDefined = 106,
+    /// Deploy exceeds wasm lane gas limit
+    #[error("Transaction::Deploy exceeds lane gas limit")]
+    InvalidDeployExceededWasmLaneGasLimit = 107,
+    /// Invalid runtime for Transaction::Deploy
+    #[error("Invalid payment amount for Transaction::Deploy")]
+    InvalidDeployInvalidPaymentAmount = 108,
+    /// Insufficient burn amount for Transaction::V1
+    #[error("Insufficient burn amount for Transaction::V1")]
+    InvalidTransactionInsufficientBurnAmount = 109,
+    /// Invalid payment amount for Transaction::V1
+    #[error("Invalid payment amount for Transaction::V1")]
+    InvalidTransactionInvalidPaymentAmount = 110,
+    /// Unexpected entry point for Transaction::V1
+    #[error("Unexpected entry point for Transaction::V1")]
+    InvalidTransactionUnexpectedEntryPoint = 111,
 }
 
 impl TryFrom<u16> for ErrorCode {
@@ -447,6 +467,12 @@ impl TryFrom<u16> for ErrorCode {
             103 => Ok(ErrorCode::PricingModeNotSupported),
             104 => Ok(ErrorCode::InvalidDeployGasLimitNotSupported),
             105 => Ok(ErrorCode::InvalidDeployInvalidRuntime),
+            106 => Ok(ErrorCode::InvalidDeployChainspecHasNoWasmLanesDefined),
+            107 => Ok(ErrorCode::InvalidDeployExceededWasmLaneGasLimit),
+            108 => Ok(ErrorCode::InvalidDeployInvalidPaymentAmount),
+            109 => Ok(ErrorCode::InvalidTransactionInsufficientBurnAmount),
+            110 => Ok(ErrorCode::InvalidTransactionInvalidPaymentAmount),
+            111 => Ok(ErrorCode::InvalidTransactionUnexpectedEntryPoint),
             _ => Err(UnknownErrorCode),
         }
     }
@@ -520,6 +546,13 @@ impl From<InvalidDeploy> for ErrorCode {
             InvalidDeploy::GasPriceToleranceTooLow { .. } => ErrorCode::GasPriceToleranceTooLow,
             InvalidDeploy::GasLimitNotSupported => ErrorCode::InvalidDeployGasLimitNotSupported,
             InvalidDeploy::InvalidRuntime => ErrorCode::InvalidDeployInvalidRuntime,
+            InvalidDeploy::ChainspecHasNoWasmLanesDefined => {
+                ErrorCode::InvalidDeployChainspecHasNoWasmLanesDefined
+            }
+            InvalidDeploy::ExceededWasmLaneGasLimit { .. } => {
+                ErrorCode::InvalidDeployExceededWasmLaneGasLimit
+            }
+            InvalidDeploy::InvalidPaymentAmount => ErrorCode::InvalidDeployInvalidPaymentAmount,
             _ => ErrorCode::InvalidDeployUnspecified,
         }
     }
@@ -611,6 +644,15 @@ impl From<InvalidTransactionV1> for ErrorCode {
             }
             InvalidTransactionV1::MissingSeed => ErrorCode::InvalidTransactionMissingSeed,
             InvalidTransactionV1::PricingModeNotSupported => ErrorCode::PricingModeNotSupported,
+            InvalidTransactionV1::InsufficientBurnAmount { .. } => {
+                ErrorCode::InvalidTransactionInsufficientBurnAmount
+            }
+            InvalidTransactionV1::InvalidPaymentAmount => {
+                ErrorCode::InvalidTransactionInvalidPaymentAmount
+            }
+            InvalidTransactionV1::UnexpectedEntryPoint { .. } => {
+                ErrorCode::InvalidTransactionUnexpectedEntryPoint
+            }
             _other => ErrorCode::InvalidTransactionUnspecified,
         }
     }
