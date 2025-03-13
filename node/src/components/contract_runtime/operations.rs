@@ -553,6 +553,11 @@ pub fn execute_finalized_block(
                             .with_added_consumed(gas_limit)
                             .with_burn_result(burn_result)
                             .map_err(|_| BlockExecutionError::RootNotFound(state_root_hash))?;
+                    } else {
+                        artifact_builder.with_error_message(format!(
+                            "Attempt to call unsupported native mint entrypoint: {}",
+                            entry_point
+                        ));
                     }
                 }
                 lane_id if lane_id == AUCTION_LANE_ID => {

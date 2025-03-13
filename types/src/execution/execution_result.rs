@@ -37,11 +37,11 @@ pub enum ExecutionResult {
 }
 
 impl ExecutionResult {
-    /// Returns refund amount.
-    pub fn refund(&self) -> Option<U512> {
+    /// Returns cost.
+    pub fn cost(&self) -> U512 {
         match self {
-            ExecutionResult::V1(_) => None,
-            ExecutionResult::V2(result) => Some(result.refund),
+            ExecutionResult::V1(result) => result.cost(),
+            ExecutionResult::V2(result) => result.cost,
         }
     }
 
@@ -50,6 +50,14 @@ impl ExecutionResult {
         match self {
             ExecutionResult::V1(result) => result.cost(),
             ExecutionResult::V2(result) => result.consumed.value(),
+        }
+    }
+
+    /// Returns refund amount.
+    pub fn refund(&self) -> Option<U512> {
+        match self {
+            ExecutionResult::V1(_) => None,
+            ExecutionResult::V2(result) => Some(result.refund),
         }
     }
 
