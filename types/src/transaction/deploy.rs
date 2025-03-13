@@ -555,6 +555,23 @@ impl Deploy {
                     attempted: Box::new(attempted),
                 });
             }
+        } else {
+            let payment_args = self.payment().args();
+            let payment_amount = payment_args
+                .get(ARG_AMOUNT)
+                .ok_or_else(|| {
+                    debug!("missing transfer 'amount' runtime argument");
+                    InvalidDeploy::MissingTransferAmount
+                })?
+                .clone()
+                .into_t::<U512>()
+                .map_err(|_| {
+                    debug!("failed to parse transfer 'amount' runtime argument as a U512");
+                    InvalidDeploy::FailedToParseTransferAmount
+                })?;
+            if payment_amount < U512::from(chainspec.core_config.baseline_motes_amount) {
+                return Err(InvalidDeploy::InvalidPaymentAmount);
+            }
         }
 
         Ok(())
@@ -652,8 +669,9 @@ impl Deploy {
             "source" => PublicKey::random(rng).to_account_hash(),
             "target" => PublicKey::random(rng).to_account_hash(),
         };
+        let payment_amount = 10_000_000_000u64;
         let payment_args = runtime_args! {
-            "amount" => U512::from(10),
+            "amount" => U512::from(payment_amount),
         };
         let session = ExecutableDeployItem::Transfer {
             args: transfer_args,
@@ -724,6 +742,55 @@ impl Deploy {
     pub fn random_with_mangled_payment_amount(rng: &mut TestRng) -> Self {
         let payment_args = runtime_args! {
             "amount" => "invalid-argument"
+        };
+        let payment = ExecutableDeployItem::ModuleBytes {
+            module_bytes: Bytes::new(),
+            args: payment_args,
+        };
+        Self::random_transfer_with_payment(rng, payment)
+    }
+
+    /// Returns a random invalid `Deploy` with insufficient payment amount.
+    #[cfg(any(all(feature = "std", feature = "testing"), test))]
+    pub fn random_with_payment_one(rng: &mut TestRng) -> Self {
+        let timestamp = Timestamp::now();
+        let ttl = TimeDiff::from_seconds(rng.gen_range(60..3600));
+        let payment_args = runtime_args! {
+            "amount" => U512::one()
+        };
+        let payment = ExecutableDeployItem::ModuleBytes {
+            module_bytes: Bytes::new(),
+            args: payment_args,
+        };
+        let gas_price = rng.gen_range(1..4);
+
+        let dependencies = vec![];
+        let chain_name = String::from("casper-example");
+        let session = rng.gen();
+
+        let secret_key = SecretKey::random(rng);
+
+        Deploy::new_signed(
+            timestamp,
+            ttl,
+            gas_price,
+            dependencies,
+            chain_name,
+            payment,
+            session,
+            &secret_key,
+            None,
+        )
+    }
+
+    /// Returns a random invalid `Deploy` with insufficient payment amount.
+    #[cfg(any(all(feature = "std", feature = "testing"), test))]
+    pub fn random_with_insufficient_payment_amount(
+        rng: &mut TestRng,
+        payment_amount: U512,
+    ) -> Self {
+        let payment_args = runtime_args! {
+            "amount" => payment_amount
         };
         let payment = ExecutableDeployItem::ModuleBytes {
             module_bytes: Bytes::new(),
@@ -866,12 +933,40 @@ impl Deploy {
     /// hash, but calling an invalid entry point.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
     pub fn random_with_missing_entry_point_in_session_contract(rng: &mut TestRng) -> Self {
+        let timestamp = Timestamp::now();
+        let ttl = TimeDiff::from_seconds(rng.gen_range(60..3600));
         let session = ExecutableDeployItem::StoredContractByHash {
             hash: [19; 32].into(),
             entry_point: "non-existent-entry-point".to_string(),
             args: Default::default(),
         };
-        Self::random_transfer_with_session(rng, session)
+
+        let payment_amount = 10_000_000_000u64;
+        let payment_args = runtime_args! {
+            "amount" => U512::from(payment_amount)
+        };
+        let payment = ExecutableDeployItem::ModuleBytes {
+            module_bytes: Bytes::new(),
+            args: payment_args,
+        };
+        let gas_price = rng.gen_range(1..4);
+
+        let dependencies = vec![];
+        let chain_name = String::from("casper-example");
+
+        let secret_key = SecretKey::random(rng);
+
+        Deploy::new_signed(
+            timestamp,
+            ttl,
+            gas_price,
+            dependencies,
+            chain_name,
+            payment,
+            session,
+            &secret_key,
+            None,
+        )
     }
 
     /// Returns a random `Deploy` with custom session specified as a stored versioned contract by
@@ -905,14 +1000,8 @@ impl Deploy {
             module_bytes: Bytes::new(),
             args: payment_args,
         };
-        let contract_name = match maybe_contract_name {
-            None => "Test".to_string(),
-            Some(contract_name) => contract_name,
-        };
-        let entry_point_name = match maybe_entry_point_name {
-            None => "Test".to_string(),
-            Some(entry_point_name) => entry_point_name,
-        };
+        let contract_name = maybe_contract_name.unwrap_or_else(|| "Test".to_string());
+        let entry_point_name = maybe_entry_point_name.unwrap_or_else(|| "Test".to_string());
         let session = ExecutableDeployItem::StoredVersionedContractByName {
             name: contract_name,
             version: None,
@@ -923,10 +1012,7 @@ impl Deploy {
             None => SecretKey::random(rng),
             Some(secret_key) => secret_key,
         };
-        let timestamp = match maybe_timestamp {
-            None => Timestamp::now(),
-            Some(timestamp) => timestamp,
-        };
+        let timestamp = maybe_timestamp.unwrap_or_else(Timestamp::now);
         let ttl = match maybe_ttl {
             None => TimeDiff::from_seconds(rng.gen_range(60..3600)),
             Some(ttl) => ttl,
@@ -1017,7 +1103,34 @@ impl Deploy {
             module_bytes: Bytes::new(),
             args: Default::default(),
         };
-        Self::random_transfer_with_session(rng, session)
+        let timestamp = Timestamp::now();
+        let ttl = TimeDiff::from_seconds(rng.gen_range(60..3600));
+        let amount = 10_000_000_000u64;
+        let payment_args = runtime_args! {
+            "amount" => U512::from(amount)
+        };
+        let payment = ExecutableDeployItem::ModuleBytes {
+            module_bytes: Bytes::new(),
+            args: payment_args,
+        };
+        let gas_price = 1;
+
+        let dependencies = vec![];
+        let chain_name = String::from("casper-example");
+
+        let secret_key = SecretKey::random(rng);
+
+        Deploy::new_signed(
+            timestamp,
+            ttl,
+            gas_price,
+            dependencies,
+            chain_name,
+            payment,
+            session,
+            &secret_key,
+            None,
+        )
     }
 
     /// Returns a random invalid `Deploy` with an expired TTL.

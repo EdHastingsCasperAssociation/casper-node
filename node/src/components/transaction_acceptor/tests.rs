@@ -212,9 +212,11 @@ enum TestScenario {
     DeployWithMangledTransferAmount,
     DeployWithoutTransferTarget,
     DeployWithoutTransferAmount,
+    DeployWithPaymentOne,
     BalanceCheckForDeploySentByPeer,
     InvalidPricingModeForTransactionV1,
     TooLowGasPriceToleranceForTransactionV1,
+    TransactionWithPaymentOne,
     TooLowGasPriceToleranceForDeploy,
     InvalidFields,
     InvalidFieldsFromPeer,
@@ -256,6 +258,7 @@ impl TestScenario {
             | TestScenario::DeployWithMangledPaymentAmount
             | TestScenario::DeployWithMangledTransferAmount
             | TestScenario::DeployWithoutTransferAmount
+            | TestScenario::DeployWithPaymentOne
             | TestScenario::DeployWithoutTransferTarget
             | TestScenario::FromClientCustomPaymentContract(_)
             | TestScenario::FromClientCustomPaymentContractPackage(_)
@@ -267,6 +270,7 @@ impl TestScenario {
             | TestScenario::InvalidPricingModeForTransactionV1
             | TestScenario::TooLowGasPriceToleranceForTransactionV1
             | TestScenario::TooLowGasPriceToleranceForDeploy
+            | TestScenario::TransactionWithPaymentOne
             | TestScenario::InvalidFields
             | TestScenario::InvalidArgumentsKind
             | TestScenario::WasmTransactionWithTooBigPayment
@@ -411,6 +415,33 @@ impl TestScenario {
             }
             TestScenario::DeployWithMangledTransferAmount => {
                 Transaction::from(Deploy::random_with_mangled_transfer_amount(rng))
+            }
+            TestScenario::DeployWithPaymentOne => {
+                Transaction::from(Deploy::random_with_payment_one(rng))
+            }
+
+            TestScenario::TransactionWithPaymentOne => {
+                let timestamp = Timestamp::now()
+                    + Config::default().timestamp_leeway
+                    + TimeDiff::from_millis(100);
+                let ttl = TimeDiff::from_seconds(300);
+                let txn = TransactionV1Builder::new_session(
+                    false,
+                    Bytes::from(vec![1]),
+                    TransactionRuntimeParams::VmCasperV1,
+                )
+                .with_pricing_mode(PricingMode::PaymentLimited {
+                    payment_amount: 1u64,
+                    gas_price_tolerance: 2,
+                    standard_payment: true,
+                })
+                .with_chain_name("casper-example")
+                .with_timestamp(timestamp)
+                .with_ttl(ttl)
+                .with_secret_key(&secret_key)
+                .build()
+                .unwrap();
+                Transaction::from(txn)
             }
 
             TestScenario::FromPeerCustomPaymentContract(contract_scenario)
@@ -753,6 +784,7 @@ impl TestScenario {
             | TestScenario::DeployWithMangledTransferAmount
             | TestScenario::DeployWithoutTransferAmount
             | TestScenario::DeployWithoutTransferTarget
+            | TestScenario::DeployWithPaymentOne
             | TestScenario::BalanceCheckForDeploySentByPeer
             | TestScenario::FromClientExpired(_) => false,
             TestScenario::FromPeerCustomPaymentContract(contract_scenario)
@@ -775,15 +807,16 @@ impl TestScenario {
                     | ContractPackageScenario::MissingPackageAtHash
                     | ContractPackageScenario::MissingContractVersion => false,
                 }
-            }
-            TestScenario::InvalidPricingModeForTransactionV1 => false,
-            TestScenario::TooLowGasPriceToleranceForTransactionV1 => false,
-            TestScenario::TooLowGasPriceToleranceForDeploy => false,
-            TestScenario::InvalidFields => false,
-            TestScenario::InvalidFieldsFromPeer => false,
-            TestScenario::InvalidArgumentsKind => false,
-            TestScenario::WasmTransactionWithTooBigPayment => false,
-            TestScenario::WasmDeployWithTooBigPayment => false,
+            },
+            TestScenario::InvalidPricingModeForTransactionV1
+            | TestScenario::TooLowGasPriceToleranceForTransactionV1
+            | TestScenario::TransactionWithPaymentOne
+            | TestScenario::TooLowGasPriceToleranceForDeploy
+            | TestScenario::InvalidFields
+            | TestScenario::InvalidFieldsFromPeer
+            | TestScenario::InvalidArgumentsKind
+            | TestScenario::WasmTransactionWithTooBigPayment
+            | TestScenario::WasmDeployWithTooBigPayment => false,
         }
     }
 
@@ -1343,9 +1376,11 @@ async fn run_transaction_acceptor_without_timeout(
             | TestScenario::DeployWithMangledTransferAmount
             | TestScenario::DeployWithoutTransferTarget
             | TestScenario::DeployWithoutTransferAmount
+            | TestScenario::DeployWithPaymentOne
             | TestScenario::InvalidPricingModeForTransactionV1
             | TestScenario::FromClientExpired(_)
             | TestScenario::TooLowGasPriceToleranceForTransactionV1
+            | TestScenario::TransactionWithPaymentOne
             | TestScenario::TooLowGasPriceToleranceForDeploy
             | TestScenario::InvalidFields
             | TestScenario::InvalidArgumentsKind
@@ -2469,6 +2504,18 @@ async fn should_reject_deploy_with_empty_module_bytes_in_session() {
 }
 
 #[tokio::test]
+async fn should_reject_deploy_with_insufficient_payment() {
+    let test_scenario = TestScenario::DeployWithPaymentOne;
+    let result = run_transaction_acceptor(test_scenario).await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(
+            InvalidTransaction::Deploy(InvalidDeploy::InvalidPaymentAmount)
+        ))
+    ))
+}
+
+#[tokio::test]
 async fn should_reject_deploy_with_transfer_in_payment() {
     let test_scenario = TestScenario::DeployWithNativeTransferInPayment;
     let result = run_transaction_acceptor(test_scenario).await;
@@ -2614,6 +2661,18 @@ async fn should_reject_transaction_v1_with_too_low_gas_price_tolerance() {
         result,
         Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
             InvalidTransactionV1::GasPriceToleranceTooLow { .. }
+        )))
+    ))
+}
+
+#[tokio::test]
+async fn should_reject_transaction_v1_with_insufficient_payment() {
+    let test_scenario = TestScenario::TransactionWithPaymentOne;
+    let result = run_transaction_acceptor(test_scenario).await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
+            InvalidTransactionV1::InvalidPaymentAmount
         )))
     ))
 }

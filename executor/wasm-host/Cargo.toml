@@ -11,8 +11,8 @@ casper-executor-wasm-interface = { path = "../wasm-interface" }
 casper-storage = { path = "../../storage" }
 casper-types = { path = "../../types" }
 either = "1.13.0"
-num-derive = "0.4.2"
-num-traits = "0.2.18"
+num-derive = { workspace = true }
+num-traits = { workspace = true }
 parking_lot = "0.12.3"
 safe-transmute = "0.11.2"
 thiserror = "1.0.61"

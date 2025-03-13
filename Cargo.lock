@@ -621,6 +621,8 @@ dependencies = [
  "bincode",
  "bytes",
  "casper-types",
+ "num-derive",
+ "num-traits",
  "once_cell",
  "rand",
  "serde",

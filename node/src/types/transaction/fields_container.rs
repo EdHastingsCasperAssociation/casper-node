@@ -86,10 +86,12 @@ impl FieldsContainer {
     /// Returns a random `FieldsContainer`.
     #[cfg(test)]
     pub(crate) fn random(rng: &mut TestRng) -> Self {
-        match rng.gen_range(0..8) {
+        use casper_types::URef;
+
+        match rng.gen_range(0..=12) {
             0 => {
                 let amount = rng.gen_range(2_500_000_000..=u64::MAX);
-                let maybe_source = if rng.gen() { Some(rng.gen()) } else { None };
+                let maybe_source: Option<URef> = rng.gen();
                 let target = TransferTarget::random(rng);
                 let maybe_id = rng.gen::<bool>().then(|| rng.gen());
                 let args = arg_handling::new_transfer_args(amount, maybe_source, target, maybe_id)
@@ -191,6 +193,69 @@ impl FieldsContainer {
                     TransactionArgs::Named(RuntimeArgs::random(rng)),
                     target,
                     TransactionEntryPoint::Call,
+                    TransactionScheduling::random(rng),
+                )
+            }
+            8 => {
+                let amount = rng.gen::<u64>();
+                let maybe_source: Option<URef> = rng.gen();
+                let args = arg_handling::new_burn_args(amount, maybe_source).unwrap();
+                FieldsContainer::new(
+                    TransactionArgs::Named(args),
+                    TransactionTarget::Native,
+                    TransactionEntryPoint::Burn,
+                    TransactionScheduling::random(rng),
+                )
+            }
+            9 => {
+                let validator = PublicKey::random(rng);
+                let args = arg_handling::new_activate_bid_args(validator).unwrap();
+                FieldsContainer::new(
+                    TransactionArgs::Named(args),
+                    TransactionTarget::Native,
+                    TransactionEntryPoint::ActivateBid,
+                    TransactionScheduling::random(rng),
+                )
+            }
+            10 => {
+                let public_key = PublicKey::random(rng);
+                let new_public_key = PublicKey::random(rng);
+                let args = arg_handling::new_change_bid_public_key_args(public_key, new_public_key)
+                    .unwrap();
+                FieldsContainer::new(
+                    TransactionArgs::Named(args),
+                    TransactionTarget::Native,
+                    TransactionEntryPoint::ChangeBidPublicKey,
+                    TransactionScheduling::random(rng),
+                )
+            }
+            11 => {
+                let number = rng.gen_range(0..500);
+                let mut reservations = vec![];
+                for _ in 0..number {
+                    reservations.push(rng.gen());
+                }
+                let args = arg_handling::new_add_reservations_args(reservations).unwrap();
+                FieldsContainer::new(
+                    TransactionArgs::Named(args),
+                    TransactionTarget::Native,
+                    TransactionEntryPoint::AddReservations,
+                    TransactionScheduling::random(rng),
+                )
+            }
+            12 => {
+                let validator = PublicKey::random(rng);
+                let number = rng.gen_range(0..500);
+                let mut delegators = vec![];
+                for _ in 0..number {
+                    delegators.push(rng.gen());
+                }
+                let args =
+                    arg_handling::new_cancel_reservations_args(validator, delegators).unwrap();
+                FieldsContainer::new(
+                    TransactionArgs::Named(args),
+                    TransactionTarget::Native,
+                    TransactionEntryPoint::CancelReservations,
                     TransactionScheduling::random(rng),
                 )
             }
