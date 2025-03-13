@@ -3825,19 +3825,15 @@ async fn successful_purse_to_account_transfer() {
     );
 }
 
-#[tokio::test]
-async fn native_transfer_deploy_with_source_purse_should_succeed() {
-    let config = SingleTransactionTestCase::default_test_config()
-        .with_pricing_handling(PricingHandling::Fixed)
-        .with_refund_handling(RefundHandling::NoRefund)
-        .with_fee_handling(FeeHandling::NoFee)
-        .with_gas_hold_balance_handling(HoldBalanceHandling::Accrued);
-
+async fn bob_transfers_to_charlie_via_native_transfer_deploy(
+    configs_override: ConfigsOverride,
+    with_source: bool,
+) -> ExecutionResult {
     let mut test = SingleTransactionTestCase::new(
         ALICE_SECRET_KEY.clone(),
         BOB_SECRET_KEY.clone(),
         CHARLIE_SECRET_KEY.clone(),
-        Some(config),
+        Some(configs_override),
     )
     .await;
 
@@ -3852,9 +3848,15 @@ async fn native_transfer_deploy_with_source_purse_should_succeed() {
         BOB_PUBLIC_KEY.to_account_hash(),
     );
 
+    let source = if with_source {
+        Some(entity.main_purse())
+    } else {
+        None
+    };
+
     let mut txn: Transaction = Deploy::native_transfer(
         CHAIN_NAME.to_string(),
-        Some(entity.main_purse()),
+        source,
         BOB_PUBLIC_KEY.clone(),
         CHARLIE_PUBLIC_KEY.clone(),
         None,
@@ -3865,43 +3867,87 @@ async fn native_transfer_deploy_with_source_purse_should_succeed() {
     .into();
     txn.sign(&BOB_SECRET_KEY);
     let (_txn_hash, _block_height, exec_result) = test.send_transaction(txn).await;
-    assert!(exec_result_is_success(&exec_result), "{:?}", exec_result);
+    exec_result
 }
 
 #[tokio::test]
-async fn native_transfer_deploy_without_source_purse_should_succeed() {
+async fn should_transfer_with_source_purse_deploy_fixed_norefund_nofee() {
     let config = SingleTransactionTestCase::default_test_config()
         .with_pricing_handling(PricingHandling::Fixed)
         .with_refund_handling(RefundHandling::NoRefund)
         .with_fee_handling(FeeHandling::NoFee)
         .with_gas_hold_balance_handling(HoldBalanceHandling::Accrued);
+    let exec_result = bob_transfers_to_charlie_via_native_transfer_deploy(config, true).await;
 
-    let mut test = SingleTransactionTestCase::new(
-        ALICE_SECRET_KEY.clone(),
-        BOB_SECRET_KEY.clone(),
-        CHARLIE_SECRET_KEY.clone(),
-        Some(config),
-    )
-    .await;
-
-    test.fixture
-        .run_until_consensus_in_era(ERA_ONE, ONE_MIN)
-        .await;
-
-    let mut txn: Transaction = Deploy::native_transfer(
-        CHAIN_NAME.to_string(),
-        None,
-        BOB_PUBLIC_KEY.clone(),
-        CHARLIE_PUBLIC_KEY.clone(),
-        None,
-        Timestamp::now(),
-        TimeDiff::from_seconds(600),
-        10,
-    )
-    .into();
-    txn.sign(&BOB_SECRET_KEY);
-    let (_txn_hash, _block_height, exec_result) = test.send_transaction(txn).await;
     assert!(exec_result_is_success(&exec_result), "{:?}", exec_result);
+    assert_eq!(
+        exec_result.transfers().len(),
+        1,
+        "native transfer should have exactly 1 transfer"
+    );
+}
+
+#[tokio::test]
+async fn should_transfer_with_source_purse_deploy_payment_limited_refund_fee() {
+    let config = SingleTransactionTestCase::default_test_config()
+        .with_pricing_handling(PricingHandling::PaymentLimited)
+        .with_refund_handling(RefundHandling::Refund {
+            refund_ratio: Ratio::new(99, 100),
+        })
+        .with_fee_handling(FeeHandling::PayToProposer)
+        .with_gas_hold_balance_handling(HoldBalanceHandling::Accrued);
+    let exec_result = bob_transfers_to_charlie_via_native_transfer_deploy(config, true).await;
+    assert!(exec_result_is_success(&exec_result), "{:?}", exec_result);
+    assert_eq!(
+        exec_result.transfers().len(),
+        1,
+        "native transfer should have exactly 1 transfer"
+    );
+    assert_eq!(
+        exec_result.refund(),
+        Some(U512::zero()),
+        "cost should equal consumed thus no refund"
+    );
+}
+
+#[tokio::test]
+async fn should_transfer_with_main_purse_deploy_fixed_norefund_nofee() {
+    let config = SingleTransactionTestCase::default_test_config()
+        .with_pricing_handling(PricingHandling::Fixed)
+        .with_refund_handling(RefundHandling::NoRefund)
+        .with_fee_handling(FeeHandling::NoFee)
+        .with_gas_hold_balance_handling(HoldBalanceHandling::Accrued);
+    let exec_result = bob_transfers_to_charlie_via_native_transfer_deploy(config, false).await;
+
+    assert!(exec_result_is_success(&exec_result), "{:?}", exec_result);
+    assert_eq!(
+        exec_result.transfers().len(),
+        1,
+        "native transfer should have exactly 1 transfer"
+    );
+}
+
+#[tokio::test]
+async fn should_transfer_with_main_purse_deploy_payment_limited_refund_fee() {
+    let config = SingleTransactionTestCase::default_test_config()
+        .with_pricing_handling(PricingHandling::PaymentLimited)
+        .with_refund_handling(RefundHandling::Refund {
+            refund_ratio: Ratio::new(99, 100),
+        })
+        .with_fee_handling(FeeHandling::PayToProposer)
+        .with_gas_hold_balance_handling(HoldBalanceHandling::Accrued);
+    let exec_result = bob_transfers_to_charlie_via_native_transfer_deploy(config, false).await;
+    assert!(exec_result_is_success(&exec_result), "{:?}", exec_result);
+    assert_eq!(
+        exec_result.transfers().len(),
+        1,
+        "native transfer should have exactly 1 transfer"
+    );
+    assert_eq!(
+        exec_result.refund(),
+        Some(U512::zero()),
+        "cost should equal consumed thus no refund"
+    );
 }
 
 #[tokio::test]

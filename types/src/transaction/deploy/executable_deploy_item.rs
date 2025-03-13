@@ -24,7 +24,7 @@ use crate::{
     system::mint::ARG_AMOUNT,
     transaction::{RuntimeArgs, TransferTarget},
     AddressableEntityHash, AddressableEntityIdentifier, Gas, Motes, PackageIdentifier, Phase, URef,
-    U512,
+    METHOD_TRANSFER, U512,
 };
 #[cfg(any(feature = "testing", test))]
 use crate::{testing::TestRng, CLValue};
@@ -255,9 +255,8 @@ impl ExecutableDeployItem {
     /// Returns the entry point name.
     pub fn entry_point_name(&self) -> &str {
         match self {
-            ExecutableDeployItem::ModuleBytes { .. } | ExecutableDeployItem::Transfer { .. } => {
-                DEFAULT_ENTRY_POINT_NAME
-            }
+            ExecutableDeployItem::ModuleBytes { .. } => DEFAULT_ENTRY_POINT_NAME,
+            ExecutableDeployItem::Transfer { .. } => METHOD_TRANSFER,
             ExecutableDeployItem::StoredVersionedContractByName { entry_point, .. }
             | ExecutableDeployItem::StoredVersionedContractByHash { entry_point, .. }
             | ExecutableDeployItem::StoredContractByHash { entry_point, .. }
