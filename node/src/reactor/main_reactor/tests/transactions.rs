@@ -4572,6 +4572,49 @@ async fn should_allow_native_burn() {
 }
 
 #[tokio::test]
+async fn should_allow_native_transfer_v1() {
+    let config = SingleTransactionTestCase::default_test_config()
+        .with_pricing_handling(PricingHandling::PaymentLimited)
+        .with_refund_handling(RefundHandling::Refund {
+            refund_ratio: Ratio::new(99, 100),
+        })
+        .with_fee_handling(FeeHandling::PayToProposer)
+        .with_gas_hold_balance_handling(HoldBalanceHandling::Accrued);
+
+    let mut test = SingleTransactionTestCase::new(
+        ALICE_SECRET_KEY.clone(),
+        BOB_SECRET_KEY.clone(),
+        CHARLIE_SECRET_KEY.clone(),
+        Some(config),
+    )
+    .await;
+
+    let transfer_amount = U512::from(100);
+
+    let txn_v1 =
+        TransactionV1Builder::new_transfer(transfer_amount, None, CHARLIE_PUBLIC_KEY.clone(), None)
+            .unwrap()
+            .with_chain_name(CHAIN_NAME)
+            .with_initiator_addr(PublicKey::from(&**BOB_SECRET_KEY))
+            .build()
+            .unwrap();
+    let price = txn_v1
+        .payment_amount()
+        .expect("must have payment amount as txns are using payment_limited");
+    let mut txn = Transaction::from(txn_v1);
+    txn.sign(&BOB_SECRET_KEY);
+
+    let (_txn_hash, _block_height, exec_result) = test.send_transaction(txn).await;
+    let ExecutionResult::V2(result) = exec_result else {
+        panic!("Expected ExecutionResult::V2 but got {:?}", exec_result);
+    };
+    let expected_cost: U512 = U512::from(price) * MIN_GAS_PRICE;
+    assert_eq!(result.error_message.as_deref(), None);
+    assert_eq!(result.cost, expected_cost);
+    assert_eq!(result.transfers.len(), 1, "should have exactly 1 transfer");
+}
+
+#[tokio::test]
 async fn should_not_allow_unverified_native_burn() {
     let config = SingleTransactionTestCase::default_test_config()
         .with_pricing_handling(PricingHandling::PaymentLimited)

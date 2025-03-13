@@ -37,7 +37,7 @@ pub enum ExecutionResult {
 }
 
 impl ExecutionResult {
-    /// Returns consumed amount.
+    /// Returns cost.
     pub fn cost(&self) -> U512 {
         match self {
             ExecutionResult::V1(result) => result.cost(),
