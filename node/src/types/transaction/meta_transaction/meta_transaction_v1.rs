@@ -491,6 +491,8 @@ impl MetaTransactionV1 {
                         if *payment_amount < expected_payment {
                             return Err(InvalidTransactionV1::InvalidPaymentAmount);
                         }
+                    } else if *payment_amount < chainspec.core_config.baseline_motes_amount {
+                        return Err(InvalidTransactionV1::InvalidPaymentAmount);
                     }
                 } else {
                     return Err(InvalidTransactionV1::InvalidPricingMode {
