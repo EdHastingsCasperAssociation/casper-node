@@ -1514,7 +1514,7 @@ async fn wasm_transaction_refunds_are_burnt_payment_limited_pricing() {
 }
 
 async fn only_refunds_are_burnt_no_fee(txn_pricing_mode: PricingMode) {
-    let (price_handling, min_gas_price, gas_limit) = match_pricing_mode(&txn_pricing_mode);
+    let (price_handling, min_gas_price, _gas_limit) = match_pricing_mode(&txn_pricing_mode);
 
     let refund_ratio = Ratio::new(1, 2);
     let config = SingleTransactionTestCase::default_test_config()
@@ -1529,7 +1529,8 @@ async fn only_refunds_are_burnt_no_fee(txn_pricing_mode: PricingMode) {
         Some(config),
     )
     .await;
-    let txn = invalid_wasm_txn(BOB_SECRET_KEY.clone(), txn_pricing_mode);
+
+    let txn = valid_wasm_txn(BOB_SECRET_KEY.clone(), txn_pricing_mode);
 
     test.fixture
         .run_until_consensus_in_era(ERA_ONE, ONE_MIN)
@@ -1541,13 +1542,11 @@ async fn only_refunds_are_burnt_no_fee(txn_pricing_mode: PricingMode) {
     let (_txn_hash, block_height, exec_result) = test.send_transaction(txn).await;
 
     // Fixed transaction pricing.
-    let expected_transaction_gas: u64 = gas_limit.unwrap_or(
-        test.chainspec()
-            .get_max_gas_limit_by_category(LARGE_WASM_LANE_ID),
-    );
-    let expected_transaction_cost = expected_transaction_gas * min_gas_price as u64;
+    let expected_transaction_gas = test.chainspec().system_costs_config.mint_costs().transfer;
+    let expected_transaction_cost = (expected_transaction_gas * min_gas_price as u32) as u64;
 
-    assert!(!exec_result_is_success(&exec_result)); // transaction should not succeed because the wasm bytes are invalid.
+    assert!(exec_result_is_success(&exec_result));
+    // ZAJKO -> this is where I'm at...need to calculate correct expected cost & consumed
     assert_exec_result_cost(
         exec_result,
         expected_transaction_cost.into(),
@@ -1555,8 +1554,6 @@ async fn only_refunds_are_burnt_no_fee(txn_pricing_mode: PricingMode) {
         "only_refunds_are_burnt_no_fee",
     );
 
-    // This transaction consumed 0 gas, the unspent gas is equal to the limit, so we apply the
-    // refund ratio to the full transaction cost.
     let refund_amount: U512 = (refund_ratio * Ratio::from(expected_transaction_cost))
         .to_integer()
         .into();
@@ -2630,6 +2627,31 @@ fn invalid_wasm_txn(initiator: Arc<SecretKey>, pricing_mode: PricingMode) -> Tra
     txn
 }
 
+fn valid_wasm_txn(initiator: Arc<SecretKey>, pricing_mode: PricingMode) -> Transaction {
+    let contract_file = RESOURCES_PATH
+        .join("..")
+        .join("target")
+        .join("wasm32-unknown-unknown")
+        .join("release")
+        .join("do_nothing.wasm");
+    let module_bytes = Bytes::from(std::fs::read(contract_file).expect("cannot read module bytes"));
+
+    let mut txn = Transaction::from(
+        TransactionV1Builder::new_session(
+            false,
+            module_bytes,
+            TransactionRuntimeParams::VmCasperV1,
+        )
+        .with_chain_name(CHAIN_NAME)
+        .with_pricing_mode(pricing_mode)
+        .with_initiator_addr(PublicKey::from(&*initiator))
+        .build()
+        .unwrap(),
+    );
+    txn.sign(&initiator);
+    txn
+}
+
 fn match_pricing_mode(txn_pricing_mode: &PricingMode) -> (PricingHandling, u8, Option<u64>) {
     match txn_pricing_mode {
         PricingMode::PaymentLimited {
@@ -2817,9 +2839,8 @@ async fn fee_holds_are_amortized() {
 
     // This transaction consumed 0 gas, the unspent gas is equal to the limit, so we apply the
     // refund ratio to the full transaction cost.
-    let refund_amount: U512 = (refund_ratio * Ratio::from(expected_transaction_cost))
-        .to_integer()
-        .into();
+    // error transactions no longer refund
+    let refund_amount = U512::zero();
 
     // We set it up so that the refunds are burnt so check this.
     assert_eq!(

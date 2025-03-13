@@ -695,11 +695,12 @@ pub fn execute_finalized_block(
 
         // handle refunds per the chainspec determined setting.
         let refund_amount = {
-            let consumed = if balance_identifier.is_penalty() {
-                artifact_builder.cost_to_use() // no refund for penalty
-            } else {
-                artifact_builder.consumed()
-            };
+            let consumed =
+                if balance_identifier.is_penalty() || artifact_builder.error_message().is_some() {
+                    artifact_builder.cost_to_use() // no refund for penalty
+                } else {
+                    artifact_builder.consumed()
+                };
 
             let refund_mode = match refund_handling {
                 RefundHandling::NoRefund => {
