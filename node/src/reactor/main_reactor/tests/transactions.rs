@@ -4556,7 +4556,7 @@ async fn should_allow_native_burn() {
         .with_initiator_addr(PublicKey::from(&**BOB_SECRET_KEY))
         .build()
         .unwrap();
-    let price = txn_v1
+    let payment = txn_v1
         .payment_amount()
         .expect("must have payment amount as txns are using payment_limited");
     let mut txn = Transaction::from(txn_v1);
@@ -4566,7 +4566,7 @@ async fn should_allow_native_burn() {
     let ExecutionResult::V2(result) = exec_result else {
         panic!("Expected ExecutionResult::V2 but got {:?}", exec_result);
     };
-    let expected_cost: U512 = U512::from(price) * MIN_GAS_PRICE;
+    let expected_cost: U512 = U512::from(payment) * MIN_GAS_PRICE;
     assert_eq!(result.error_message.as_deref(), None);
     assert_eq!(result.cost, expected_cost);
 }
@@ -4598,7 +4598,7 @@ async fn should_allow_native_transfer_v1() {
             .with_initiator_addr(PublicKey::from(&**BOB_SECRET_KEY))
             .build()
             .unwrap();
-    let price = txn_v1
+    let payment = txn_v1
         .payment_amount()
         .expect("must have payment amount as txns are using payment_limited");
     let mut txn = Transaction::from(txn_v1);
@@ -4608,7 +4608,7 @@ async fn should_allow_native_transfer_v1() {
     let ExecutionResult::V2(result) = exec_result else {
         panic!("Expected ExecutionResult::V2 but got {:?}", exec_result);
     };
-    let expected_cost: U512 = U512::from(price) * MIN_GAS_PRICE;
+    let expected_cost: U512 = U512::from(payment) * MIN_GAS_PRICE;
     assert_eq!(result.error_message.as_deref(), None);
     assert_eq!(result.cost, expected_cost);
     assert_eq!(result.transfers.len(), 1, "should have exactly 1 transfer");
