@@ -273,6 +273,7 @@ impl PricingMode {
 }
 
 ///Errors that can occur when calling PricingMode functions
+#[derive(Debug)]
 pub enum PricingModeError {
     /// The entry point for this transaction target cannot be `call`.
     EntryPointCannotBeCall,
