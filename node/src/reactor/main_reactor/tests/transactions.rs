@@ -1453,12 +1453,13 @@ async fn wasm_transaction_refunds_are_burnt(txn_pricing_mode: PricingMode) {
         "wasm_transaction_refunds_are_burnt",
     );
 
-    // Bob should get back half of the cost for the unspent gas. Since this transaction consumed 0
-    // gas, the unspent gas is equal to the limit.
-    let refund_amount: U512 = (refund_ratio * Ratio::from(expected_transaction_cost))
-        .to_integer()
-        .into();
-
+    // Bobs transaction was invalid. He should get NO refund. We penalize Bob with
+    // the entirety of the transaction cost.
+    let refund_amount: U512 = Ratio::from(expected_transaction_cost).to_integer().into();
+    println!(
+        "AAAA, expected_transaction_cost {}",
+        expected_transaction_cost
+    );
     // The refund should have been burnt. So expect the total supply should have been reduced by the
     // refund amount that was burnt.
     assert_eq!(
