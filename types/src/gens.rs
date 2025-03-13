@@ -1060,21 +1060,11 @@ pub fn trie_merkle_proof_arb() -> impl Strategy<Value = TrieMerkleProof<Key, Sto
 }
 
 pub fn transaction_scheduling_arb() -> impl Strategy<Value = TransactionScheduling> {
-    prop_oneof![
-        Just(TransactionScheduling::Standard),
-        era_id_arb().prop_map(TransactionScheduling::FutureEra),
-        any::<u64>().prop_map(
-            |timestamp| TransactionScheduling::FutureTimestamp(Timestamp::from(timestamp))
-        ),
-    ]
+    prop_oneof![Just(TransactionScheduling::Standard),]
 }
 
 pub fn json_compliant_transaction_scheduling_arb() -> impl Strategy<Value = TransactionScheduling> {
-    prop_oneof![
-        Just(TransactionScheduling::Standard),
-        era_id_arb().prop_map(TransactionScheduling::FutureEra),
-        timestamp_arb().prop_map(TransactionScheduling::FutureTimestamp),
-    ]
+    prop_oneof![Just(TransactionScheduling::Standard),]
 }
 
 pub fn transaction_invocation_target_arb() -> impl Strategy<Value = TransactionInvocationTarget> {

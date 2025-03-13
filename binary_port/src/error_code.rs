@@ -2,11 +2,13 @@ use core::{convert::TryFrom, fmt};
 
 use casper_types::{InvalidDeploy, InvalidTransaction, InvalidTransactionV1};
 
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 #[cfg(test)]
 use strum_macros::EnumIter;
 
 /// The error code indicating the result of handling the binary request.
-#[derive(Debug, Copy, Clone, thiserror::Error, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, thiserror::Error, Eq, PartialEq, FromPrimitive)]
 #[repr(u16)]
 #[cfg_attr(test, derive(EnumIter))]
 pub enum ErrorCode {
@@ -334,121 +336,33 @@ pub enum ErrorCode {
     /// Invalid runtime for Transaction::Deploy
     #[error("Invalid runtime for Transaction::Deploy")]
     InvalidDeployInvalidRuntime = 105,
+    /// Chainspec has no wasm lanes defined
+    #[error(
+        "Cannot execute wasm-based Transaction::Deploy due to no wasm lanes defined in chainspec"
+    )]
+    InvalidDeployChainspecHasNoWasmLanesDefined = 106,
+    /// Deploy exceeds wasm lane gas limit
+    #[error("Transaction::Deploy exceeds lane gas limit")]
+    InvalidDeployExceededWasmLaneGasLimit = 107,
+    /// Invalid runtime for Transaction::Deploy
+    #[error("Invalid payment amount for Transaction::Deploy")]
+    InvalidDeployInvalidPaymentAmount = 108,
+    /// Insufficient burn amount for Transaction::V1
+    #[error("Insufficient burn amount for Transaction::V1")]
+    InvalidTransactionInsufficientBurnAmount = 109,
+    /// Invalid payment amount for Transaction::V1
+    #[error("Invalid payment amount for Transaction::V1")]
+    InvalidTransactionInvalidPaymentAmount = 110,
+    /// Unexpected entry point for Transaction::V1
+    #[error("Unexpected entry point for Transaction::V1")]
+    InvalidTransactionUnexpectedEntryPoint = 111,
 }
 
 impl TryFrom<u16> for ErrorCode {
     type Error = UnknownErrorCode;
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(ErrorCode::NoError),
-            1 => Ok(ErrorCode::FunctionDisabled),
-            2 => Ok(ErrorCode::NotFound),
-            3 => Ok(ErrorCode::RootNotFound),
-            4 => Ok(ErrorCode::InvalidItemVariant),
-            5 => Ok(ErrorCode::WasmPreprocessing),
-            6 => Ok(ErrorCode::InternalError),
-            7 => Ok(ErrorCode::FailedQuery),
-            8 => Ok(ErrorCode::BadRequest),
-            9 => Ok(ErrorCode::UnsupportedRequest),
-            10 => Ok(ErrorCode::DictionaryURefNotFound),
-            11 => Ok(ErrorCode::NoCompleteBlocks),
-            12 => Ok(ErrorCode::InvalidDeployChainName),
-            13 => Ok(ErrorCode::InvalidDeployDependenciesNoLongerSupported),
-            14 => Ok(ErrorCode::InvalidDeployExcessiveSize),
-            15 => Ok(ErrorCode::InvalidDeployExcessiveTimeToLive),
-            16 => Ok(ErrorCode::InvalidDeployTimestampInFuture),
-            17 => Ok(ErrorCode::InvalidDeployBodyHash),
-            18 => Ok(ErrorCode::InvalidDeployHash),
-            19 => Ok(ErrorCode::InvalidDeployEmptyApprovals),
-            20 => Ok(ErrorCode::InvalidDeployApproval),
-            21 => Ok(ErrorCode::InvalidDeployExcessiveSessionArgsLength),
-            22 => Ok(ErrorCode::InvalidDeployExcessivePaymentArgsLength),
-            23 => Ok(ErrorCode::InvalidDeployMissingPaymentAmount),
-            24 => Ok(ErrorCode::InvalidDeployFailedToParsePaymentAmount),
-            25 => Ok(ErrorCode::InvalidDeployExceededBlockGasLimit),
-            26 => Ok(ErrorCode::InvalidDeployMissingTransferAmount),
-            27 => Ok(ErrorCode::InvalidDeployFailedToParseTransferAmount),
-            28 => Ok(ErrorCode::InvalidDeployInsufficientTransferAmount),
-            29 => Ok(ErrorCode::InvalidDeployExcessiveApprovals),
-            30 => Ok(ErrorCode::InvalidDeployUnableToCalculateGasLimit),
-            31 => Ok(ErrorCode::InvalidDeployUnableToCalculateGasCost),
-            32 => Ok(ErrorCode::InvalidDeployUnspecified),
-            33 => Ok(ErrorCode::InvalidTransactionChainName),
-            34 => Ok(ErrorCode::InvalidTransactionExcessiveSize),
-            35 => Ok(ErrorCode::InvalidTransactionExcessiveTimeToLive),
-            36 => Ok(ErrorCode::InvalidTransactionTimestampInFuture),
-            37 => Ok(ErrorCode::InvalidTransactionBodyHash),
-            38 => Ok(ErrorCode::InvalidTransactionHash),
-            39 => Ok(ErrorCode::InvalidTransactionEmptyApprovals),
-            40 => Ok(ErrorCode::InvalidTransactionInvalidApproval),
-            41 => Ok(ErrorCode::InvalidTransactionExcessiveArgsLength),
-            42 => Ok(ErrorCode::InvalidTransactionExcessiveApprovals),
-            43 => Ok(ErrorCode::InvalidTransactionExceedsBlockGasLimit),
-            44 => Ok(ErrorCode::InvalidTransactionMissingArg),
-            45 => Ok(ErrorCode::InvalidTransactionUnexpectedArgType),
-            46 => Ok(ErrorCode::InvalidTransactionInvalidArg),
-            47 => Ok(ErrorCode::InvalidTransactionInsufficientTransferAmount),
-            48 => Ok(ErrorCode::InvalidTransactionEntryPointCannotBeCustom),
-            49 => Ok(ErrorCode::InvalidTransactionEntryPointMustBeCustom),
-            50 => Ok(ErrorCode::InvalidTransactionEmptyModuleBytes),
-            51 => Ok(ErrorCode::InvalidTransactionGasPriceConversion),
-            52 => Ok(ErrorCode::InvalidTransactionUnableToCalculateGasLimit),
-            53 => Ok(ErrorCode::InvalidTransactionUnableToCalculateGasCost),
-            54 => Ok(ErrorCode::InvalidTransactionPricingMode),
-            55 => Ok(ErrorCode::InvalidTransactionUnspecified),
-            56 => Ok(ErrorCode::InvalidTransactionOrDeployUnspecified),
-            57 => Ok(ErrorCode::SwitchBlockNotFound),
-            58 => Ok(ErrorCode::SwitchBlockParentNotFound),
-            59 => Ok(ErrorCode::UnsupportedRewardsV1Request),
-            60 => Ok(ErrorCode::CommandHeaderVersionMismatch),
-            61 => Ok(ErrorCode::EmptyBlockchain),
-            62 => Ok(ErrorCode::ExpectedDeploy),
-            63 => Ok(ErrorCode::ExpectedTransaction),
-            64 => Ok(ErrorCode::TransactionExpired),
-            65 => Ok(ErrorCode::MissingOrIncorrectParameters),
-            66 => Ok(ErrorCode::NoSuchAddressableEntity),
-            67 => Ok(ErrorCode::NoSuchContractAtHash),
-            68 => Ok(ErrorCode::NoSuchEntryPoint),
-            69 => Ok(ErrorCode::NoSuchPackageAtHash),
-            70 => Ok(ErrorCode::InvalidEntityAtVersion),
-            71 => Ok(ErrorCode::DisabledEntityAtVersion),
-            72 => Ok(ErrorCode::MissingEntityAtVersion),
-            73 => Ok(ErrorCode::InvalidAssociatedKeys),
-            74 => Ok(ErrorCode::InsufficientSignatureWeight),
-            75 => Ok(ErrorCode::InsufficientBalance),
-            76 => Ok(ErrorCode::UnknownBalance),
-            77 => Ok(ErrorCode::DeployInvalidPaymentVariant),
-            78 => Ok(ErrorCode::DeployMissingPaymentAmount),
-            79 => Ok(ErrorCode::DeployFailedToParsePaymentAmount),
-            80 => Ok(ErrorCode::DeployMissingTransferTarget),
-            81 => Ok(ErrorCode::DeployMissingModuleBytes),
-            82 => Ok(ErrorCode::InvalidTransactionEntryPointCannotBeCall),
-            83 => Ok(ErrorCode::InvalidTransactionInvalidTransactionLane),
-            84 => Ok(ErrorCode::GasPriceToleranceTooLow),
-            85 => Ok(ErrorCode::ReceivedV1Transaction),
-            86 => Ok(ErrorCode::PurseNotFound),
-            87 => Ok(ErrorCode::RequestThrottled),
-            88 => Ok(ErrorCode::ExpectedNamedArguments),
-            89 => Ok(ErrorCode::InvalidTransactionRuntime),
-            90 => Ok(ErrorCode::TransferRecordMalformedKey),
-            91 => Ok(ErrorCode::MalformedInformationRequest),
-            92 => Ok(ErrorCode::TooLittleBytesForRequestHeaderVersion),
-            93 => Ok(ErrorCode::MalformedCommandHeaderVersion),
-            94 => Ok(ErrorCode::MalformedCommandHeader),
-            95 => Ok(ErrorCode::MalformedCommand),
-            96 => Ok(ErrorCode::InvalidTransactionNoWasmLaneMatches),
-            97 => Ok(ErrorCode::InvalidTransactionEntryPointMustBeCall),
-            98 => Ok(ErrorCode::InvalidTransactionCannotDeserializeField),
-            99 => Ok(ErrorCode::InvalidTransactionCannotCalculateFieldsHash),
-            100 => Ok(ErrorCode::InvalidTransactionUnexpectedFields),
-            101 => Ok(ErrorCode::InvalidTransactionExpectedBytesArguments),
-            102 => Ok(ErrorCode::InvalidTransactionMissingSeed),
-            103 => Ok(ErrorCode::PricingModeNotSupported),
-            104 => Ok(ErrorCode::InvalidDeployGasLimitNotSupported),
-            105 => Ok(ErrorCode::InvalidDeployInvalidRuntime),
-            _ => Err(UnknownErrorCode),
-        }
+        FromPrimitive::from_u16(value).ok_or(UnknownErrorCode)
     }
 }
 
@@ -520,6 +434,13 @@ impl From<InvalidDeploy> for ErrorCode {
             InvalidDeploy::GasPriceToleranceTooLow { .. } => ErrorCode::GasPriceToleranceTooLow,
             InvalidDeploy::GasLimitNotSupported => ErrorCode::InvalidDeployGasLimitNotSupported,
             InvalidDeploy::InvalidRuntime => ErrorCode::InvalidDeployInvalidRuntime,
+            InvalidDeploy::ChainspecHasNoWasmLanesDefined => {
+                ErrorCode::InvalidDeployChainspecHasNoWasmLanesDefined
+            }
+            InvalidDeploy::ExceededWasmLaneGasLimit { .. } => {
+                ErrorCode::InvalidDeployExceededWasmLaneGasLimit
+            }
+            InvalidDeploy::InvalidPaymentAmount => ErrorCode::InvalidDeployInvalidPaymentAmount,
             _ => ErrorCode::InvalidDeployUnspecified,
         }
     }
@@ -611,6 +532,15 @@ impl From<InvalidTransactionV1> for ErrorCode {
             }
             InvalidTransactionV1::MissingSeed => ErrorCode::InvalidTransactionMissingSeed,
             InvalidTransactionV1::PricingModeNotSupported => ErrorCode::PricingModeNotSupported,
+            InvalidTransactionV1::InsufficientBurnAmount { .. } => {
+                ErrorCode::InvalidTransactionInsufficientBurnAmount
+            }
+            InvalidTransactionV1::InvalidPaymentAmount => {
+                ErrorCode::InvalidTransactionInvalidPaymentAmount
+            }
+            InvalidTransactionV1::UnexpectedEntryPoint { .. } => {
+                ErrorCode::InvalidTransactionUnexpectedEntryPoint
+            }
             _other => ErrorCode::InvalidTransactionUnspecified,
         }
     }

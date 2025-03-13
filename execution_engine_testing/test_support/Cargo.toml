@@ -21,7 +21,7 @@ filesize = "0.2.0"
 lmdb-rkv = "0.14"
 log = "0.4.14"
 num-rational = "0.4.0"
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 once_cell = "1.8.0"
 rand = "0.8.4"
 serde = { version = "1", features = ["derive", "rc"] }
