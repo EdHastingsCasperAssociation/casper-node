@@ -136,7 +136,6 @@ impl Executor {
                 runtime.call_contract_with_stack(entity_hash, &entry_point, args, stack)
             }
         };
-
         match result {
             Ok(ret) => WasmV1Result::new(
                 gas_limit,

@@ -1501,6 +1501,7 @@ impl GasLimited for Deploy {
             }
             PricingHandling::Fixed => {
                 // in fixed, the computation limit is fixed per the chainspec settings
+                //THIS SHOULD USE MINT_LANE_ID
                 let computation_limit = if self.is_transfer() {
                     costs.mint_costs().transfer as u64
                 } else {
