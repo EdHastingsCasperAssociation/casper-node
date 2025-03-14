@@ -216,15 +216,7 @@ impl PricingMode {
         lane_id: u8,
     ) -> Result<Gas, PricingModeError> {
         let gas = match self {
-            PricingMode::PaymentLimited { payment_amount, .. } => {
-                let min = self.chainspec_limit(chainspec, entry_point, lane_id)?;
-                let imputed = U512::from(*payment_amount);
-                if imputed < min.value() {
-                    min
-                } else {
-                    Gas::new(*payment_amount)
-                }
-            }
+            PricingMode::PaymentLimited { payment_amount, .. } => Gas::new(*payment_amount),
             PricingMode::Fixed { .. } => self.chainspec_limit(chainspec, entry_point, lane_id)?,
             PricingMode::Prepaid { receipt } => {
                 return Err(PricingModeError::InvalidPricingMode {
