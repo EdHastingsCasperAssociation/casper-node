@@ -1,12 +1,9 @@
-use crate::{
-    security_badge,
-    traits::{Burnable, BurnableExt, CEP18State, Mintable, MintableExt, CEP18},
-};
-use casper_macros::casper;
-use casper_sdk::{host, log};
-use security_badge::SecurityBadge;
+use casper_sdk::prelude::*;
 
-use crate::traits::CEP18Ext;
+use crate::{
+    security_badge::SecurityBadge,
+    traits::{Burnable, BurnableExt, CEP18Ext, CEP18State, Mintable, MintableExt, CEP18},
+};
 
 #[casper(contract_state)]
 pub struct TokenContract {
@@ -29,7 +26,7 @@ impl TokenContract {
         // reason, so can't use "name"
         let mut instance = Self::default();
 
-        let caller = host::get_caller();
+        let caller = casper::get_caller();
 
         instance.state.name = token_name;
         instance.state.enable_mint_burn = true;
@@ -37,7 +34,10 @@ impl TokenContract {
         instance
             .state
             .security_badges
-            .insert(&host::get_caller(), &SecurityBadge::Admin);
+            .insert(&caller, &SecurityBadge::Admin);
+
+        // Give caller some tokens
+        instance.mint(caller, 1000).expect("Mint");
 
         log!("TokenContract created with state {:?}", &instance.state);
         log!("Admin is {caller:?}");
@@ -47,7 +47,7 @@ impl TokenContract {
     pub fn my_balance(&self) -> u64 {
         self.state()
             .balances
-            .get(&host::get_caller())
+            .get(&casper::get_caller())
             .unwrap_or_default()
     }
 }
@@ -76,7 +76,7 @@ mod tests {
     use super::*;
 
     use casper_sdk::{
-        host::{
+        casper::{
             self,
             native::{current_environment, Environment, DEFAULT_ADDRESS},
             Entity,
@@ -91,7 +91,7 @@ mod tests {
     fn it_works() {
         let stub = Environment::new(Default::default(), DEFAULT_ADDRESS);
 
-        let result = host::native::dispatch_with(stub, || {
+        let result = casper::native::dispatch_with(stub, || {
             let mut contract = TokenContract::new("Foo Token".to_string());
 
             assert_eq!(contract.state().sec_check(&[SecurityBadge::Admin]), Ok(()));
@@ -106,7 +106,7 @@ mod tests {
             assert_eq!(contract.balance_of(ALICE), 1000);
 
             // DEFAULT_ADDRESS -> ALICE - not much balance
-            assert_eq!(contract.balance_of(host::get_caller()), 0);
+            assert_eq!(contract.balance_of(casper::get_caller()), 0);
             assert_eq!(
                 contract.transfer(ALICE, 1),
                 Err(Cep18Error::InsufficientBalance)
@@ -117,15 +117,15 @@ mod tests {
 
     #[test]
     fn e2e() {
-        let db = host::native::Container::default();
+        let db = casper::native::Container::default();
         let env = Environment::new(db.clone(), DEFAULT_ADDRESS);
 
-        let result = host::native::dispatch_with(env, move || {
+        let result = casper::native::dispatch_with(env, move || {
             let constructor = TokenContractRef::new("Foo Token".to_string());
 
             // casper_call(address, value, selector!("nme"), ());
             let ctor_input_data = constructor.input_data();
-            let create_result = host::casper_create(
+            let create_result = casper::create(
                 None,
                 0,
                 Some(constructor.entry_point()),
@@ -195,12 +195,12 @@ mod tests {
                     .expect("Should call"),
                 Err(Cep18Error::InsufficientBalance)
             );
-            assert_eq!(host::get_caller(), DEFAULT_ADDRESS);
+            assert_eq!(casper::get_caller(), DEFAULT_ADDRESS);
 
             let alice_env = current_environment().with_caller(ALICE);
 
-            host::native::dispatch_with(alice_env, || {
-                assert_eq!(host::get_caller(), ALICE);
+            casper::native::dispatch_with(alice_env, || {
+                assert_eq!(casper::get_caller(), ALICE);
                 assert_eq!(
                     cep18_handle
                         .call(|cep18| cep18.my_balance())

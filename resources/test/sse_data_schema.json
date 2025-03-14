@@ -3343,9 +3343,11 @@
       "required": [
         "consumed",
         "cost",
+        "current_price",
         "effects",
         "initiator",
         "limit",
+        "refund",
         "size_estimate",
         "transfers"
       ],
@@ -3365,8 +3367,14 @@
             "null"
           ]
         },
+        "current_price": {
+          "description": "The current gas price. I.e. how many motes are charged for each unit of computation.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
         "limit": {
-          "description": "What was the maximum allowed gas limit for this transaction?.",
+          "description": "The maximum allowed gas limit for this transaction",
           "allOf": [
             {
               "$ref": "#/definitions/Gas"
@@ -3383,6 +3391,14 @@
         },
         "cost": {
           "description": "How much was paid for this transaction.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/U512"
+            }
+          ]
+        },
+        "refund": {
+          "description": "How much unconsumed gas was refunded (if any)?",
           "allOf": [
             {
               "$ref": "#/definitions/U512"
@@ -4575,7 +4591,7 @@
           "description": "All versions (enabled & disabled).",
           "allOf": [
             {
-              "$ref": "#/definitions/Array_of_EntityVersionAndHash"
+              "$ref": "#/definitions/Array_of_EntityVersionAndEntityAddr"
             }
           ]
         },
@@ -4605,16 +4621,16 @@
         }
       }
     },
-    "Array_of_EntityVersionAndHash": {
+    "Array_of_EntityVersionAndEntityAddr": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/EntityVersionAndHash"
+        "$ref": "#/definitions/EntityVersionAndEntityAddr"
       }
     },
-    "EntityVersionAndHash": {
+    "EntityVersionAndEntityAddr": {
       "type": "object",
       "required": [
-        "addressable_entity_hash",
+        "entity_addr",
         "entity_version_key"
       ],
       "properties": {
@@ -4625,10 +4641,10 @@
             }
           ]
         },
-        "addressable_entity_hash": {
+        "entity_addr": {
           "allOf": [
             {
-              "$ref": "#/definitions/AddressableEntityHash"
+              "$ref": "#/definitions/EntityAddr"
             }
           ]
         }
@@ -4656,9 +4672,22 @@
         }
       }
     },
-    "AddressableEntityHash": {
-      "description": "The hex-encoded address of the addressable entity.",
-      "type": "string"
+    "EntityAddr": {
+      "description": "The address for an AddressableEntity which contains the 32 bytes and tagging information.",
+      "anyOf": [
+        {
+          "description": "The address for a system entity account or contract.",
+          "type": "string"
+        },
+        {
+          "description": "The address of an entity that corresponds to an Account.",
+          "type": "string"
+        },
+        {
+          "description": "The address of an entity that corresponds to a Userland smart contract.",
+          "type": "string"
+        }
+      ]
     },
     "PackageStatus": {
       "description": "A enum to determine the lock status of the package.",
@@ -4995,16 +5024,20 @@
       "type": "object",
       "required": [
         "block_index",
-        "hash_addr",
+        "entity_addr",
         "message",
         "topic_index",
         "topic_name",
         "topic_name_hash"
       ],
       "properties": {
-        "hash_addr": {
+        "entity_addr": {
           "description": "The identity of the entity that produced the message.",
-          "type": "string"
+          "allOf": [
+            {
+              "$ref": "#/definitions/EntityAddr"
+            }
+          ]
         },
         "message": {
           "description": "The payload of the message.",

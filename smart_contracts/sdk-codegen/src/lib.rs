@@ -527,13 +527,6 @@ impl Codegen {
                 func.arg(&arg.name, arg_ty);
             }
 
-            func.line(format!(
-                r#"const SELECTOR: Selector = Selector::new({});"#,
-                entry_point
-                    .selector
-                    .expect("TODO: Handle fallback entrypoint"),
-            ));
-
             func.line("let value = 0; // TODO: Transferring values");
 
             let input_struct_name =
@@ -587,16 +580,6 @@ impl Codegen {
             }
 
             let impl_block = scope.new_impl(&struct_name).impl_trait("ToCallData");
-
-            impl_block.associate_const(
-                "SELECTOR",
-                "Selector",
-                format!(
-                    "Selector::new({})",
-                    entry_point.selector.expect("Handle fallback")
-                ),
-                String::new(),
-            );
 
             let input_data_func = impl_block
                 .new_fn("input_data")

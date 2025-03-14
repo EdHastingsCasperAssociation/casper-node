@@ -58,6 +58,20 @@ pub enum TransactionEntryPoint {
     )]
     Transfer,
 
+    /// The `burn` native entry point, used to burn `Motes` from a source purse.
+    ///
+    /// Requires the following runtime args:
+    ///   * "source": `URef`
+    ///   * "amount": `U512`
+    #[cfg_attr(
+        feature = "json-schema",
+        schemars(
+            description = "The `burn` native entry point, used to burn `Motes` from a \
+            source purse."
+        )
+    )]
+    Burn,
+
     /// The `add_bid` native entry point, used to create or top off a bid purse.
     ///
     /// Requires the following runtime args:
@@ -197,7 +211,7 @@ impl TransactionEntryPoint {
     /// Returns a random `TransactionEntryPoint`.
     #[cfg(any(feature = "testing", test))]
     pub fn random(rng: &mut TestRng) -> Self {
-        match rng.gen_range(0..12) {
+        match rng.gen_range(0..13) {
             0 => TransactionEntryPoint::Custom(rng.random_string(1..21)),
             1 => TransactionEntryPoint::Transfer,
             2 => TransactionEntryPoint::AddBid,
@@ -210,25 +224,8 @@ impl TransactionEntryPoint {
             9 => TransactionEntryPoint::Call,
             10 => TransactionEntryPoint::AddReservations,
             11 => TransactionEntryPoint::CancelReservations,
+            12 => TransactionEntryPoint::Burn,
             _ => unreachable!(),
-        }
-    }
-
-    /// Does this entry point kind require holds epoch?
-    pub fn requires_holds_epoch(&self) -> bool {
-        match self {
-            TransactionEntryPoint::AddBid
-            | TransactionEntryPoint::Delegate
-            | TransactionEntryPoint::Custom(_)
-            | TransactionEntryPoint::Call
-            | TransactionEntryPoint::Transfer
-            | TransactionEntryPoint::WithdrawBid
-            | TransactionEntryPoint::Undelegate
-            | TransactionEntryPoint::Redelegate
-            | TransactionEntryPoint::ActivateBid
-            | TransactionEntryPoint::ChangeBidPublicKey
-            | TransactionEntryPoint::AddReservations
-            | TransactionEntryPoint::CancelReservations => false,
         }
     }
 
@@ -242,6 +239,7 @@ impl TransactionEntryPoint {
             }
             TransactionEntryPoint::Call
             | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
             | TransactionEntryPoint::AddBid
             | TransactionEntryPoint::WithdrawBid
             | TransactionEntryPoint::Delegate
@@ -283,6 +281,7 @@ const ACTIVATE_BID_VARIANT_TAG: u8 = 8;
 const CHANGE_BID_PUBLIC_KEY_VARIANT_TAG: u8 = 9;
 const ADD_RESERVATIONS_VARIANT_TAG: u8 = 10;
 const CANCEL_RESERVATIONS_VARIANT_TAG: u8 = 11;
+const BURN_VARIANT_TAG: u8 = 12;
 
 impl ToBytes for TransactionEntryPoint {
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
@@ -301,6 +300,11 @@ impl ToBytes for TransactionEntryPoint {
             TransactionEntryPoint::Transfer => {
                 CalltableSerializationEnvelopeBuilder::new(self.serialized_field_lengths())?
                     .add_field(TAG_FIELD_INDEX, &TRANSFER_VARIANT_TAG)?
+                    .binary_payload_bytes()
+            }
+            TransactionEntryPoint::Burn => {
+                CalltableSerializationEnvelopeBuilder::new(self.serialized_field_lengths())?
+                    .add_field(TAG_FIELD_INDEX, &BURN_VARIANT_TAG)?
                     .binary_payload_bytes()
             }
             TransactionEntryPoint::AddBid => {
@@ -383,6 +387,12 @@ impl FromBytes for TransactionEntryPoint {
                 }
                 Ok(TransactionEntryPoint::Transfer)
             }
+            BURN_VARIANT_TAG => {
+                if window.is_some() {
+                    return Err(Formatting);
+                }
+                Ok(TransactionEntryPoint::Burn)
+            }
             ADD_BID_VARIANT_TAG => {
                 if window.is_some() {
                     return Err(Formatting);
@@ -451,6 +461,7 @@ impl Display for TransactionEntryPoint {
                 write!(formatter, "custom({entry_point})")
             }
             TransactionEntryPoint::Transfer => write!(formatter, "transfer"),
+            TransactionEntryPoint::Burn => write!(formatter, "burn"),
             TransactionEntryPoint::AddBid => write!(formatter, "add_bid"),
             TransactionEntryPoint::WithdrawBid => write!(formatter, "withdraw_bid"),
             TransactionEntryPoint::Delegate => write!(formatter, "delegate"),
@@ -468,6 +479,9 @@ impl From<&str> for TransactionEntryPoint {
     fn from(value: &str) -> Self {
         if value.to_lowercase() == mint::METHOD_TRANSFER {
             return TransactionEntryPoint::Transfer;
+        }
+        if value.to_lowercase() == mint::METHOD_BURN {
+            return TransactionEntryPoint::Burn;
         }
         if value.to_lowercase() == auction::METHOD_ACTIVATE_BID {
             return TransactionEntryPoint::ActivateBid;

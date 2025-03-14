@@ -38,9 +38,9 @@ use casper_types::{
     },
     addressable_entity::{
         self, ActionThresholds, ActionType, AddressableEntity, AddressableEntityHash,
-        AssociatedKeys, ContractRuntimeTag, EntityEntryPoint, EntityKindTag, EntryPointAccess,
-        EntryPointType, EntryPoints, MessageTopicError, MessageTopics, NamedKeyAddr, NamedKeyValue,
-        Parameter, Weight, DEFAULT_ENTRY_POINT_NAME,
+        AssociatedKeys, ContractRuntimeTag, EntityEntryPoint, EntryPointAccess, EntryPointType,
+        EntryPoints, MessageTopicError, MessageTopics, NamedKeyAddr, NamedKeyValue, Parameter,
+        Weight, DEFAULT_ENTRY_POINT_NAME,
     },
     bytesrepr::{self, Bytes, FromBytes, ToBytes},
     contract_messages::{
@@ -772,6 +772,11 @@ where
 
         let mint_hash = self.context.get_system_contract(MINT)?;
         let mint_addr = EntityAddr::new_system(mint_hash.value());
+        let mint_key = if self.context.engine_config().enable_entity {
+            Key::AddressableEntity(EntityAddr::System(mint_hash.value()))
+        } else {
+            Key::Hash(mint_hash.value())
+        };
 
         let mint_named_keys = self
             .context
@@ -782,7 +787,7 @@ where
         let mut named_keys = mint_named_keys;
 
         let runtime_context = self.context.new_from_self(
-            mint_addr.into(),
+            mint_key,
             EntryPointType::Called,
             &mut named_keys,
             access_rights,
@@ -1007,14 +1012,18 @@ where
     ) -> Result<CLValue, ExecError> {
         let gas_counter = self.gas_counter();
 
-        let entity_hash = self.context.get_system_contract(AUCTION)?;
-        let auction_key = Key::addressable_entity_key(EntityKindTag::System, entity_hash);
+        let auction_hash = self.context.get_system_contract(AUCTION)?;
+        let auction_key = if self.context.engine_config().enable_entity {
+            Key::AddressableEntity(EntityAddr::System(auction_hash.value()))
+        } else {
+            Key::Hash(auction_hash.value())
+        };
 
         let auction_named_keys = self
             .context
             .state()
             .borrow_mut()
-            .get_named_keys(EntityAddr::System(entity_hash.value()))?;
+            .get_named_keys(EntityAddr::System(auction_hash.value()))?;
 
         let mut named_keys = auction_named_keys;
 
@@ -1620,7 +1629,7 @@ where
                 let entity_hash = AddressableEntityHash::new(contract_hash);
 
                 // Check if provided contract hash is disabled
-                let is_contract_enabled = package.is_entity_enabled(&entity_hash);
+                let is_contract_enabled = package.is_entity_enabled(&entity_addr);
 
                 if !is_calling_system_contract && !is_contract_enabled {
                     return Err(ExecError::DisabledEntity(entity_hash));
@@ -1776,7 +1785,7 @@ where
             .engine_config()
             .administrative_accounts()
             .is_empty()
-            && !package.is_entity_enabled(&entity_hash)
+            && !package.is_entity_enabled(&entity_addr)
             && !self
                 .context
                 .is_system_addressable_entity(&entity_addr.value())?
@@ -2488,7 +2497,8 @@ where
             ContractWasm::new(module_bytes)
         };
 
-        let contract_hash: HashAddr = self.context.new_hash_address()?;
+        let contract_hash_addr: HashAddr = self.context.new_hash_address()?;
+        let contract_entity_addr = EntityAddr::SmartContract(contract_hash_addr);
 
         let protocol_version = self.context.protocol_version();
         let major = protocol_version.value().major;
@@ -2500,14 +2510,16 @@ where
 
                 let previous_named_keys = previous_contract.take_named_keys();
                 named_keys.append(previous_named_keys);
-                Some(previous_contract_hash.value())
+                Some(EntityAddr::SmartContract(previous_contract_hash.value()))
             } else {
                 None
             };
 
-        if let Err(err) =
-            self.carry_forward_message_topics(maybe_previous_hash, contract_hash, message_topics)?
-        {
+        if let Err(err) = self.carry_forward_message_topics(
+            maybe_previous_hash,
+            contract_entity_addr,
+            message_topics,
+        )? {
             return Ok(Err(err));
         };
 
@@ -2521,18 +2533,18 @@ where
         );
 
         let insert_contract_result =
-            contract_package.insert_contract_version(major, contract_hash.into());
+            contract_package.insert_contract_version(major, contract_hash_addr.into());
 
         self.context
             .metered_write_gs_unsafe(Key::Hash(contract_wasm_hash), contract_wasm)?;
         self.context
-            .metered_write_gs_unsafe(Key::Hash(contract_hash), contract)?;
+            .metered_write_gs_unsafe(Key::Hash(contract_hash_addr), contract)?;
         self.context
             .metered_write_gs_unsafe(Key::Hash(contract_package_hash.value()), contract_package)?;
 
         // set return values to buffer
         {
-            let hash_bytes = match contract_hash.to_bytes() {
+            let hash_bytes = match contract_hash_addr.to_bytes() {
                 Ok(bytes) => bytes,
                 Err(error) => return Ok(Err(error.into())),
             };
@@ -2597,9 +2609,10 @@ where
         let byte_code_hash = self.context.new_hash_address()?;
 
         let hash_addr = self.context.new_hash_address()?;
+        let entity_addr = EntityAddr::SmartContract(hash_addr);
 
         if let Err(err) =
-            self.carry_forward_message_topics(previous_hash_addr, hash_addr, message_topics)?
+            self.carry_forward_message_topics(previous_hash_addr, entity_addr, message_topics)?
         {
             return Ok(Err(err));
         };
@@ -2607,7 +2620,7 @@ where
         let protocol_version = self.context.protocol_version();
 
         let insert_entity_version_result =
-            package.insert_entity_version(protocol_version.value().major, hash_addr.into());
+            package.insert_entity_version(protocol_version.value().major, entity_addr);
 
         let byte_code = {
             let module_bytes = self.get_module_from_entry_points(&entry_points)?;
@@ -2680,11 +2693,11 @@ where
 
     fn carry_forward_message_topics(
         &mut self,
-        previous_hash_addr: Option<HashAddr>,
-        hash_addr: HashAddr,
+        previous_entity_addr: Option<EntityAddr>,
+        entity_addr: EntityAddr,
         message_topics: BTreeMap<String, MessageTopicOperation>,
     ) -> Result<Result<(), ApiError>, ExecError> {
-        let mut previous_message_topics = match previous_hash_addr {
+        let mut previous_message_topics = match previous_entity_addr {
             Some(previous_hash) => self.context.get_message_topics(previous_hash)?,
             None => MessageTopics::default(),
         };
@@ -2717,7 +2730,7 @@ where
         }
 
         for (topic_name, topic_hash) in previous_message_topics.iter() {
-            let topic_key = Key::message_topic(hash_addr, *topic_hash);
+            let topic_key = Key::message_topic(entity_addr, *topic_hash);
             let block_time = self.context.get_block_info().block_time();
             let summary = StoredValue::MessageTopic(MessageTopicSummary::new(
                 0,
@@ -2738,12 +2751,12 @@ where
             NamedKeys,
             ActionThresholds,
             AssociatedKeys,
-            Option<HashAddr>,
+            Option<EntityAddr>,
         ),
         ExecError,
     > {
         if let Some(previous_entity_hash) = package.current_entity_hash() {
-            let previous_entity_key = Key::contract_entity_key(previous_entity_hash);
+            let previous_entity_key = Key::AddressableEntity(previous_entity_hash);
             let (mut previous_entity, requires_purse_creation) =
                 self.context.get_contract_entity(previous_entity_key)?;
 
@@ -2811,7 +2824,7 @@ where
                 previous_named_keys,
                 action_thresholds,
                 associated_keys,
-                Some(previous_entity_hash.value()),
+                Some(previous_entity_hash),
             ));
         }
 
@@ -2840,7 +2853,9 @@ where
                 return Err(ExecError::LockedEntity(contract_package_hash));
             }
 
-            if let Err(err) = contract_package.disable_entity_version(contract_hash) {
+            if let Err(err) = contract_package
+                .disable_entity_version(EntityAddr::SmartContract(contract_hash.value()))
+            {
                 return Ok(Err(err.into()));
             }
 
@@ -2888,7 +2903,9 @@ where
                 return Err(ExecError::LockedEntity(contract_package_hash));
             }
 
-            if let Err(err) = contract_package.enable_version(contract_hash) {
+            if let Err(err) =
+                contract_package.enable_version(EntityAddr::SmartContract(contract_hash.value()))
+            {
                 return Ok(Err(err.into()));
             }
 
@@ -3435,7 +3452,10 @@ where
                         Groups::default(),
                         PackageStatus::Locked,
                     );
-                    package.insert_entity_version(protocol_version.value().major, entity_hash);
+                    package.insert_entity_version(
+                        protocol_version.value().major,
+                        EntityAddr::Account(target.value()),
+                    );
                     package
                 };
 
@@ -3899,7 +3919,7 @@ where
             for entity_hash in versions.contract_hashes() {
                 let entry_points = {
                     self.context
-                        .get_casper_vm_v1_entry_point(Key::contract_entity_key(*entity_hash))?
+                        .get_casper_vm_v1_entry_point(Key::AddressableEntity(*entity_hash))?
                 };
                 for entry_point in entry_points.take_entry_points() {
                     match entry_point.access() {
@@ -4406,10 +4426,10 @@ where
         topic_name: &str,
         message: MessagePayload,
     ) -> Result<Result<(), ApiError>, Trap> {
-        let hash_addr = self.context.context_key_to_entity_addr()?.value();
+        let entity_addr = self.context.context_key_to_entity_addr()?;
 
         let topic_name_hash = cryptography::blake2b(topic_name).into();
-        let topic_key = Key::Message(MessageAddr::new_topic_addr(hash_addr, topic_name_hash));
+        let topic_key = Key::Message(MessageAddr::new_topic_addr(entity_addr, topic_name_hash));
 
         // Check if the topic exists and get the summary.
         let Some(StoredValue::MessageTopic(prev_topic_summary)) =
@@ -4422,7 +4442,7 @@ where
         let topic_message_index = if prev_topic_summary.blocktime() != current_blocktime {
             for index in 1..prev_topic_summary.message_count() {
                 self.context
-                    .prune_gs_unsafe(Key::message(hash_addr, topic_name_hash, index));
+                    .prune_gs_unsafe(Key::message(entity_addr, topic_name_hash, index));
             }
             0
         } else {
@@ -4461,7 +4481,7 @@ where
             block_message_count,
             topic_message_count,
             Message::new(
-                hash_addr,
+                entity_addr,
                 message,
                 topic_name.to_string(),
                 topic_name_hash,

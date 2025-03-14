@@ -33,7 +33,7 @@ gh-1470-regression = { path = "../../smart_contracts/contracts/test/gh-1470-regr
 gh-1470-regression-call = { path = "../../smart_contracts/contracts/test/gh-1470-regression-call", default-features = false }
 lmdb-rkv = "0.14"
 num-rational = "0.4.0"
-num-traits = "0.2.10"
+num-traits = { workspace = true }
 once_cell = "1.5.2"
 regex = "1.5.4"
 walrus = "0.20.2"

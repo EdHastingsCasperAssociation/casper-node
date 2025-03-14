@@ -139,6 +139,13 @@ impl<T> HostFunction<T> {
         Self { cost, arguments }
     }
 
+    pub fn with_new_static_cost(self, cost: Cost) -> Self {
+        Self {
+            cost,
+            arguments: self.arguments,
+        }
+    }
+
     /// Returns the base gas fee for calling the host function.
     pub fn cost(&self) -> Cost {
         self.cost

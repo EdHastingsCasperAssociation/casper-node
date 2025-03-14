@@ -186,6 +186,7 @@ pub use semver::{ParseSemVerError, SemVer, SEM_VER_SERIALIZED_LENGTH};
 pub use stored_value::{
     GlobalStateIdentifier, StoredValue, StoredValueTag, TypeMismatch as StoredValueTypeMismatch,
 };
+pub use system::mint::METHOD_TRANSFER;
 pub use tagged::Tagged;
 #[cfg(any(feature = "std", test))]
 pub use timestamp::serde_option_time_diff;

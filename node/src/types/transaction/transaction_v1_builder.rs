@@ -191,6 +191,20 @@ impl<'a> TransactionV1Builder<'a> {
         Ok(builder)
     }
 
+    /// Returns a new `TransactionV1Builder` suitable for building a native burn transaction.
+    #[cfg(test)]
+    pub(crate) fn new_burn<A: Into<U512>>(
+        amount: A,
+        maybe_source: Option<URef>,
+    ) -> Result<Self, CLValueError> {
+        let args = arg_handling::new_burn_args(amount, maybe_source)?;
+        let mut builder = TransactionV1Builder::new();
+        builder.args = TransactionArgs::Named(args);
+        builder.entry_point = TransactionEntryPoint::Burn;
+        builder.scheduling = Self::DEFAULT_SCHEDULING;
+        Ok(builder)
+    }
+
     /// Returns a new `TransactionV1Builder` suitable for building a native add_bid transaction.
     #[cfg(test)]
     pub(crate) fn new_add_bid<A: Into<U512>>(

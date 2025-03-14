@@ -1,5 +1,7 @@
 /// Auction logic.
 pub mod auction;
+/// Burn logic.
+pub mod burn;
 /// Error definition.
 pub mod error;
 /// Genesis logic.

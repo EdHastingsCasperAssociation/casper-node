@@ -446,6 +446,10 @@ pub trait AvailableBalanceChecker {
 
         let held = gas_held.saturating_add(processing_held);
 
+        if held > total_balance {
+            return Ok(U512::zero());
+        }
+
         debug_assert!(
             total_balance >= held,
             "it should not be possible to hold more than the total available"

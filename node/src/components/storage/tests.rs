@@ -1371,12 +1371,16 @@ fn prepare_exec_result_with_transfer(
         Some(rng.gen()),
     ));
     let limit = Gas::new(rng.gen::<u64>());
+    let current_price = 1;
+    let refund = U512::zero();
     let exec_result = ExecutionResult::V2(Box::new(ExecutionResultV2 {
         initiator: initiator_addr,
         error_message: None,
+        current_price,
         limit,
         cost: limit.value(),
         consumed: limit,
+        refund,
         transfers: vec![transfer.clone()],
         effects: Effects::new(),
         size_estimate: rng.gen(),

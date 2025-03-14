@@ -13,13 +13,30 @@ pub enum Error {
     InvalidData,
     /// The input to the host function was invalid.
     InvalidInput,
+    /// The topic is too long.
+    TopicTooLong,
+    /// Too many topics.
+    TooManyTopics,
+    /// The payload is too long.
+    PayloadTooLong,
+    /// The message topic is full and cannot accept new messages.
+    MessageTopicFull,
+    /// The maximum number of messages emitted per block was exceeded when trying to emit a
+    /// message.
+    MaxMessagesPerBlockExceeded,
     /// An error code not covered by the other variants.
     Other(i32),
 }
 
+pub const HOST_ERROR_SUCCEED: i32 = 0;
 pub const HOST_ERROR_NOT_FOUND: i32 = 1;
 pub const HOST_ERROR_INVALID_DATA: i32 = 2;
 pub const HOST_ERROR_INVALID_INPUT: i32 = 3;
+pub const HOST_ERROR_TOPIC_TOO_LONG: i32 = 4;
+pub const HOST_ERROR_TOO_MANY_TOPICS: i32 = 5;
+pub const HOST_ERROR_PAYLOAD_TOO_LONG: i32 = 6;
+pub const HOST_ERROR_MESSAGE_TOPIC_FULL: i32 = 7;
+pub const HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED: i32 = 8;
 
 impl From<i32> for Error {
     fn from(value: i32) -> Self {
@@ -27,8 +44,20 @@ impl From<i32> for Error {
             HOST_ERROR_NOT_FOUND => Error::NotFound,
             HOST_ERROR_INVALID_DATA => Error::InvalidData,
             HOST_ERROR_INVALID_INPUT => Error::InvalidInput,
+            HOST_ERROR_TOPIC_TOO_LONG => Error::TopicTooLong,
+            HOST_ERROR_TOO_MANY_TOPICS => Error::TooManyTopics,
+            HOST_ERROR_PAYLOAD_TOO_LONG => Error::PayloadTooLong,
+            HOST_ERROR_MESSAGE_TOPIC_FULL => Error::MessageTopicFull,
+            HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED => Error::MaxMessagesPerBlockExceeded,
             other => Error::Other(other),
         }
+    }
+}
+
+pub fn result_from_code(code: i32) -> Result<(), Error> {
+    match code {
+        HOST_ERROR_SUCCEED => Ok(()),
+        other => Err(Error::from(other)),
     }
 }
 

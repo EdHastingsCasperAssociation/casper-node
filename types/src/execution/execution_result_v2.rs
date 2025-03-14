@@ -26,7 +26,7 @@ use crate::testing::TestRng;
 #[cfg(feature = "json-schema")]
 use crate::Key;
 use crate::{
-    bytesrepr::{self, FromBytes, ToBytes},
+    bytesrepr::{self, Error, FromBytes, ToBytes},
     Gas, InitiatorAddr, Transfer, U512,
 };
 
@@ -46,12 +46,28 @@ static EXECUTION_RESULT: Lazy<ExecutionResultV2> = Lazy::new(|| {
 
     let transfers = vec![Transfer::example().clone()];
 
+    // NOTE: these are arbitrary values for schema and type demonstration,
+    // they are not properly derived actual values. Depending on current chainspec
+    // settings on a given chain, we may or may not be issuing a refund and if we are
+    // the percentage can vary. And the cost is affected by dynamic gas pricing
+    // for a given era, within an inclusive range defined in the chainspec.
+    // Thus, real values cannot be calculated in a vacuum.
+    const LIMIT: u64 = 123_456;
+    const CONSUMED: u64 = 100_000;
+    const COST: u64 = 246_912;
+
+    const PRICE: u8 = 2;
+
+    let refund = COST.saturating_sub(CONSUMED);
+
     ExecutionResultV2 {
         initiator: InitiatorAddr::from(crate::PublicKey::example().clone()),
         error_message: None,
-        limit: Gas::new(123_456),
-        consumed: Gas::new(100_000),
-        cost: U512::from(246_912),
+        current_price: PRICE,
+        limit: Gas::new(LIMIT),
+        consumed: Gas::new(CONSUMED),
+        cost: U512::from(COST),
+        refund: U512::from(refund),
         size_estimate: Transfer::example().serialized_length() as u64,
         transfers,
         effects,
@@ -69,12 +85,16 @@ pub struct ExecutionResultV2 {
     /// If there is no error message, this execution was processed successfully.
     /// If there is an error message, this execution failed to fully process for the stated reason.
     pub error_message: Option<String>,
-    /// What was the maximum allowed gas limit for this transaction?.
+    /// The current gas price. I.e. how many motes are charged for each unit of computation.
+    pub current_price: u8,
+    /// The maximum allowed gas limit for this transaction
     pub limit: Gas,
     /// How much gas was consumed executing this transaction.
     pub consumed: Gas,
     /// How much was paid for this transaction.
     pub cost: U512,
+    /// How much unconsumed gas was refunded (if any)?
+    pub refund: U512,
     /// A record of transfers performed while executing this transaction.
     pub transfers: Vec<Transfer>,
     /// The size estimate of the transaction
@@ -84,6 +104,11 @@ pub struct ExecutionResultV2 {
 }
 
 impl ExecutionResultV2 {
+    /// The refunded amount, if any.
+    pub fn refund(&self) -> U512 {
+        self.refund
+    }
+
     // This method is not intended to be used by third party crates.
     #[doc(hidden)]
     #[cfg(feature = "json-schema")]
@@ -112,15 +137,21 @@ impl ExecutionResultV2 {
         let consumed = limit
             .checked_sub(Gas::new(rng.gen_range(0..=range)))
             .expect("consumed");
+
+        // this assumes 100% refund ratio
+        let refund = cost.saturating_sub(consumed.value());
+
         let size_estimate = rng.gen();
 
         ExecutionResultV2 {
             initiator: InitiatorAddr::random(rng),
             effects,
             transfers,
+            current_price: gas_price,
             cost,
             limit,
             consumed,
+            refund,
             size_estimate,
             error_message: if rng.gen() {
                 Some(format!("Error message {}", rng.gen::<u64>()))
@@ -132,7 +163,7 @@ impl ExecutionResultV2 {
 }
 
 impl ToBytes for ExecutionResultV2 {
-    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
+    fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         let mut buffer = bytesrepr::allocate_buffer(self)?;
         self.write_bytes(&mut buffer)?;
         Ok(buffer)
@@ -147,9 +178,11 @@ impl ToBytes for ExecutionResultV2 {
             + self.transfers.serialized_length()
             + self.size_estimate.serialized_length()
             + self.effects.serialized_length()
+            + self.refund.serialized_length()
+            + self.current_price.serialized_length()
     }
 
-    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), bytesrepr::Error> {
+    fn write_bytes(&self, writer: &mut Vec<u8>) -> Result<(), Error> {
         self.initiator.write_bytes(writer)?; // initiator should logically be first
         self.error_message.write_bytes(writer)?;
         self.limit.write_bytes(writer)?;
@@ -157,12 +190,14 @@ impl ToBytes for ExecutionResultV2 {
         self.cost.write_bytes(writer)?;
         self.transfers.write_bytes(writer)?;
         self.size_estimate.write_bytes(writer)?;
-        self.effects.write_bytes(writer)
+        self.effects.write_bytes(writer)?;
+        self.refund.write_bytes(writer)?;
+        self.current_price.write_bytes(writer)
     }
 }
 
 impl FromBytes for ExecutionResultV2 {
-    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
+    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), Error> {
         let (initiator, remainder) = InitiatorAddr::from_bytes(bytes)?;
         let (error_message, remainder) = Option::<String>::from_bytes(remainder)?;
         let (limit, remainder) = Gas::from_bytes(remainder)?;
@@ -171,12 +206,39 @@ impl FromBytes for ExecutionResultV2 {
         let (transfers, remainder) = Vec::<Transfer>::from_bytes(remainder)?;
         let (size_estimate, remainder) = FromBytes::from_bytes(remainder)?;
         let (effects, remainder) = Effects::from_bytes(remainder)?;
+        // refund && current_price were added after 2.0 was upgraded into on
+        // DevNet and IntegrationNet, thus the bytes repr must be appended and optional
+        let (refund, remainder) = match U512::from_bytes(remainder) {
+            Ok((ret, rem)) => (ret, rem),
+            Err(_) => {
+                let rem: &[u8] = &[];
+                (U512::zero(), rem)
+            }
+        };
+        let (current_price, remainder) = match u8::from_bytes(remainder) {
+            Ok((ret, rem)) => (ret, rem),
+            Err(_) => {
+                let ret = {
+                    let div = cost.checked_div(limit.value()).unwrap_or_default();
+                    if div > U512::from(u8::MAX) {
+                        u8::MAX
+                    } else {
+                        div.as_u32() as u8
+                    }
+                };
+
+                let rem: &[u8] = &[];
+                (ret, rem)
+            }
+        };
         let execution_result = ExecutionResultV2 {
             initiator,
             error_message,
+            current_price,
             limit,
             consumed,
             cost,
+            refund,
             transfers,
             size_estimate,
             effects,

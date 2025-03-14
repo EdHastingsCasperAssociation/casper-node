@@ -74,7 +74,7 @@ minimum_delegation_amount = 500_000_000_000
 maximum_delegation_amount = 1_000_000_000_000_000_000
 # Minimum bid amount allowed in motes. Withdrawing one's bid to an amount strictly less than
 # the value specified will be treated as a full unbond of a validator and their associated delegators
-minimum_bid_amount = 100_000_000_000_000
+minimum_bid_amount = 10_000_000_000_000
 # Global state prune batch size (0 = this feature is off)
 prune_batch_size = 0
 # Enables strict arguments checking when calling a contract; i.e. that all non-optional args are provided and of the correct `CLType`.
@@ -88,7 +88,7 @@ max_delegators_per_validator = 1200
 # The split in finality signature rewards between block producer and participating signers.
 finders_fee = [1, 5]
 # The proportion of baseline rewards going to reward finality signatures specifically.
-finality_signature_proportion = [1, 2]
+finality_signature_proportion = [95, 100]
 # Lookback interval indicating which past block we are looking at to reward.
 signature_rewards_max_delay = 3
 # Allows transfers between accounts in the blockchain network.
@@ -242,6 +242,8 @@ max_stack_height = 500
 # Gas charged per byte stored in the global state.
 gas_per_byte = 1_117_587
 
+# For each opcode cost below there exists a static cost and a dynamic cost.
+# The static cost is a fixed cost for each opcode that is hardcoded and validated by benchmarks.
 [wasm.v1.opcode_costs]
 # Bit operations multiplier.
 bit = 105
@@ -271,7 +273,7 @@ unreachable = 105
 nop = 105
 # Get current memory operation multiplier.
 current_memory = 105
-# Grow memory cost, per page (192kb).
+# Grow memory cost, per page (64kb).
 grow_memory = 900
 # Sign extension operations cost
 sign = 105
@@ -305,8 +307,8 @@ add_contract_version = { cost = 200, arguments = [0, 0, 0, 0, 120_000, 0, 0, 0, 
 add_contract_version_with_message_topics = { cost = 200, arguments = [0, 0, 0, 0, 120_000, 0, 0, 0, 30_000, 0, 0] }
 add_package_version = { cost = 200, arguments = [0, 0, 0, 0, 120_000, 0, 0, 0, 30_000, 0, 0] }
 blake2b = { cost = 1_200_000, arguments = [0, 120_000, 0, 0] }
-call_contract = { cost = 3000_000_000, arguments = [0, 0, 0, 120_000, 0, 120_000, 0] }
-call_versioned_contract = { cost = 3000_000_000, arguments = [0, 0, 0, 0, 0, 120_000, 0, 120_000, 0] }
+call_contract = { cost = 300_000_000, arguments = [0, 0, 0, 120_000, 0, 120_000, 0] }
+call_versioned_contract = { cost = 300_000_000, arguments = [0, 0, 0, 0, 0, 120_000, 0, 120_000, 0] }
 create_contract_package_at_hash = { cost = 200, arguments = [0, 0] }
 create_contract_user_group = { cost = 200, arguments = [0, 0, 0, 0, 0, 0, 0, 0] }
 create_purse = { cost = 2_500_000_000, arguments = [0, 0] }
@@ -386,7 +388,7 @@ unreachable = 105
 nop = 105
 # Get current memory operation multiplier.
 current_memory = 105
-# Grow memory cost, per page (192kb).
+# Grow memory cost, per page (64kb).
 grow_memory = 900
 # Sign extension operations cost
 sign = 105
@@ -426,6 +428,7 @@ env_balance = { cost = 0, arguments = [0, 0, 0, 0] }
 upgrade = { cost = 0, arguments = [0, 0, 0, 0, 0, 0] }
 call = { cost = 0, arguments = [0, 0, 0, 0, 0, 0, 0, 0, 0] }
 print = { cost = 0, arguments = [0, 0] }
+emit = { cost = 0, arguments = [0, 0, 0, 0] }
 
 [wasm.messages_limits]
 max_topic_name_size = 256
@@ -448,8 +451,8 @@ slash = 2_500_000_000
 distribute = 2_500_000_000
 withdraw_delegator_reward = 5_000_000_000
 withdraw_validator_reward = 5_000_000_000
-read_era_id = 10_000
-activate_bid = 10_000
+read_era_id = 2_500_000_000
+activate_bid = 2_500_000_000
 redelegate = 2_500_000_000
 change_bid_public_key = 5_000_000_000
 add_reservations = 2_500_000_000
@@ -459,8 +462,8 @@ cancel_reservations = 2_500_000_000
 mint = 2_500_000_000
 reduce_total_supply = 2_500_000_000
 create = 2_500_000_000
-balance = 10_000
-burn = 10_000
+balance = 100_000_000
+burn = 100_000_000
 transfer = 100_000_000
 read_base_round_reward = 2_500_000_000
 mint_into_existing_purse = 2_500_000_000

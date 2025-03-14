@@ -229,7 +229,7 @@ impl EntityEntryPoint {
         }
     }
 
-    /// Create a default [`EntryPoint`] with specified name.
+    /// Create a default [`EntityEntryPoint`] with specified name.
     pub fn default_with_name<T: Into<String>>(name: T) -> Self {
         EntityEntryPoint {
             name: name.into(),
@@ -536,17 +536,17 @@ impl EntryPoints {
         entry_points
     }
 
-    /// Adds new [`EntryPoint`].
+    /// Adds new [`EntityEntryPoint`].
     pub fn add_entry_point(&mut self, entry_point: EntityEntryPoint) {
         self.0.insert(entry_point.name().to_string(), entry_point);
     }
 
-    /// Checks if given [`EntryPoint`] exists.
+    /// Checks if given [`EntityEntryPoint`] exists.
     pub fn has_entry_point(&self, entry_point_name: &str) -> bool {
         self.0.contains_key(entry_point_name)
     }
 
-    /// Gets an existing [`EntryPoint`] by its name.
+    /// Gets an existing [`EntityEntryPoint`] by its name.
     pub fn get(&self, entry_point_name: &str) -> Option<&EntityEntryPoint> {
         self.0.get(entry_point_name)
     }

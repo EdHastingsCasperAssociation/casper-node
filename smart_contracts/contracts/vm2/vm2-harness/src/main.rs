@@ -8,12 +8,18 @@ extern crate alloc;
 
 use casper_macros::casper;
 use casper_sdk::{
-    host::{self, Entity},
+    casper::{self, emit, emit_raw, Entity},
+    casper_executor_wasm_common::error::Error,
     log,
     types::{Address, CallError},
 };
 
 use contracts::token_owner::TokenOwnerContractRef;
+
+#[casper(message)]
+pub struct TestMessage {
+    pub message: String,
+}
 
 #[derive(Default)]
 struct Seed {
@@ -47,7 +53,7 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
 
     log!("calling create");
 
-    let session_caller = host::get_caller();
+    let session_caller = casper::get_caller();
     assert_ne!(session_caller, Entity::Account([0; 32]));
 
     // Constructor without args
@@ -278,21 +284,21 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
             .create(|| HarnessRef::payable_constructor())
             .expect("Should create");
 
-        let caller = host::get_caller();
+        let caller = casper::get_caller();
 
         {
             next_test(
                 &mut counter,
                 &format!("{current_test} Depositing as an account"),
             );
-            let account_balance_1 = host::get_balance_of(&caller);
+            let account_balance_1 = casper::get_balance_of(&caller);
             contract_handle
                 .build_call()
                 .with_transferred_value(100)
                 .call(|harness| harness.perform_token_deposit(account_balance_1))
                 .expect("Should call")
                 .expect("Should succeed");
-            let account_balance_2 = host::get_balance_of(&caller);
+            let account_balance_2 = casper::get_balance_of(&caller);
             assert_eq!(account_balance_2, account_balance_1 - 100);
 
             contract_handle
@@ -302,7 +308,7 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
                 .expect("Should call")
                 .expect("Should succeed");
 
-            let account_balance_after = host::get_balance_of(&caller);
+            let account_balance_after = casper::get_balance_of(&caller);
             assert_eq!(account_balance_after, account_balance_1 - 125);
         }
 
@@ -317,13 +323,13 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
                 &mut counter,
                 &format!("{current_test} Withdrawing as an account"),
             );
-            let account_balance_before = host::get_balance_of(&caller);
+            let account_balance_before = casper::get_balance_of(&caller);
             contract_handle
                 .build_call()
                 .call(|harness| harness.withdraw(account_balance_before, 50))
                 .expect("Should call")
                 .expect("Should succeed");
-            let account_balance_after = host::get_balance_of(&caller);
+            let account_balance_after = casper::get_balance_of(&caller);
             assert_ne!(account_balance_after, account_balance_before);
             assert_eq!(account_balance_after, account_balance_before + 50);
 
@@ -347,7 +353,7 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
             "Contract acts as owner of funds deposited into other contract",
         );
 
-        let caller = host::get_caller();
+        let caller = casper::get_caller();
 
         let harness = ContractBuilder::<HarnessRef>::new()
             .with_transferred_value(0)
@@ -370,7 +376,7 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
         // harness: +50
         {
             next_test(&mut counter, "Subtest 1");
-            let caller_balance_before = host::get_balance_of(&caller);
+            let caller_balance_before = casper::get_balance_of(&caller);
             let token_owner_balance_before = token_owner.balance();
             let harness_balance_before = harness.balance();
 
@@ -388,7 +394,7 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
                 .expect("Should succeed");
 
             assert_eq!(
-                host::get_balance_of(&caller),
+                casper::get_balance_of(&caller),
                 caller_balance_before,
                 "Caller funds should not change"
             );
@@ -406,7 +412,7 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
         // harness: -50
         {
             next_test(&mut counter, "Subtest 2");
-            let caller_balance_before = host::get_balance_of(&caller);
+            let caller_balance_before = casper::get_balance_of(&caller);
             let token_owner_balance_before = token_owner.balance();
             let harness_balance_before = harness.balance();
 
@@ -422,7 +428,7 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
                 .expect("Should succeed");
 
             assert_eq!(
-                host::get_balance_of(&caller),
+                casper::get_balance_of(&caller),
                 caller_balance_before,
                 "Caller funds should not change"
             );
@@ -578,9 +584,46 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
             "Calling non-existing entrypoint does not crash",
         );
         let (output, result) =
-            host::casper_call(&flipper_address, 0, "non_existing_entrypoint", &[]);
+            casper::casper_call(&flipper_address, 0, "non_existing_entrypoint", &[]);
         assert_eq!(result, Err(CallError::NotCallable));
         assert_eq!(output, None);
+    }
+
+    {
+        let _current_test = next_test(&mut counter, "Message passing");
+
+        for i in 0..10 {
+            assert_eq!(
+                emit(TestMessage {
+                    message: format!("Hello, world: {i}!"),
+                }),
+                Ok(())
+            );
+        }
+
+        let small_topic_name = "a".repeat(32);
+        let large_topic_name = "a".repeat(257);
+        let large_payload_data = vec![0; 16384];
+
+        assert_eq!(emit_raw(&large_topic_name, &[]), Err(Error::TopicTooLong));
+        assert_eq!(
+            emit_raw(&small_topic_name, &large_payload_data),
+            Err(Error::PayloadTooLong)
+        );
+
+        for i in 0..127u64 {
+            assert_eq!(
+                emit_raw(&format!("Topic{i}"), &i.to_be_bytes()),
+                Ok(()),
+                "Emitting message with small payload failed"
+            );
+        }
+
+        assert_eq!(
+            emit_raw(&format!("Topic128"), &[128]),
+            Err(Error::TooManyTopics),
+            "Emitting message with small payload failed"
+        );
     }
 
     log!("👋 Goodbye");
@@ -599,9 +642,9 @@ pub fn yet_another_exported_function(arg1: u64, arg2: String) {
 
 #[cfg(test)]
 mod tests {
-    use casper_sdk::host::native::{self, dispatch};
+    use casper::native::{dispatch_with, Environment, ExportKind, EXPORTS};
+    use casper_sdk::casper::native::{self, dispatch};
     use contracts::harness::{Harness, INITIAL_GREETING};
-    use host::native::{dispatch_with, Environment, ExportKind, EXPORTS};
 
     use super::*;
     #[test]

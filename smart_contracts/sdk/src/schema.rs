@@ -42,7 +42,6 @@ pub struct SchemaArgument {
 
 pub struct SchemaEntryPoint {
     pub name: String,
-    pub selector: Option<u32>,
     pub arguments: Vec<SchemaArgument>,
     pub result: abi::Declaration,
     #[serde(
@@ -62,6 +61,12 @@ pub enum SchemaType {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub struct SchemaMessage {
+    pub name: String,
+    pub decl: Declaration,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct Schema {
     pub name: String,
     pub version: Option<String>,
@@ -69,12 +74,12 @@ pub struct Schema {
     pub type_: SchemaType,
     pub definitions: Definitions,
     pub entry_points: Vec<SchemaEntryPoint>,
+    pub messages: Vec<SchemaMessage>,
 }
 
 #[derive(Debug)]
 pub struct EntryPoint<'a, F: Fn()> {
     pub name: &'a str,
-    pub selector: u32,
     pub params: &'a [&'a str],
     pub func: F,
 }

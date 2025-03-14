@@ -612,6 +612,7 @@ impl TransactionAcceptor {
                 TransactionEntryPoint::Call => Some(DEFAULT_ENTRY_POINT_NAME.to_owned()),
                 TransactionEntryPoint::Custom(name) => Some(name.clone()),
                 TransactionEntryPoint::Transfer
+                | TransactionEntryPoint::Burn
                 | TransactionEntryPoint::AddBid
                 | TransactionEntryPoint::WithdrawBid
                 | TransactionEntryPoint::Delegate
@@ -740,8 +741,8 @@ impl TransactionAcceptor {
         }
 
         match package.lookup_entity_hash(entity_version_key) {
-            Some(&contract_hash) => {
-                let entity_addr = EntityAddr::SmartContract(contract_hash.value());
+            Some(&entity_addr) => {
+                let contract_hash = AddressableEntityHash::new(entity_addr.value());
                 effect_builder
                     .get_addressable_entity(*block_header.state_root_hash(), entity_addr)
                     .event(move |result| Event::GetContractResult {

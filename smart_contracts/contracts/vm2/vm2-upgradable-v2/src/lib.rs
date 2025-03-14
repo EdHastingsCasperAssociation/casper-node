@@ -3,7 +3,7 @@
 
 use casper_macros::casper;
 use casper_sdk::{
-    host::{self, Entity},
+    casper::{self, Entity},
     log,
     serializers::borsh::BorshDeserialize,
 };
@@ -54,7 +54,7 @@ impl Default for UpgradableContractV2 {
 impl UpgradableContractV2 {
     #[casper(constructor)]
     pub fn new(initial_value: u64) -> Self {
-        let caller = host::get_caller();
+        let caller = casper::get_caller();
         Self {
             value: initial_value,
             owner: caller,
@@ -91,20 +91,20 @@ impl UpgradableContractV2 {
     #[casper(ignore_state)]
     pub fn migrate() {
         log!("Reading old state...");
-        let old_state: UpgradableContractV1 = host::read_state().unwrap();
+        let old_state: UpgradableContractV1 = casper::read_state().unwrap();
         log!("Old state {old_state:?}");
         let new_state = UpgradableContractV2::from(old_state);
         log!("Success! New state: {new_state:?}");
-        host::write_state(&new_state).unwrap();
+        casper::write_state(&new_state).unwrap();
     }
 
     #[casper(ignore_state)]
     pub fn perform_upgrade() {
-        let new_code = host::casper_copy_input();
+        let new_code = casper::copy_input();
         log!("V2: New code length: {}", new_code.len());
         log!("V2: New code first 10 bytes: {:?}", &new_code[..10]);
 
-        let upgrade_result = host::casper_upgrade(&new_code, Some("migrate"), None);
+        let upgrade_result = casper::upgrade(&new_code, Some("migrate"), None);
         log!("{:?}", upgrade_result);
     }
 }

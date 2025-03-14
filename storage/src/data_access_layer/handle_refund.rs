@@ -3,7 +3,8 @@ use crate::{
     tracking_copy::TrackingCopyError,
 };
 use casper_types::{
-    execution::Effects, Digest, InitiatorAddr, Phase, ProtocolVersion, TransactionHash, U512,
+    execution::Effects, Digest, InitiatorAddr, Phase, ProtocolVersion, TransactionHash, Transfer,
+    U512,
 };
 use num_rational::Ratio;
 
@@ -164,6 +165,8 @@ pub enum HandleRefundResult {
     RootNotFound,
     /// Handle refund request succeeded.
     Success {
+        /// Transfers.
+        transfers: Vec<Transfer>,
         /// The effects.
         effects: Effects,
         /// The amount, if any.

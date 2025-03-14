@@ -134,6 +134,14 @@ pub enum InvalidTransaction {
         attempted: U512,
     },
 
+    /// Insufficient burn amount.
+    InsufficientBurnAmount {
+        /// The minimum burn amount.
+        minimum: u64,
+        /// The attempted burn amount.
+        attempted: U512,
+    },
+
     /// The entry point for this transaction target cannot be `call`.
     EntryPointCannotBeCall,
     /// The entry point for this transaction target cannot be `TransactionEntryPoint::Custom`.
@@ -206,6 +214,11 @@ pub enum InvalidTransaction {
     PricingModeNotSupported,
     // Invalid payment amount.
     InvalidPaymentAmount,
+    /// Unexpected entry point detected.
+    UnexpectedEntryPoint {
+        entry_point: TransactionEntryPoint,
+        lane_id: u8,
+    },
 }
 
 impl Display for InvalidTransaction {
@@ -404,6 +417,14 @@ impl Display for InvalidTransaction {
             InvalidTransaction::InvalidPaymentAmount => {
                 write!(formatter, "invalid payment amount")
             }
+            InvalidTransaction::UnexpectedEntryPoint {
+                entry_point, lane_id
+            } => {
+                write!(formatter, "unexpected entry_point {} lane_id {}", entry_point, lane_id)
+            }
+            InvalidTransaction::InsufficientBurnAmount { minimum, attempted } => {
+                write!(formatter, "insufficient burn amount: {minimum} {attempted}")
+            }
         }
     }
 }
@@ -458,6 +479,8 @@ impl StdError for InvalidTransaction {
             | InvalidTransaction::MissingSeed
             | InvalidTransaction::PricingModeNotSupported
             | InvalidTransaction::InvalidPaymentAmount => None,
+            InvalidTransaction::InsufficientBurnAmount { .. } => None,
+            InvalidTransaction::UnexpectedEntryPoint { .. } => None,
         }
     }
 }

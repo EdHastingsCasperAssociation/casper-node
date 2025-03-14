@@ -124,10 +124,10 @@ pub fn named_key_addr_arb() -> impl Strategy<Value = NamedKeyAddr> {
 
 pub fn message_addr_arb() -> impl Strategy<Value = MessageAddr> {
     prop_oneof![
-        (u8_slice_32(), u8_slice_32()).prop_map(|(hash_addr, topic_name_hash)| {
+        (entity_addr_arb(), u8_slice_32()).prop_map(|(hash_addr, topic_name_hash)| {
             MessageAddr::new_topic_addr(hash_addr, TopicNameHash::new(topic_name_hash))
         }),
-        (u8_slice_32(), u8_slice_32(), example_u32_arb()).prop_map(
+        (entity_addr_arb(), u8_slice_32(), example_u32_arb()).prop_map(
             |(hash_addr, topic_name_hash, index)| MessageAddr::new_message_addr(
                 hash_addr,
                 TopicNameHash::new(topic_name_hash),
@@ -700,12 +700,8 @@ pub fn contract_versions_arb() -> impl Strategy<Value = ContractVersions> {
 }
 
 pub fn entity_versions_arb() -> impl Strategy<Value = EntityVersions> {
-    collection::btree_map(
-        entity_version_key_arb(),
-        u8_slice_32().prop_map(AddressableEntityHash::new),
-        1..5,
-    )
-    .prop_map(EntityVersions::from)
+    collection::btree_map(entity_version_key_arb(), entity_addr_arb(), 1..5)
+        .prop_map(EntityVersions::from)
 }
 
 pub fn disabled_versions_arb() -> impl Strategy<Value = BTreeSet<EntityVersionKey>> {
@@ -1064,21 +1060,11 @@ pub fn trie_merkle_proof_arb() -> impl Strategy<Value = TrieMerkleProof<Key, Sto
 }
 
 pub fn transaction_scheduling_arb() -> impl Strategy<Value = TransactionScheduling> {
-    prop_oneof![
-        Just(TransactionScheduling::Standard),
-        era_id_arb().prop_map(TransactionScheduling::FutureEra),
-        any::<u64>().prop_map(
-            |timestamp| TransactionScheduling::FutureTimestamp(Timestamp::from(timestamp))
-        ),
-    ]
+    prop_oneof![Just(TransactionScheduling::Standard),]
 }
 
 pub fn json_compliant_transaction_scheduling_arb() -> impl Strategy<Value = TransactionScheduling> {
-    prop_oneof![
-        Just(TransactionScheduling::Standard),
-        era_id_arb().prop_map(TransactionScheduling::FutureEra),
-        timestamp_arb().prop_map(TransactionScheduling::FutureTimestamp),
-    ]
+    prop_oneof![Just(TransactionScheduling::Standard),]
 }
 
 pub fn transaction_invocation_target_arb() -> impl Strategy<Value = TransactionInvocationTarget> {

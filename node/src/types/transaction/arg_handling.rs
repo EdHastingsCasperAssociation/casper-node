@@ -18,6 +18,9 @@ const TRANSFER_ARG_TARGET: &str = "target";
 // "id" for legacy reasons, if the argument is passed it is [Option]
 const TRANSFER_ARG_ID: OptionalArg<Option<u64>> = OptionalArg::new("id");
 
+const BURN_ARG_AMOUNT: RequiredArg<U512> = RequiredArg::new("amount");
+const BURN_ARG_SOURCE: OptionalArg<URef> = OptionalArg::new("source");
+
 const ADD_BID_ARG_PUBLIC_KEY: RequiredArg<PublicKey> = RequiredArg::new("public_key");
 const ADD_BID_ARG_DELEGATION_RATE: RequiredArg<u8> = RequiredArg::new("delegation_rate");
 const ADD_BID_ARG_AMOUNT: RequiredArg<U512> = RequiredArg::new("amount");
@@ -232,6 +235,43 @@ pub fn has_valid_transfer_args(
     Ok(())
 }
 
+/// Creates a `RuntimeArgs` suitable for use in a burn transaction.
+#[cfg(test)]
+pub fn new_burn_args<A: Into<U512>>(
+    amount: A,
+    maybe_source: Option<URef>,
+) -> Result<RuntimeArgs, CLValueError> {
+    let mut args = RuntimeArgs::new();
+    if let Some(source) = maybe_source {
+        BURN_ARG_SOURCE.insert(&mut args, source)?;
+    }
+    BURN_ARG_AMOUNT.insert(&mut args, amount.into())?;
+    Ok(args)
+}
+
+/// Checks the given `RuntimeArgs` are suitable for use in a burn transaction.
+pub fn has_valid_burn_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
+    let native_burn_minimum_motes = 1;
+    let args = args
+        .as_named()
+        .ok_or(InvalidTransactionV1::ExpectedNamedArguments)?;
+
+    let amount = BURN_ARG_AMOUNT.get(args)?;
+    if amount < U512::from(native_burn_minimum_motes) {
+        debug!(
+            minimum = %native_burn_minimum_motes,
+            %amount,
+            "insufficient burn amount"
+        );
+        return Err(InvalidTransactionV1::InsufficientBurnAmount {
+            minimum: native_burn_minimum_motes,
+            attempted: amount,
+        });
+    }
+    let _source = BURN_ARG_SOURCE.get(args)?;
+    Ok(())
+}
+
 /// Creates a `RuntimeArgs` suitable for use in an add_bid transaction.
 #[cfg(test)]
 pub fn new_add_bid_args<A: Into<U512>>(
@@ -370,6 +410,14 @@ pub fn has_valid_redelegate_args(args: &TransactionArgs) -> Result<(), InvalidTr
     let _amount = REDELEGATE_ARG_AMOUNT.get(args)?;
     let _new_validator = REDELEGATE_ARG_NEW_VALIDATOR.get(args)?;
     Ok(())
+}
+
+/// Creates a `RuntimeArgs` suitable for use in a delegate transaction.
+#[cfg(test)]
+pub fn new_activate_bid_args(validator: PublicKey) -> Result<RuntimeArgs, CLValueError> {
+    let mut args = RuntimeArgs::new();
+    ACTIVATE_BID_ARG_VALIDATOR.insert(&mut args, validator)?;
+    Ok(args)
 }
 
 /// Checks the given `RuntimeArgs` are suitable for use in an activate bid transaction.

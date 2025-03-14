@@ -50,6 +50,10 @@ const DEFAULT_CREATE_ENTRYPOINT_SIZE_WEIGHT: u32 = 0;
 const DEFAULT_CREATE_INPUT_SIZE_WEIGHT: u32 = 0;
 const DEFAULT_CREATE_SEED_SIZE_WEIGHT: u32 = 0;
 
+const DEFAULT_EMIT_COST: u32 = 200;
+const DEFAULT_EMIT_TOPIC_SIZE_WEIGHT: u32 = 30_000;
+const DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT: u32 = 120_000;
+
 /// Default cost for a new dictionary.
 pub const DEFAULT_NEW_DICTIONARY_COST: u32 = DEFAULT_NEW_UREF_COST;
 
@@ -89,6 +93,8 @@ pub struct HostFunctionCostsV2 {
     pub call: HostFunction<[Cost; 9]>,
     /// Cost of calling the `print` host function.
     pub print: HostFunction<[Cost; 2]>,
+    /// Cost of calling the `emit` host function.
+    pub emit: HostFunction<[Cost; 4]>,
 }
 
 impl Zero for HostFunctionCostsV2 {
@@ -107,6 +113,7 @@ impl Zero for HostFunctionCostsV2 {
             upgrade: HostFunction::zero(),
             call: HostFunction::zero(),
             print: HostFunction::zero(),
+            emit: HostFunction::zero(),
         }
     }
 
@@ -125,6 +132,7 @@ impl Zero for HostFunctionCostsV2 {
             upgrade,
             call,
             print,
+            emit,
         } = self;
         read.is_zero()
             && write.is_zero()
@@ -139,6 +147,7 @@ impl Zero for HostFunctionCostsV2 {
             && upgrade.is_zero()
             && call.is_zero()
             && print.is_zero()
+            && emit.is_zero()
     }
 }
 
@@ -206,6 +215,15 @@ impl Default for HostFunctionCostsV2 {
                 DEFAULT_PRINT_COST,
                 [NOT_USED, DEFAULT_PRINT_TEXT_SIZE_WEIGHT],
             ),
+            emit: HostFunction::new(
+                DEFAULT_EMIT_COST,
+                [
+                    NOT_USED,
+                    DEFAULT_EMIT_TOPIC_SIZE_WEIGHT,
+                    NOT_USED,
+                    DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT,
+                ],
+            ),
         }
     }
 }
@@ -226,6 +244,7 @@ impl ToBytes for HostFunctionCostsV2 {
         ret.append(&mut self.upgrade.to_bytes()?);
         ret.append(&mut self.call.to_bytes()?);
         ret.append(&mut self.print.to_bytes()?);
+        ret.append(&mut self.emit.to_bytes()?);
         Ok(ret)
     }
 
@@ -243,6 +262,7 @@ impl ToBytes for HostFunctionCostsV2 {
             + self.upgrade.serialized_length()
             + self.call.serialized_length()
             + self.print.serialized_length()
+            + self.emit.serialized_length()
     }
 }
 
@@ -261,6 +281,7 @@ impl FromBytes for HostFunctionCostsV2 {
         let (upgrade, rem) = FromBytes::from_bytes(rem)?;
         let (call, rem) = FromBytes::from_bytes(rem)?;
         let (print, rem) = FromBytes::from_bytes(rem)?;
+        let (emit, rem) = FromBytes::from_bytes(rem)?;
         Ok((
             HostFunctionCostsV2 {
                 read,
@@ -276,6 +297,7 @@ impl FromBytes for HostFunctionCostsV2 {
                 upgrade,
                 call,
                 print,
+                emit,
             },
             rem,
         ))
@@ -299,6 +321,7 @@ impl Distribution<HostFunctionCostsV2> for Standard {
             upgrade: rng.gen(),
             call: rng.gen(),
             print: rng.gen(),
+            emit: rng.gen(),
         }
     }
 }
@@ -332,6 +355,7 @@ pub mod gens {
             upgrade in host_function_cost_v2_arb(),
             call in host_function_cost_v2_arb(),
             print in host_function_cost_v2_arb(),
+            emit in host_function_cost_v2_arb(),
         ) -> HostFunctionCostsV2 {
             HostFunctionCostsV2 {
                 read,
@@ -347,6 +371,7 @@ pub mod gens {
                 upgrade,
                 call,
                 print,
+                emit,
             }
         }
     }

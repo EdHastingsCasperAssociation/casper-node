@@ -12,13 +12,12 @@ pub use topics::{
 
 use crate::{
     bytesrepr::{self, FromBytes, ToBytes},
-    checksummed_hex, HashAddr,
+    EntityAddr,
 };
 
 use alloc::{string::String, vec::Vec};
 use core::fmt::{Debug, Display, Formatter};
 
-use crate::account::ACCOUNT_HASH_LENGTH;
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
 #[cfg(any(feature = "testing", test))]
@@ -39,7 +38,7 @@ const MESSAGE_ADDR_PREFIX: &str = "message-";
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 pub struct MessageAddr {
     /// The entity addr.
-    hash_addr: HashAddr,
+    entity_addr: EntityAddr,
     /// The hash of the name of the message topic.
     topic_name_hash: TopicNameHash,
     /// The message index.
@@ -49,9 +48,9 @@ pub struct MessageAddr {
 impl MessageAddr {
     /// Constructs a new topic address based on the addressable entity addr and the hash of the
     /// message topic name.
-    pub const fn new_topic_addr(hash_addr: HashAddr, topic_name_hash: TopicNameHash) -> Self {
+    pub const fn new_topic_addr(entity_addr: EntityAddr, topic_name_hash: TopicNameHash) -> Self {
         Self {
-            hash_addr,
+            entity_addr,
             topic_name_hash,
             message_index: None,
         }
@@ -60,12 +59,12 @@ impl MessageAddr {
     /// Constructs a new message address based on the addressable entity addr, the hash of the
     /// message topic name and the message index in the topic.
     pub const fn new_message_addr(
-        hash_addr: HashAddr,
+        entity_addr: EntityAddr,
         topic_name_hash: TopicNameHash,
         message_index: u32,
     ) -> Self {
         Self {
-            hash_addr,
+            entity_addr,
             topic_name_hash,
             message_index: Some(message_index),
         }
@@ -78,7 +77,7 @@ impl MessageAddr {
                 format!(
                     "{}{}-{}-{:x}",
                     MESSAGE_ADDR_PREFIX,
-                    base16::encode_lower(&self.hash_addr),
+                    self.entity_addr,
                     self.topic_name_hash.to_formatted_string(),
                     index,
                 )
@@ -88,7 +87,7 @@ impl MessageAddr {
                     "{}{}{}-{}",
                     MESSAGE_ADDR_PREFIX,
                     TOPIC_FORMATTED_STRING_PREFIX,
-                    base16::encode_lower(&self.hash_addr),
+                    self.entity_addr,
                     self.topic_name_hash.to_formatted_string(),
                 )
             }
@@ -112,25 +111,24 @@ impl MessageAddr {
             }
         };
 
-        let (hash_addr_str, topic_name_hash_str) = remainder
+        let (entity_addr_str, topic_name_hash_str) = remainder
             .rsplit_once('-')
             .ok_or(FromStrError::MissingMessageIndex)?;
 
-        let hash_addr = <[u8; ACCOUNT_HASH_LENGTH]>::try_from(
-            checksummed_hex::decode(hash_addr_str)?.as_ref(),
-        )?;
+        let entity_addr = EntityAddr::from_formatted_str(entity_addr_str)
+            .map_err(FromStrError::EntityAddrParseError)?;
 
         let topic_name_hash = TopicNameHash::from_formatted_str(topic_name_hash_str)?;
         Ok(MessageAddr {
-            hash_addr,
+            entity_addr,
             topic_name_hash,
             message_index,
         })
     }
 
-    /// Returns the hash addr of this message topic.
-    pub fn hash_addr(&self) -> HashAddr {
-        self.hash_addr
+    /// Returns the entity addr of this message topic.
+    pub fn entity_addr(&self) -> EntityAddr {
+        self.entity_addr
     }
 
     /// Returns the topic name hash of this message topic.
@@ -152,18 +150,11 @@ impl Display for MessageAddr {
                 write!(
                     f,
                     "{}-{}-{:x}",
-                    base16::encode_lower(&self.hash_addr),
-                    self.topic_name_hash,
-                    index,
+                    self.entity_addr, self.topic_name_hash, index,
                 )
             }
             None => {
-                write!(
-                    f,
-                    "{}-{}",
-                    base16::encode_lower(&self.hash_addr),
-                    self.topic_name_hash
-                )
+                write!(f, "{}-{}", self.entity_addr, self.topic_name_hash)
             }
         }
     }
@@ -172,14 +163,14 @@ impl Display for MessageAddr {
 impl ToBytes for MessageAddr {
     fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
         let mut buffer = bytesrepr::allocate_buffer(self)?;
-        buffer.append(&mut self.hash_addr.to_bytes()?);
+        buffer.append(&mut self.entity_addr.to_bytes()?);
         buffer.append(&mut self.topic_name_hash.to_bytes()?);
         buffer.append(&mut self.message_index.to_bytes()?);
         Ok(buffer)
     }
 
     fn serialized_length(&self) -> usize {
-        self.hash_addr.serialized_length()
+        self.entity_addr.serialized_length()
             + self.topic_name_hash.serialized_length()
             + self.message_index.serialized_length()
     }
@@ -192,7 +183,7 @@ impl FromBytes for MessageAddr {
         let (message_index, rem) = FromBytes::from_bytes(rem)?;
         Ok((
             MessageAddr {
-                hash_addr: entity_addr,
+                entity_addr,
                 topic_name_hash: topic_hash,
                 message_index,
             },
@@ -205,7 +196,7 @@ impl FromBytes for MessageAddr {
 impl Distribution<MessageAddr> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MessageAddr {
         MessageAddr {
-            hash_addr: rng.gen(),
+            entity_addr: rng.gen(),
             topic_name_hash: rng.gen(),
             message_index: rng.gen(),
         }
@@ -220,12 +211,14 @@ mod tests {
 
     #[test]
     fn serialization_roundtrip() {
-        let topic_addr =
-            MessageAddr::new_topic_addr([1; KEY_HASH_LENGTH], [2; TOPIC_NAME_HASH_LENGTH].into());
+        let topic_addr = MessageAddr::new_topic_addr(
+            EntityAddr::SmartContract([1; KEY_HASH_LENGTH]),
+            [2; TOPIC_NAME_HASH_LENGTH].into(),
+        );
         bytesrepr::test_serialization_roundtrip(&topic_addr);
 
         let message_addr = MessageAddr::new_message_addr(
-            [1; KEY_HASH_LENGTH],
+            EntityAddr::SmartContract([1; KEY_HASH_LENGTH]),
             [2; TOPIC_NAME_HASH_LENGTH].into(),
             3,
         );

@@ -13,9 +13,9 @@ use casper_types::{
     bytesrepr::ToBytes,
     contract_messages::{MessageChecksum, MessagePayload, MessageTopicSummary, TopicNameHash},
     runtime_args, AddressableEntityHash, BlockGlobalAddr, BlockTime, CLValue, CoreConfig, Digest,
-    HostFunction, HostFunctionCostsV1, HostFunctionCostsV2, Key, MessageLimits, OpcodeCosts,
-    RuntimeArgs, StorageCosts, StoredValue, SystemConfig, WasmConfig, WasmV1Config, WasmV2Config,
-    DEFAULT_MAX_STACK_HEIGHT, DEFAULT_WASM_MAX_MEMORY, U512,
+    EntityAddr, HostFunction, HostFunctionCostsV1, HostFunctionCostsV2, Key, MessageLimits,
+    OpcodeCosts, RuntimeArgs, StorageCosts, StoredValue, SystemConfig, WasmConfig, WasmV1Config,
+    WasmV2Config, DEFAULT_MAX_STACK_HEIGHT, DEFAULT_WASM_MAX_MEMORY, U512,
 };
 
 const MESSAGE_EMITTER_INSTALLER_WASM: &str = "contract_messages_emitter.wasm";
@@ -191,7 +191,7 @@ impl<'a> ContractQueryView<'a> {
         let message_topics_result = self
             .builder
             .borrow_mut()
-            .message_topics(None, self.contract_hash.value())
+            .message_topics(None, EntityAddr::SmartContract(self.contract_hash.value()))
             .expect("must get message topics");
 
         message_topics_result
@@ -203,7 +203,10 @@ impl<'a> ContractQueryView<'a> {
             .borrow_mut()
             .query(
                 None,
-                Key::message_topic(self.contract_hash.value(), topic_name_hash),
+                Key::message_topic(
+                    EntityAddr::SmartContract(self.contract_hash.value()),
+                    topic_name_hash,
+                ),
                 &[],
             )
             .expect("should query");
@@ -227,7 +230,11 @@ impl<'a> ContractQueryView<'a> {
     ) -> Result<MessageChecksum, String> {
         let query_result = self.builder.borrow_mut().query(
             state_hash,
-            Key::message(self.contract_hash.value(), topic_name_hash, message_index),
+            Key::message(
+                EntityAddr::SmartContract(self.contract_hash.value()),
+                topic_name_hash,
+                message_index,
+            ),
             &[],
         )?;
 
