@@ -37,6 +37,11 @@ fn main() -> anyhow::Result<()> {
                 features
             )?
         },
+        Command::New {
+            name
+        } => {
+            cli::new::new_impl(&name)?
+        }
     }
     Ok(())
 }

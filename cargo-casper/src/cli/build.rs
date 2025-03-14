@@ -50,13 +50,16 @@ pub fn build_impl(
 
     // Write the schema next to the wasm
     let wasm_file_name = production_wasm_path
+        .with_extension("");
+    
+    let wasm_file_name = wasm_file_name
         .file_name()
         .and_then(|x| x.to_str())
         .context("Failed reading wasm file name")?;
 
     let schema_file_path = production_wasm_path
-        .with_extension("json")
-        .with_file_name(format!("{wasm_file_name}-schema"));
+        .with_file_name(format!("{wasm_file_name}-schema"))
+        .with_extension("json");
 
     std::fs::create_dir_all(&schema_file_path.parent().unwrap())
         .context("Failed creating directory for wasm schema")?;
