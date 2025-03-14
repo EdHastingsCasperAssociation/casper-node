@@ -840,8 +840,6 @@ pub fn execute_finalized_block(
             FeeHandling::PayToProposer => {
                 // in this mode, the consumed gas is paid as a fee to the block proposer
                 let amount = cost.saturating_sub(refund_amount);
-                println!("BBB cost {}", cost);
-                println!("BBB refund_amount {}", refund_amount);
                 let handle_fee_request = HandleFeeRequest::new(
                     native_runtime_config.clone(),
                     state_root_hash,
