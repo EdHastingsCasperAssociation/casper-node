@@ -366,11 +366,8 @@ impl Transaction {
                 .map_err(InvalidTransaction::from),
             Transaction::V1(v1) => {
                 let pricing_mode = v1.pricing_mode();
-                let entry_point = v1
-                    .get_transaction_entry_point()
-                    .map_err(InvalidTransaction::from)?;
                 pricing_mode
-                    .gas_limit(chainspec, &entry_point, lane_id)
+                    .gas_limit(chainspec, lane_id)
                     .map_err(InvalidTransaction::from)
             }
         }
@@ -391,11 +388,8 @@ impl Transaction {
                 .map_err(InvalidTransaction::from),
             Transaction::V1(v1) => {
                 let pricing_mode = v1.pricing_mode();
-                let entry_point = v1
-                    .get_transaction_entry_point()
-                    .map_err(InvalidTransaction::from)?;
                 pricing_mode
-                    .gas_cost(chainspec, &entry_point, lane_id, gas_price)
+                    .gas_cost(chainspec, lane_id, gas_price)
                     .map_err(InvalidTransaction::from)
             }
         }

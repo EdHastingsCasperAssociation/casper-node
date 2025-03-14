@@ -26,7 +26,7 @@ use crate::{
     Digest,
 };
 #[cfg(any(feature = "std", test))]
-use crate::{Chainspec, Gas, Motes, AUCTION_LANE_ID, MINT_LANE_ID, U512};
+use crate::{Chainspec, Gas, Motes};
 
 /// The pricing mode of a [`Transaction`].
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize, Debug)]
@@ -138,86 +138,14 @@ impl PricingMode {
     }
 
     #[cfg(any(feature = "std", test))]
-    fn chainspec_limit(
-        &self,
-        chainspec: &Chainspec,
-        entry_point: &TransactionEntryPoint,
-        lane_id: u8,
-    ) -> Result<Gas, PricingModeError> {
-        let costs = chainspec.system_costs_config;
-        let computation_limit = {
-            if lane_id == MINT_LANE_ID {
-                let amount = match entry_point {
-                    TransactionEntryPoint::Transfer => costs.mint_costs().transfer,
-                    TransactionEntryPoint::Burn => costs.mint_costs().burn,
-                    TransactionEntryPoint::Call => {
-                        return Err(PricingModeError::EntryPointCannotBeCall)
-                    }
-                    TransactionEntryPoint::Custom(_) => {
-                        return Err(PricingModeError::EntryPointCannotBeCustom {
-                            entry_point: entry_point.clone(),
-                        });
-                    }
-                    _ => {
-                        return Err(PricingModeError::UnexpectedEntryPoint {
-                            entry_point: entry_point.clone(),
-                            lane_id,
-                        })
-                    }
-                };
-                amount.into()
-            } else if lane_id == AUCTION_LANE_ID {
-                let amount = match entry_point {
-                    TransactionEntryPoint::AddBid | TransactionEntryPoint::ActivateBid => {
-                        costs.auction_costs().add_bid
-                    }
-                    TransactionEntryPoint::WithdrawBid => costs.auction_costs().withdraw_bid,
-                    TransactionEntryPoint::Delegate => costs.auction_costs().delegate,
-                    TransactionEntryPoint::Undelegate => costs.auction_costs().undelegate,
-                    TransactionEntryPoint::Redelegate => costs.auction_costs().redelegate,
-                    TransactionEntryPoint::ChangeBidPublicKey => {
-                        costs.auction_costs().change_bid_public_key
-                    }
-                    TransactionEntryPoint::AddReservations => {
-                        costs.auction_costs().add_reservations
-                    }
-                    TransactionEntryPoint::CancelReservations => {
-                        costs.auction_costs().cancel_reservations
-                    }
-                    TransactionEntryPoint::Call => {
-                        return Err(PricingModeError::EntryPointCannotBeCall)
-                    }
-                    TransactionEntryPoint::Custom(_) => {
-                        return Err(PricingModeError::EntryPointCannotBeCustom {
-                            entry_point: entry_point.clone(),
-                        });
-                    }
-                    _ => {
-                        return Err(PricingModeError::UnexpectedEntryPoint {
-                            entry_point: entry_point.clone(),
-                            lane_id,
-                        })
-                    }
-                };
-                amount
-            } else {
-                chainspec.get_max_gas_limit_by_category(lane_id)
-            }
-        };
-        Ok(Gas::new(U512::from(computation_limit)))
-    }
-
-    #[cfg(any(feature = "std", test))]
     /// Returns the gas limit.
-    pub fn gas_limit(
-        &self,
-        chainspec: &Chainspec,
-        entry_point: &TransactionEntryPoint,
-        lane_id: u8,
-    ) -> Result<Gas, PricingModeError> {
+    pub fn gas_limit(&self, chainspec: &Chainspec, lane_id: u8) -> Result<Gas, PricingModeError> {
         let gas = match self {
             PricingMode::PaymentLimited { payment_amount, .. } => Gas::new(*payment_amount),
-            PricingMode::Fixed { .. } => self.chainspec_limit(chainspec, entry_point, lane_id)?,
+            PricingMode::Fixed { .. } => {
+                //The lane_id should already include additional_computation_factor in case of wasm
+                Gas::new(chainspec.get_max_gas_limit_by_category(lane_id))
+            }
             PricingMode::Prepaid { receipt } => {
                 return Err(PricingModeError::InvalidPricingMode {
                     price_mode: PricingMode::Prepaid { receipt: *receipt },
@@ -232,11 +160,10 @@ impl PricingMode {
     pub fn gas_cost(
         &self,
         chainspec: &Chainspec,
-        entry_point: &TransactionEntryPoint,
         lane_id: u8,
         gas_price: u8,
     ) -> Result<Motes, PricingModeError> {
-        let gas_limit = self.gas_limit(chainspec, entry_point, lane_id)?;
+        let gas_limit = self.gas_limit(chainspec, lane_id)?;
         let motes = match self {
             PricingMode::PaymentLimited { payment_amount, .. } => {
                 Motes::from_gas(Gas::from(*payment_amount), gas_price)

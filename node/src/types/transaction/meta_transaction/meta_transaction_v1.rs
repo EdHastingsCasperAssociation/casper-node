@@ -547,7 +547,7 @@ impl MetaTransactionV1 {
 
         let gas_limit = self
             .pricing_mode
-            .gas_limit(chainspec, &self.entry_point, self.lane_id)
+            .gas_limit(chainspec, self.lane_id)
             .map_err(Into::<InvalidTransactionV1>::into)?;
         let block_gas_limit = Gas::new(U512::from(transaction_config.block_gas_limit));
         if gas_limit > block_gas_limit {
@@ -766,7 +766,7 @@ impl MetaTransactionV1 {
     /// Returns the gas limit for the transaction.
     pub fn gas_limit(&self, chainspec: &Chainspec) -> Result<Gas, InvalidTransaction> {
         self.pricing_mode()
-            .gas_limit(chainspec, self.entry_point(), self.lane_id)
+            .gas_limit(chainspec, self.lane_id)
             .map_err(Into::into)
     }
 
