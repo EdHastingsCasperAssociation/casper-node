@@ -117,6 +117,12 @@ pub fn build_with_schema_injected(
         .join(built_wasm_path.file_name().unwrap())
         .with_extension(built_wasm_path.extension().unwrap());
 
+    eprintln!("{:?}", &built_wasm_path);
+    eprintln!("{:?}", &production_wasm_path);
+
+    std::fs::create_dir_all(&production_wasm_path.parent().unwrap())
+        .context("Failed creating output directory for the compiled wasm")?;
+
     std::fs::copy(
         &built_wasm_path,
         &production_wasm_path

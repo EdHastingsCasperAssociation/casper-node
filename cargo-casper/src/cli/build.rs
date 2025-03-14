@@ -2,7 +2,7 @@ use std::{io::Cursor, path::PathBuf, process::Command};
 
 use anyhow::Context;
 
-use crate::{injector, CompileJob};
+use crate::{injector, compilation::CompileJob};
 
 /// The `build` subcommand flow.
 pub fn build_impl(
@@ -53,9 +53,14 @@ pub fn build_impl(
         .file_name()
         .and_then(|x| x.to_str())
         .context("Failed reading wasm file name")?;
+
     let schema_file_path = production_wasm_path
         .with_extension("json")
         .with_file_name(format!("{wasm_file_name}-schema"));
+
+    std::fs::create_dir_all(&schema_file_path.parent().unwrap())
+        .context("Failed creating directory for wasm schema")?;
+
     std::fs::write(&schema_file_path, contract_schema)
         .context("Failed writing contract schema")?;
 
