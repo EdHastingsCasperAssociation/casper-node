@@ -796,12 +796,12 @@ dependencies = [
 [[package]]
 name = "casper-executor-wasm-common"
 version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git#e3ed303536163a95197623cf1320461067ea44eb"
+source = "git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8#1d362cd8260b1b862f8d63ab1bd9de2f09da69f2"
 dependencies = [
  "bitflags 2.8.0",
  "blake2 0.10.6",
  "borsh",
- "casper-sdk-sys 0.1.0 (git+https://github.com/casper-network/casper-node.git)",
+ "casper-sdk-sys 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8)",
  "num-derive",
  "num-traits",
  "serde",
@@ -875,11 +875,11 @@ dependencies = [
 [[package]]
 name = "casper-macros"
 version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git#e3ed303536163a95197623cf1320461067ea44eb"
+source = "git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8#1d362cd8260b1b862f8d63ab1bd9de2f09da69f2"
 dependencies = [
  "blake2-rfc",
- "casper-sdk 0.1.0 (git+https://github.com/casper-network/casper-node.git)",
- "casper-sdk-sys 0.1.0 (git+https://github.com/casper-network/casper-node.git)",
+ "casper-executor-wasm-common 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8)",
+ "casper-sdk-sys 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8)",
  "darling",
  "paste",
  "proc-macro2",
@@ -1008,13 +1008,14 @@ dependencies = [
 [[package]]
 name = "casper-sdk"
 version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git#e3ed303536163a95197623cf1320461067ea44eb"
+source = "git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8#1d362cd8260b1b862f8d63ab1bd9de2f09da69f2"
 dependencies = [
  "bitflags 2.8.0",
  "borsh",
  "bytes",
- "casper-executor-wasm-common 0.1.0 (git+https://github.com/casper-network/casper-node.git)",
- "casper-sdk-sys 0.1.0 (git+https://github.com/casper-network/casper-node.git)",
+ "casper-executor-wasm-common 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8)",
+ "casper-macros 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8)",
+ "casper-sdk-sys 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8)",
  "cfg-if 1.0.0",
  "const-fnv1a-hash",
  "impl-trait-for-tuples",
@@ -1047,7 +1048,7 @@ version = "0.1.0"
 [[package]]
 name = "casper-sdk-sys"
 version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git#e3ed303536163a95197623cf1320461067ea44eb"
+source = "git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8#1d362cd8260b1b862f8d63ab1bd9de2f09da69f2"
 
 [[package]]
 name = "casper-storage"
@@ -5284,8 +5285,8 @@ dependencies = [
 name = "schema-inject"
 version = "0.1.0"
 dependencies = [
- "casper-macros 0.1.0 (git+https://github.com/casper-network/casper-node.git)",
- "casper-sdk 0.1.0 (git+https://github.com/casper-network/casper-node.git)",
+ "casper-macros 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8)",
+ "casper-sdk 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=release-2.0.0-rc8)",
 ]
 
 [[package]]

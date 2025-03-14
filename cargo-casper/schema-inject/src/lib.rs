@@ -1,4 +1,4 @@
-use casper_sdk::{casper_executor_wasm_common::flags::ReturnFlags, host::casper_return};
+use casper_sdk::casper_executor_wasm_common::flags::ReturnFlags;
 
 const SCHEMA: &str = r#""{{__CARGO_CASPER_INJECT_SCHEMA_MARKER}}""#;
 
