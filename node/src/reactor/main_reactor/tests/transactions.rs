@@ -1502,9 +1502,9 @@ async fn should_refund_ratio_of_unconsumed_gas_fixed() {
 }
 
 async fn should_not_refund_erroneous_wasm_burn(txn_pricing_mode: PricingMode) {
-    /// if refund handling is set to burn, and an erroneous wasm is processed
-    /// ALL of the spent token is treated as the fee, thus there is no refund, and thus
-    /// nothing is burned.
+    // if refund handling is set to burn, and an erroneous wasm is processed
+    // ALL of the spent token is treated as the fee, thus there is no refund, and thus
+    // nothing is burned.
     let (price_handling, min_gas_price, gas_limit) = match_pricing_mode(&txn_pricing_mode);
 
     let refund_ratio = Ratio::new(1, 2);
