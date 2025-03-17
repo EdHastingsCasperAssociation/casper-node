@@ -137,6 +137,66 @@ impl PricingMode {
         }
     }
 
+    fn mint_gas_limit(
+        &self,
+        chainspec: &Chainspec,
+        entry_point: &TransactionEntryPoint,
+    ) -> Result<Gas, PricingModeError> {
+        let costs = chainspec.system_costs_config;
+        let amount = match entry_point {
+            TransactionEntryPoint::Transfer => costs.mint_costs().transfer,
+            TransactionEntryPoint::Burn => costs.mint_costs().burn,
+            TransactionEntryPoint::Call => return Err(PricingModeError::EntryPointCannotBeCall),
+            TransactionEntryPoint::Custom(_) => {
+                return Err(PricingModeError::EntryPointCannotBeCustom {
+                    entry_point: entry_point.clone(),
+                });
+            }
+            _ => {
+                return Err(PricingModeError::UnexpectedEntryPoint {
+                    entry_point: entry_point.clone(),
+                    lane_id: MINT_LANE_ID,
+                })
+            }
+        };
+        Ok(amount.into())
+    }
+
+    fn auction_gas_limit(
+        &self,
+        chainspec: &Chainspec,
+        entry_point: &TransactionEntryPoint,
+    ) -> Result<Gas, PricingModeError> {
+        let costs = chainspec.system_costs_config;
+        let amount = match entry_point {
+            TransactionEntryPoint::AddBid | TransactionEntryPoint::ActivateBid => {
+                costs.auction_costs().add_bid
+            }
+            TransactionEntryPoint::WithdrawBid => costs.auction_costs().withdraw_bid,
+            TransactionEntryPoint::Delegate => costs.auction_costs().delegate,
+            TransactionEntryPoint::Undelegate => costs.auction_costs().undelegate,
+            TransactionEntryPoint::Redelegate => costs.auction_costs().redelegate,
+            TransactionEntryPoint::ChangeBidPublicKey => {
+                costs.auction_costs().change_bid_public_key
+            }
+            TransactionEntryPoint::AddReservations => costs.auction_costs().add_reservations,
+            TransactionEntryPoint::CancelReservations => costs.auction_costs().cancel_reservations,
+            TransactionEntryPoint::Call => return Err(PricingModeError::EntryPointCannotBeCall),
+            TransactionEntryPoint::Custom(_) => {
+                return Err(PricingModeError::EntryPointCannotBeCustom {
+                    entry_point: entry_point.clone(),
+                });
+            }
+            _ => {
+                return Err(PricingModeError::UnexpectedEntryPoint {
+                    entry_point: entry_point.clone(),
+                    lane_id: AUCTION_LANE_ID,
+                })
+            }
+        };
+        Ok(amount.into())
+    }
+
     #[cfg(any(feature = "std", test))]
     /// Returns the gas limit.
     pub fn gas_limit(
@@ -145,80 +205,30 @@ impl PricingMode {
         entry_point: &TransactionEntryPoint,
         lane_id: u8,
     ) -> Result<Gas, PricingModeError> {
-        let costs = chainspec.system_costs_config;
-        let gas = match self {
-            PricingMode::PaymentLimited { payment_amount, .. } => Gas::new(*payment_amount),
+        match self {
+            PricingMode::PaymentLimited { payment_amount, .. } => {
+                if lane_id == MINT_LANE_ID {
+                    self.mint_gas_limit(chainspec, entry_point)
+                } else if lane_id == AUCTION_LANE_ID {
+                    self.auction_gas_limit(chainspec, entry_point)
+                } else {
+                    Ok(Gas::new(*payment_amount))
+                }
+            }
             PricingMode::Fixed { .. } => {
-                let computation_limit = {
-                    if lane_id == MINT_LANE_ID {
-                        let amount = match entry_point {
-                            TransactionEntryPoint::Transfer => costs.mint_costs().transfer,
-                            TransactionEntryPoint::Burn => costs.mint_costs().burn,
-                            TransactionEntryPoint::Call => {
-                                return Err(PricingModeError::EntryPointCannotBeCall)
-                            }
-                            TransactionEntryPoint::Custom(_) => {
-                                return Err(PricingModeError::EntryPointCannotBeCustom {
-                                    entry_point: entry_point.clone(),
-                                });
-                            }
-                            _ => {
-                                return Err(PricingModeError::UnexpectedEntryPoint {
-                                    entry_point: entry_point.clone(),
-                                    lane_id,
-                                })
-                            }
-                        };
-                        amount.into()
-                    } else if lane_id == AUCTION_LANE_ID {
-                        let amount = match entry_point {
-                            TransactionEntryPoint::AddBid | TransactionEntryPoint::ActivateBid => {
-                                costs.auction_costs().add_bid
-                            }
-                            TransactionEntryPoint::WithdrawBid => {
-                                costs.auction_costs().withdraw_bid
-                            }
-                            TransactionEntryPoint::Delegate => costs.auction_costs().delegate,
-                            TransactionEntryPoint::Undelegate => costs.auction_costs().undelegate,
-                            TransactionEntryPoint::Redelegate => costs.auction_costs().redelegate,
-                            TransactionEntryPoint::ChangeBidPublicKey => {
-                                costs.auction_costs().change_bid_public_key
-                            }
-                            TransactionEntryPoint::AddReservations => {
-                                costs.auction_costs().add_reservations
-                            }
-                            TransactionEntryPoint::CancelReservations => {
-                                costs.auction_costs().cancel_reservations
-                            }
-                            TransactionEntryPoint::Call => {
-                                return Err(PricingModeError::EntryPointCannotBeCall)
-                            }
-                            TransactionEntryPoint::Custom(_) => {
-                                return Err(PricingModeError::EntryPointCannotBeCustom {
-                                    entry_point: entry_point.clone(),
-                                });
-                            }
-                            _ => {
-                                return Err(PricingModeError::UnexpectedEntryPoint {
-                                    entry_point: entry_point.clone(),
-                                    lane_id,
-                                })
-                            }
-                        };
-                        amount
-                    } else {
-                        chainspec.get_max_gas_limit_by_category(lane_id)
-                    }
-                };
-                Gas::new(U512::from(computation_limit))
+                if lane_id == MINT_LANE_ID {
+                    self.mint_gas_limit(chainspec, entry_point)
+                } else if lane_id == AUCTION_LANE_ID {
+                    self.auction_gas_limit(chainspec, entry_point)
+                } else {
+                    let limit = chainspec.get_max_gas_limit_by_category(lane_id);
+                    Ok(Gas::new(U512::from(limit)))
+                }
             }
-            PricingMode::Prepaid { receipt } => {
-                return Err(PricingModeError::InvalidPricingMode {
-                    price_mode: PricingMode::Prepaid { receipt: *receipt },
-                });
-            }
-        };
-        Ok(gas)
+            PricingMode::Prepaid { receipt } => Err(PricingModeError::InvalidPricingMode {
+                price_mode: PricingMode::Prepaid { receipt: *receipt },
+            }),
+        }
     }
 
     #[cfg(any(feature = "std", test))]
@@ -230,14 +240,16 @@ impl PricingMode {
         lane_id: u8,
         gas_price: u8,
     ) -> Result<Motes, PricingModeError> {
-        let gas_limit = self.gas_limit(chainspec, entry_point, lane_id)?;
         let motes = match self {
             PricingMode::PaymentLimited { payment_amount, .. } => {
                 Motes::from_gas(Gas::from(*payment_amount), gas_price)
                     .ok_or(PricingModeError::UnableToCalculateGasCost)?
             }
-            PricingMode::Fixed { .. } => Motes::from_gas(gas_limit, gas_price)
-                .ok_or(PricingModeError::UnableToCalculateGasCost)?,
+            PricingMode::Fixed { .. } => {
+                let gas_limit = self.gas_limit(chainspec, entry_point, lane_id)?;
+                Motes::from_gas(gas_limit, gas_price)
+                    .ok_or(PricingModeError::UnableToCalculateGasCost)?
+            }
             PricingMode::Prepaid { .. } => {
                 Motes::zero() // prepaid
             }
