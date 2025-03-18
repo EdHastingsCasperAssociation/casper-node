@@ -11,9 +11,7 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::BuildSchema { 
-            output,
-            features,
-            ..
+            output
         } => {
             // If user specified an output path, write there.
             // Otherwise print to standard output.
@@ -23,18 +21,16 @@ fn main() -> anyhow::Result<()> {
             };
 
             cli::build_schema::build_schema_impl(
-                &mut schema_writer,
-                features
+                &mut schema_writer
             )?
         },
         Command::Build { 
             output,
-            features,
-            ..
+            embed_schema
         } => {
             cli::build::build_impl(
                 output,
-                features
+                embed_schema.unwrap_or(true)
             )?
         },
         Command::New {

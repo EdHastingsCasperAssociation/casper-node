@@ -133,4 +133,33 @@ impl CompilationResults {
     pub fn artifacts(&self) -> &[PathBuf] {
         &self.artifacts
     }
+
+    /// Consumes self, saving the produced artifacts into the
+    /// specified directory.
+    /// 
+    /// Returns the extracted WASM path.
+    pub fn flush_artifacts_to_dir(
+        self,
+        output_dir: &PathBuf
+    ) -> anyhow::Result<PathBuf> {
+        let built_wasm_path = self
+            .artifacts()
+            .iter()
+            .find(|x| x.extension().unwrap() == "wasm")
+            .context("Failed to locate user wasm")?;
+
+        let production_wasm_path = output_dir
+            .join(built_wasm_path.file_name().unwrap())
+            .with_extension(built_wasm_path.extension().unwrap());
+
+        std::fs::create_dir_all(&production_wasm_path.parent().unwrap())
+            .context("Failed creating output directory for the compiled wasm")?;
+
+        std::fs::copy(
+            &built_wasm_path,
+            &production_wasm_path
+        ).context("Failed moving production wasm to output location")?;
+
+        Ok(production_wasm_path)
+    }
 }

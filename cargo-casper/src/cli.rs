@@ -42,29 +42,24 @@ pub(crate) fn extract_embedded_dir(
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Build the JSON schema of the contract.
     BuildSchema {
+        /// Where should the build artifacts be saved?
         #[arg(short, long)]
         output: Option<PathBuf>,
-        #[command(flatten)]
-        manifest: clap_cargo::Manifest,
-        #[command(flatten)]
-        workspace: clap_cargo::Workspace,
-        #[command(flatten)]
-        features: clap_cargo::Features,
     },
+    /// Build the contract with its JSON schema embedded.
     Build {
+        /// Where should the build artifacts be saved?
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Should the schema be embedded and exposed in the contract? (Default: true)
         #[arg(short, long)]
         embed_schema: Option<bool>,
-        #[command(flatten)]
-        manifest: clap_cargo::Manifest,
-        #[command(flatten)]
-        workspace: clap_cargo::Workspace,
-        #[command(flatten)]
-        features: clap_cargo::Features,
     },
+    /// Creates a new VM2 smart contract project from a template.
     New {
+        /// Name of the project to create
         name: String,
     }
 }

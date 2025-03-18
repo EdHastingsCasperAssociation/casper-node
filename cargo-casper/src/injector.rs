@@ -67,28 +67,12 @@ pub fn build_with_schema_injected(
         schema_lib.to_string_lossy()
     );
 
-    let build_results = user_lib_compilation
+    let production_wasm_path = user_lib_compilation
         .with_rustflags(rustflags)
         .dispatch("wasm32-unknown-unknown", Option::<String>::None)
-        .context("Failed to compile user wasm")?;
-
-    let built_wasm_path = build_results
-        .artifacts()
-        .iter()
-        .find(|x| x.extension().unwrap() == "wasm")
-        .context("Failed to locate user wasm")?;
-
-    let production_wasm_path = production_wasm_output_dir
-        .join(built_wasm_path.file_name().unwrap())
-        .with_extension(built_wasm_path.extension().unwrap());
-
-    std::fs::create_dir_all(&production_wasm_path.parent().unwrap())
-        .context("Failed creating output directory for the compiled wasm")?;
-
-    std::fs::copy(
-        &built_wasm_path,
-        &production_wasm_path
-    ).context("Failed moving production wasm to output location")?;
+        .context("Failed to compile user wasm")?
+        .flush_artifacts_to_dir(production_wasm_output_dir)
+        .context("Failed extracting build artifacts to directory")?;
 
     Ok(production_wasm_path)
 }

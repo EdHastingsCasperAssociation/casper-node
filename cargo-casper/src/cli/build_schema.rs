@@ -44,13 +44,12 @@ unsafe extern "C" fn collect_messages_cb(messages: *const Message, count: usize,
 /// [`Write`] implementer.
 pub fn build_schema_impl<W: Write>(
     output_writer: &mut W,
-    features: clap_cargo::Features
 ) -> Result<(), anyhow::Error> {
     // Compile contract package to a native library with extra code that will
     // produce ABI information including entrypoints, types, etc.
     let compilation = CompileJob::new(
         "./Cargo.toml",
-        Some(features.features.clone()),
+        None,
         Some("-C link-dead-code".into())
     );
 
