@@ -204,6 +204,32 @@ mod tests {
     }
 
     #[test]
+    fn sliding_window_throttle_should_not_count_throttled_requests() {
+        let mut rate_limiter = rate_limiter();
+        let t_1 = 1_u64;
+        let t_2 = 500_u64;
+        let t_3 = 1000_u64;
+        let t_4 = 1400_u64;
+
+        assert_eq!(
+            rate_limiter.internal_throttle(t_1),
+            LimiterResponse::Allowed
+        );
+        assert_eq!(
+            rate_limiter.internal_throttle(t_2),
+            LimiterResponse::Allowed
+        );
+        assert_eq!(
+            rate_limiter.internal_throttle(t_3),
+            LimiterResponse::Throttled
+        );
+        assert_eq!(
+            rate_limiter.internal_throttle(t_4),
+            LimiterResponse::Allowed
+        );
+    }
+
+    #[test]
     fn sliding_window_throttle_should_limit_requests_on_burst() {
         let mut rate_limiter = rate_limiter();
         let t_1 = 10000;
