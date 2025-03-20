@@ -14,8 +14,6 @@ use casper_types::{
 use core::fmt::{self, Debug, Display, Formatter};
 #[cfg(test)]
 use lane_id::calculate_transaction_lane;
-#[cfg(test)]
-use meta_deploy::calculate_lane_id_of_biggest_wasm;
 use meta_deploy::MetaDeploy;
 pub(crate) use meta_transaction_v1::MetaTransactionV1;
 use serde::Serialize;

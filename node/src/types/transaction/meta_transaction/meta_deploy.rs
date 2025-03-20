@@ -5,9 +5,9 @@ use crate::types::transaction::meta_transaction::lane_id::get_lane_for_non_insta
 #[cfg(test)]
 use casper_types::TransactionLaneDefinition;
 use casper_types::{
-    bytesrepr::ToBytes, system::auction::ARG_AMOUNT, CLValue, Deploy, ExecutableDeployItem,
-    GasLimited, InvalidDeploy, InvalidTransaction, Phase, PricingHandling, PricingMode,
-    TransactionV1Config, MINT_LANE_ID, U512,
+    bytesrepr::ToBytes, system::auction::ARG_AMOUNT, Deploy, ExecutableDeployItem, GasLimited,
+    InvalidDeploy, InvalidTransaction, Phase, PricingHandling, PricingMode, TransactionV1Config,
+    MINT_LANE_ID, U512,
 };
 #[derive(Clone, Debug, Serialize, DataSize)]
 pub(crate) struct MetaDeploy {

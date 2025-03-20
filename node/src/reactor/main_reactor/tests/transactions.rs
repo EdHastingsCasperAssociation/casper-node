@@ -5094,7 +5094,7 @@ async fn run_sizing_scenario(sizing_scenario: SizingScenario) {
     let initial_stakes: Vec<U512> =
         vec![alice_stake.into(), bob_stake.into(), charlie_stake.into()];
 
-    let mut secret_keys: Vec<Arc<SecretKey>> = (0..3)
+    let secret_keys: Vec<Arc<SecretKey>> = (0..3)
         .map(|_| Arc::new(SecretKey::random(&mut rng)))
         .collect();
 
@@ -5106,7 +5106,6 @@ async fn run_sizing_scenario(sizing_scenario: SizingScenario) {
 
     let mut fixture = TestFixture::new_with_keys(rng, secret_keys, stakes, None).await;
 
-    let alice_secret_key = Arc::clone(&fixture.node_contexts[0].secret_key);
     fixture
         .run_until_stored_switch_block_header(ERA_ONE, ONE_MIN)
         .await;
@@ -5159,12 +5158,6 @@ async fn run_sizing_scenario(sizing_scenario: SizingScenario) {
                     "amount" =>  U512::from(gas_limit_for_lane_3)
                 },
             };
-
-            let args_length = fixture
-                .chainspec
-                .transaction_config
-                .transaction_v1_config
-                .get_max_args_length(3u8);
 
             let session = ExecutableDeployItem::ModuleBytes {
                 module_bytes: std::fs::read(base_path.join("do_nothing.wasm"))
