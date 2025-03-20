@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::{
     collections::BTreeMap, convert::TryFrom, iter, net::SocketAddr, str::FromStr, sync::Arc,
     time::Duration,
@@ -18,11 +19,11 @@ use casper_storage::{
     global_state::state::{StateProvider, StateReader},
 };
 use casper_types::{
-    execution::{ExecutionResult, TransformV2},
+    execution::{ExecutionResult, ExecutionResultV2, TransformV2},
     system::auction::{DelegationRate, DelegatorKind},
     testing::TestRng,
-    AccountConfig, AccountsConfig, ActivationPoint, AddressableEntityHash, Block, BlockHash,
-    BlockV2, CLValue, Chainspec, ChainspecRawBytes, EraId, Key, Motes, NextUpgrade,
+    AccountConfig, AccountsConfig, ActivationPoint, AddressableEntityHash, Block, BlockBody,
+    BlockHash, BlockV2, CLValue, Chainspec, ChainspecRawBytes, EraId, Key, Motes, NextUpgrade,
     ProtocolVersion, PublicKey, SecretKey, StoredValue, SystemHashRegistry, TimeDiff, Timestamp,
     Transaction, TransactionHash, ValidatorConfig, U512,
 };
@@ -864,5 +865,61 @@ impl TestFixture {
         rng: TestRng,
     ) -> impl futures::Future<Output = (TestingNetwork<FilterReactor<MainReactor>>, TestRng)> {
         self.network.crank_until_stopped(rng)
+    }
+
+    /// Runs the network until all nodes have executed the given transaction and stored the
+    /// execution result.
+    ///
+    /// Panics if the condition isn't met in time.
+    pub(crate) async fn assert_execution_in_lane(
+        &mut self,
+        txn_hash: &TransactionHash,
+        lane_id: u8,
+        within: Duration,
+    ) {
+        self.try_run_until(
+            move |nodes: &Nodes| {
+                nodes.values().all(|runner| {
+                    if runner
+                        .main_reactor()
+                        .storage()
+                        .read_execution_result(txn_hash)
+                        .is_some()
+                    {
+                        let exec_info = runner
+                            .main_reactor()
+                            .storage()
+                            .read_execution_info(*txn_hash);
+
+                        if let Some(exec_info) = exec_info {
+                            if let BlockBody::V2(v2_body) = runner
+                                .main_reactor()
+                                .storage()
+                                .read_block_by_height(exec_info.block_height)
+                                .unwrap()
+                                .take_body()
+                            {
+                                v2_body.transactions_by_lane_id(lane_id).contains(txn_hash)
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                })
+            },
+            within,
+        )
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "should have stored execution result for {} within {} seconds",
+                txn_hash,
+                within.as_secs_f64(),
+            )
+        })
     }
 }

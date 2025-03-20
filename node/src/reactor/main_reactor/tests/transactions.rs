@@ -2129,8 +2129,12 @@ async fn should_gas_hold_fee_erroneous_wasm(txn_pricing_mode: PricingMode) {
     .await;
 
     let txn = invalid_wasm_txn(BOB_SECRET_KEY.clone(), txn_pricing_mode);
-    let meta_transaction =
-        MetaTransaction::from_transaction(&txn, &test.chainspec().transaction_config).unwrap();
+    let meta_transaction = MetaTransaction::from_transaction(
+        &txn,
+        test.chainspec().core_config.pricing_handling,
+        &test.chainspec().transaction_config,
+    )
+    .unwrap();
     // Fixed transaction pricing.
     let expected_consumed_gas = Gas::new(0); // expect that this transaction doesn't consume any gas since it has invalid wasm.
     let expected_transaction_gas = gas_limit.unwrap_or(
@@ -5075,4 +5079,236 @@ async fn should_not_allow_unverified_native_burn() {
     let expected_error = format!("Forged reference: {}", alice_purse);
     assert_eq!(result.error_message, Some(expected_error));
     assert_eq!(result.cost, expected_cost);
+}
+
+enum SizingScenario {
+    Gas,
+    SerializedLength,
+}
+
+async fn run_sizing_scenario(sizing_scenario: SizingScenario) {
+    let mut rng = TestRng::new();
+    let alice_stake = 200_000_000_000_u64;
+    let bob_stake = 300_000_000_000_u64;
+    let charlie_stake = 300_000_000_000_u64;
+    let initial_stakes: Vec<U512> =
+        vec![alice_stake.into(), bob_stake.into(), charlie_stake.into()];
+
+    let mut secret_keys: Vec<Arc<SecretKey>> = (0..3)
+        .map(|_| Arc::new(SecretKey::random(&mut rng)))
+        .collect();
+
+    let stakes = secret_keys
+        .iter()
+        .zip(initial_stakes)
+        .map(|(secret_key, stake)| (PublicKey::from(secret_key.as_ref()), stake))
+        .collect();
+
+    let mut fixture = TestFixture::new_with_keys(rng, secret_keys, stakes, None).await;
+
+    let alice_secret_key = Arc::clone(&fixture.node_contexts[0].secret_key);
+    fixture
+        .run_until_stored_switch_block_header(ERA_ONE, ONE_MIN)
+        .await;
+
+    fixture.run_until_consensus_in_era(ERA_ONE, ONE_MIN).await;
+
+    let base_path = RESOURCES_PATH
+        .parent()
+        .unwrap()
+        .join("target")
+        .join("wasm32-unknown-unknown")
+        .join("release");
+
+    let (payment_1, session_1) = match sizing_scenario {
+        SizingScenario::Gas => {
+            // We create two equally sized deploys, and ensure that they are both
+            // executed in the non largest lane by gas limit.
+            let gas_limit_for_lane_4 = fixture
+                .chainspec
+                .transaction_config
+                .transaction_v1_config
+                .get_max_transaction_gas_limit(4u8);
+
+            let payment = ExecutableDeployItem::ModuleBytes {
+                module_bytes: Bytes::new(),
+                args: runtime_args! {
+                "amount" =>  U512::from(gas_limit_for_lane_4),
+                            },
+            };
+
+            let session = ExecutableDeployItem::ModuleBytes {
+                module_bytes: std::fs::read(base_path.join("do_nothing.wasm"))
+                    .unwrap()
+                    .into(),
+                args: runtime_args! {},
+            };
+
+            (payment, session)
+        }
+        SizingScenario::SerializedLength => {
+            let gas_limit_for_lane_3 = fixture
+                .chainspec
+                .transaction_config
+                .transaction_v1_config
+                .get_max_transaction_gas_limit(3u8);
+
+            let payment = ExecutableDeployItem::ModuleBytes {
+                module_bytes: Bytes::new(),
+                args: runtime_args! {
+                    "amount" =>  U512::from(gas_limit_for_lane_3)
+                },
+            };
+
+            let args_length = fixture
+                .chainspec
+                .transaction_config
+                .transaction_v1_config
+                .get_max_args_length(3u8);
+
+            let session = ExecutableDeployItem::ModuleBytes {
+                module_bytes: std::fs::read(base_path.join("do_nothing.wasm"))
+                    .unwrap()
+                    .into(),
+                args: runtime_args! {},
+            };
+
+            (payment, session)
+        }
+    };
+
+    let timestamp = Timestamp::now();
+    let ttl = TimeDiff::from_seconds(100);
+    let gas_price = 1;
+    let chain_name = fixture.chainspec.network_config.name.clone();
+
+    let transaction_1 = Transaction::Deploy(Deploy::new_signed(
+        timestamp,
+        ttl,
+        gas_price,
+        vec![],
+        chain_name.clone(),
+        payment_1,
+        session_1,
+        &ALICE_SECRET_KEY,
+        Some(ALICE_PUBLIC_KEY.clone()),
+    ));
+
+    let wasm_lanes = fixture
+        .chainspec
+        .transaction_config
+        .transaction_v1_config
+        .wasm_lanes();
+
+    let largest_lane = wasm_lanes
+        .iter()
+        .max_by(|left, right| {
+            left.max_transaction_length
+                .cmp(&right.max_transaction_length)
+        })
+        .map(|definition| definition.id)
+        .expect("must have lane id for largest lane");
+
+    let (payment_2, session_2) = match sizing_scenario {
+        SizingScenario::Gas => {
+            // We create two equally sized deploys, and ensure that they are both
+            // executed in the non largest lane by gas limit.
+            let gas_limit_for_lane_3 = fixture
+                .chainspec
+                .transaction_config
+                .transaction_v1_config
+                .get_max_transaction_gas_limit(3u8);
+
+            let payment = ExecutableDeployItem::ModuleBytes {
+                module_bytes: Bytes::new(),
+                args: runtime_args! {
+                "amount" =>  U512::from(gas_limit_for_lane_3),
+                            },
+            };
+
+            let session = ExecutableDeployItem::ModuleBytes {
+                module_bytes: std::fs::read(base_path.join("do_nothing.wasm"))
+                    .unwrap()
+                    .into(),
+                args: runtime_args! {},
+            };
+
+            (payment, session)
+        }
+        SizingScenario::SerializedLength => {
+            let largest_lane_gas_limit = fixture
+                .chainspec
+                .transaction_config
+                .transaction_v1_config
+                .get_max_transaction_gas_limit(largest_lane);
+
+            let payment = ExecutableDeployItem::ModuleBytes {
+                module_bytes: Bytes::new(),
+                args: runtime_args! {
+                    "amount" =>  U512::from(largest_lane_gas_limit)
+                },
+            };
+
+            let faucet_fund_amount = U512::from(400_000_000_000_000u64);
+
+            let session = ExecutableDeployItem::ModuleBytes {
+                module_bytes: std::fs::read(base_path.join("faucet_stored.wasm"))
+                    .unwrap()
+                    .into(),
+                args: runtime_args! {"id" => 1u64, ARG_AMOUNT => faucet_fund_amount },
+            };
+
+            (payment, session)
+        }
+    };
+
+    let transaction_2 = Transaction::Deploy(Deploy::new_signed(
+        timestamp,
+        ttl,
+        gas_price,
+        vec![],
+        chain_name.clone(),
+        payment_2,
+        session_2,
+        &ALICE_SECRET_KEY,
+        Some(ALICE_PUBLIC_KEY.clone()),
+    ));
+
+    // Both deploys are of roughly equal length but should be sized differently based on
+    // their payment amount.
+
+    let txn_1 = transaction_1.hash();
+    let txn_2 = transaction_2.hash();
+
+    fixture.inject_transaction(transaction_1).await;
+    fixture.inject_transaction(transaction_2).await;
+
+    match sizing_scenario {
+        SizingScenario::Gas => {
+            fixture
+                .assert_execution_in_lane(&txn_1, 4u8, TEN_SECS)
+                .await;
+            fixture
+                .assert_execution_in_lane(&txn_2, 3u8, TEN_SECS)
+                .await;
+        }
+        SizingScenario::SerializedLength => {
+            fixture
+                .assert_execution_in_lane(&txn_1, 3u8, TEN_SECS)
+                .await;
+            fixture
+                .assert_execution_in_lane(&txn_2, largest_lane, TEN_SECS)
+                .await;
+        }
+    }
+}
+
+#[tokio::test]
+async fn should_correctly_assign_wasm_deploys_in_lanes_for_payment_limited_by_gas_limit() {
+    run_sizing_scenario(SizingScenario::Gas).await
+}
+
+#[tokio::test]
+async fn should_correctly_assign_wasm_deploys_in_lanes_for_payment_limited_by_serialized_length() {
+    run_sizing_scenario(SizingScenario::SerializedLength).await
 }

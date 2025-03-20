@@ -426,8 +426,8 @@ impl TransactionV1Config {
             let max_transaction_size = lane.max_transaction_length;
             let max_runtime_args_size = lane.max_transaction_args_length;
             if max_transaction_gas >= gas_limit
-                && max_transaction_size >= transaction_size
-                && max_runtime_args_size >= runtime_args_size
+                && (max_transaction_size >= transaction_size
+                    || max_runtime_args_size >= runtime_args_size)
             {
                 maybe_adequate_lane_index = Some(i);
                 break;

@@ -1,43 +1,77 @@
-use casper_types::{
-    Deploy, ExecutableDeployItem, InvalidDeploy, InvalidTransaction, TransactionLaneDefinition,
-    TransactionV1Config, MINT_LANE_ID,
-};
 use datasize::DataSize;
 use serde::Serialize;
 
+use crate::types::transaction::meta_transaction::lane_id::get_lane_for_non_install_wasm;
+#[cfg(test)]
+use casper_types::TransactionLaneDefinition;
+use casper_types::{
+    bytesrepr::ToBytes, system::auction::ARG_AMOUNT, CLValue, Deploy, ExecutableDeployItem,
+    GasLimited, InvalidDeploy, InvalidTransaction, Phase, PricingHandling, PricingMode,
+    TransactionV1Config, MINT_LANE_ID, U512,
+};
 #[derive(Clone, Debug, Serialize, DataSize)]
 pub(crate) struct MetaDeploy {
     deploy: Deploy,
-    //When a deploy is a WASM we categorize it as "largest wasm possible".
     //We need to keep that id here since we can fetch it only from chainspec.
-    largest_wasm_id: u8,
+    lane_id: u8,
 }
 
 impl MetaDeploy {
     pub(crate) fn from_deploy(
         deploy: Deploy,
+        pricing_handling: PricingHandling,
         config: &TransactionV1Config,
     ) -> Result<Self, InvalidTransaction> {
-        let maybe_biggest_lane_limit = calculate_lane_id_of_biggest_wasm(config.wasm_lanes());
-        if let Some(largest_wasm_id) = maybe_biggest_lane_limit {
-            Ok(MetaDeploy {
+        if deploy.is_transfer() {
+            return Ok(MetaDeploy {
                 deploy,
-                largest_wasm_id,
-            })
-        } else {
-            // Seems like chainspec didn't have any wasm lanes configured
-            Err(InvalidTransaction::Deploy(
-                InvalidDeploy::ChainspecHasNoWasmLanesDefined,
-            ))
+                lane_id: MINT_LANE_ID,
+            });
         }
+
+        let size_estimation = deploy.serialized_length() as u64;
+        let runtime_args_size = (deploy.payment().args().serialized_length()
+            + deploy.session().args().serialized_length()) as u64;
+
+        let gas_price_tolerance = deploy.gas_price_tolerance()?;
+        let pricing_mode = match pricing_handling {
+            PricingHandling::PaymentLimited => {
+                let is_standard_payment = deploy.payment().is_standard_payment(Phase::Payment);
+                let value = deploy
+                    .payment()
+                    .args()
+                    .get(ARG_AMOUNT)
+                    .ok_or(InvalidDeploy::MissingPaymentAmount)?;
+                let payment_amount = value
+                    .clone()
+                    .into_t::<U512>()
+                    .map_err(|_| InvalidDeploy::FailedToParsePaymentAmount)?
+                    .as_u64();
+                PricingMode::PaymentLimited {
+                    payment_amount,
+                    gas_price_tolerance,
+                    standard_payment: is_standard_payment,
+                }
+            }
+            PricingHandling::Fixed => PricingMode::Fixed {
+                gas_price_tolerance,
+                // TODO: Recheck value before switching to fixed.
+                additional_computation_factor: 0,
+            },
+        };
+
+        let lane_id = get_lane_for_non_install_wasm(
+            config,
+            &pricing_mode,
+            size_estimation,
+            runtime_args_size,
+        )?;
+        println!("{lane_id} for {}", deploy.hash());
+        Ok(MetaDeploy { deploy, lane_id })
     }
 
     pub(crate) fn lane_id(&self) -> u8 {
-        if self.deploy.is_transfer() {
-            MINT_LANE_ID
-        } else {
-            self.largest_wasm_id
-        }
+        self.lane_id
     }
 
     pub(crate) fn session(&self) -> &ExecutableDeployItem {
@@ -49,6 +83,7 @@ impl MetaDeploy {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn calculate_lane_id_of_biggest_wasm(
     wasm_lanes: &[TransactionLaneDefinition],
 ) -> Option<u8> {

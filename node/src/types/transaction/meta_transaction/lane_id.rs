@@ -34,8 +34,8 @@ pub(crate) fn calculate_transaction_lane(
         TransactionTarget::Stored { .. } => match entry_point {
             TransactionEntryPoint::Custom(_) => get_lane_for_non_install_wasm(
                 config,
-                size_estimation,
                 pricing_mode,
+                size_estimation,
                 runtime_args_size,
             ),
             TransactionEntryPoint::Call
@@ -66,8 +66,8 @@ pub(crate) fn calculate_transaction_lane(
                 } else {
                     get_lane_for_non_install_wasm(
                         config,
-                        size_estimation,
                         pricing_mode,
+                        size_estimation,
                         runtime_args_size,
                     )
                 }
@@ -100,8 +100,8 @@ pub(crate) fn calculate_transaction_lane(
                 } else {
                     get_lane_for_non_install_wasm(
                         config,
-                        size_estimation,
                         pricing_mode,
+                        size_estimation,
                         runtime_args_size,
                     )
                 }
@@ -125,10 +125,10 @@ pub(crate) fn calculate_transaction_lane(
     }
 }
 
-fn get_lane_for_non_install_wasm(
+pub(crate) fn get_lane_for_non_install_wasm(
     config: &TransactionV1Config,
-    transaction_size: u64,
     pricing_mode: &PricingMode,
+    transaction_size: u64,
     runtime_args_size: u64,
 ) -> Result<u8, InvalidTransactionV1> {
     match pricing_mode {
