@@ -1,4 +1,4 @@
-use std::{ffi::c_void, io::Write, ptr::NonNull};
+use std::{ffi::c_void, io::Write, path::PathBuf, ptr::NonNull};
 
 use anyhow::Context;
 use casper_sdk::{abi_generator::Message, schema::{Schema, SchemaMessage, SchemaType}};
@@ -45,6 +45,7 @@ unsafe extern "C" fn collect_messages_cb(messages: *const Message, count: usize,
 pub fn build_schema_impl<W: Write>(
     output_writer: &mut W,
 ) -> Result<(), anyhow::Error> {
+    eprintln!("Building schema...");
     // Compile contract package to a native library with extra code that will
     // produce ABI information including entrypoints, types, etc.
     let compilation = CompileJob::new(
@@ -57,7 +58,8 @@ pub fn build_schema_impl<W: Write>(
         env!("TARGET"), [
             "casper-sdk/__abi_generator".to_string(),
             "casper-macros/__abi_generator".to_string(),
-        ]
+        ],
+        Option::<PathBuf>::None
     ).context("ABI-rich wasm compilation failure")?;
 
     // Extract ABI information from the built contract

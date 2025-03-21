@@ -4,7 +4,6 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use tempfile::TempDir;
 
 /// Represents a job to compile a Cargo project.
 pub(crate) struct CompileJob<'a> {
@@ -35,30 +34,31 @@ impl<'a> CompileJob<'a> {
     }
 
     /// Dispatches the compilation job. This builds the Cargo project into a temporary target directory.
-    pub fn dispatch<T, I, S>(
+    pub fn dispatch<T, I, S, P>(
         &self,
         target: T,
         extra_features: I,
+        in_dir: Option<P>,
     ) -> Result<CompilationResults>
     where
         T: Into<String>,
         I: IntoIterator<Item = S>,
         S: Into<String>,
+        P: Into<PathBuf>,
     {
         let target: String = target.into();
-        let temp_dir = TempDir::new()
-            .context("Failed to create temporary directory")?;
 
         // Merge the configured features with any extra features
         let mut features = self.features.clone();
         features.extend(extra_features.into_iter().map(Into::into));
         let features_str = features.join(",");
 
-        // Build the argument list
-        let target_dir = temp_dir
-            .path()
+        let target_dir = in_dir
+            .map(|x| x.into())
+            .unwrap_or(PathBuf::from("target"));
+        let target_dir_str = target_dir
             .to_str()
-            .context("Temporary directory path is not valid UTF-8")?;
+            .context("Invalid target dir")?;
 
         let args = [
             "build",
@@ -71,10 +71,8 @@ impl<'a> CompileJob<'a> {
             "--lib",
             "--release",
             "--target-dir",
-            target_dir,
+            target_dir_str
         ];
-
-        eprintln!("Running cargo with args: {:?}", args);
 
         // Get any rustflags from the environment and combine with the additional rustflags
         let env_rustflags = std::env::var("RUSTFLAGS").unwrap_or_default();
@@ -102,7 +100,7 @@ impl<'a> CompileJob<'a> {
 
         // Determine where the build artifacts are located and read them
         // into a vector
-        let artifact_dir = temp_dir.path().join(target).join("release");
+        let artifact_dir = target_dir.join(target).join("release");
         eprintln!("Artifact directory: {:?}", artifact_dir);
 
         let artifacts = std::fs::read_dir(&artifact_dir)
@@ -115,7 +113,6 @@ impl<'a> CompileJob<'a> {
 
         Ok(CompilationResults {
             artifacts,
-            temp_dir: Some(temp_dir),
         })
     }
 }
@@ -123,9 +120,6 @@ impl<'a> CompileJob<'a> {
 /// Results of a compilation job.
 pub(crate) struct CompilationResults {
     artifacts: Vec<PathBuf>,
-    // Keeps the temporary directory alive so that artifacts remain accessible
-    #[allow(dead_code)]
-    temp_dir: Option<TempDir>,
 }
 
 impl CompilationResults {

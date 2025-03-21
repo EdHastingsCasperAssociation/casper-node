@@ -43,6 +43,7 @@ pub fn build_impl(
             &contract_schema,
             &output_dir
         ).context("Failed compiling user wasm with schema")?;
+        eprintln!("Building contract with injected schema...");
 
         // Write the schema next to the wasm
         let wasm_file_name = production_wasm_path
@@ -57,6 +58,9 @@ pub fn build_impl(
             .with_file_name(format!("{wasm_file_name}-schema"))
             .with_extension("json");
 
+        eprintln!("{:?}", &production_wasm_path);
+        eprintln!("{:?}", &schema_file_path);
+
         std::fs::create_dir_all(&schema_file_path.parent().unwrap())
             .context("Failed creating directory for wasm schema")?;
 
@@ -66,14 +70,16 @@ pub fn build_impl(
         production_wasm_path
     } else {
         // Compile and move to specified output directory
+        eprintln!("Building contract...");
         compilation
-            .dispatch("wasm32-unknown-unknown", Option::<String>::None)
+            .dispatch("wasm32-unknown-unknown", Option::<String>::None, Option::<PathBuf>::None)
             .context("Failed to compile user wasm")?
             .flush_artifacts_to_dir(&output_dir)
             .context("Failed extracting build artifacts to directory")?
     };
 
     // Run wasm optimizations passes that will shrink the size of the wasm.
+    eprintln!("Applying optimizations...");
     Command::new("wasm-strip")
         .args(&[&production_wasm_path])
         .spawn()

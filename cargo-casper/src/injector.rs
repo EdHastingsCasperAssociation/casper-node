@@ -52,7 +52,8 @@ pub fn build_with_schema_injected(
 
     let schema_compilation_results = schema_compilation.dispatch(
         "wasm32-unknown-unknown",
-        Option::<String>::None
+        Option::<String>::None,
+        Some(temp_dir.path())
     ).with_context(|| "Failed compiling the schema-inject crate")?;
 
     let schema_lib = schema_compilation_results
@@ -69,7 +70,7 @@ pub fn build_with_schema_injected(
 
     let production_wasm_path = user_lib_compilation
         .with_rustflags(rustflags)
-        .dispatch("wasm32-unknown-unknown", Option::<String>::None)
+        .dispatch("wasm32-unknown-unknown", Option::<String>::None, Option::<PathBuf>::None)
         .context("Failed to compile user wasm")?
         .flush_artifacts_to_dir(production_wasm_output_dir)
         .context("Failed extracting build artifacts to directory")?;

@@ -1,10 +1,12 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 #![cfg_attr(target_arch = "wasm32", no_std)]
 
-use casper_sdk::{casper::print, prelude::*};
+use casper_sdk::prelude::*;
 
 #[casper(contract_state)]
-pub struct Contract;
+pub struct Contract {
+    counter: u64
+}
 
 impl Default for Contract {
     fn default() -> Self {
@@ -16,7 +18,9 @@ impl Default for Contract {
 impl Contract {
     #[casper(constructor)]
     pub fn new() -> Self {
-        Self
+        Self {
+            counter: 0
+        }
     }
 
     #[casper(constructor)]
@@ -24,7 +28,26 @@ impl Contract {
         Self::new()
     }
 
-    pub fn my_entrypoint() {
-        print("Hello, Casper!");
+    pub fn increase(&mut self) {
+        self.counter += 1;
+    }
+
+    pub fn get(&self) -> u64 {
+        self.counter
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_counter() {
+        let mut counter = Contract::new();
+        assert_eq!(counter.get(), 0);
+        counter.increase();
+        assert_eq!(counter.get(), 1);
+        counter.increase();
+        assert_eq!(counter.get(), 2);
     }
 }
