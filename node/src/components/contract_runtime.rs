@@ -627,14 +627,17 @@ impl ContractRuntime {
                 let mut effects = Effects::new();
                 let mut exec_queue = self.exec_queue.clone();
                 let finalized_block_height = executable_block.height;
+                let era_id = executable_block.era_id;
                 let current_pre_state = self.execution_pre_state.lock().unwrap();
                 let next_block_height = current_pre_state.next_block_height();
                 match finalized_block_height.cmp(&next_block_height) {
                     // An old block: it won't be executed:
                     Ordering::Less => {
                         debug!(
+                            %era_id,
                             "ContractRuntime: finalized block({}) precedes expected next block({})",
-                            finalized_block_height, next_block_height
+                            finalized_block_height,
+                            next_block_height,
                         );
                         effects.extend(
                             effect_builder
@@ -645,6 +648,7 @@ impl ContractRuntime {
                     // This is a future block, we store it into exec_queue, to be executed later:
                     Ordering::Greater => {
                         debug!(
+                            %era_id,
                             "ContractRuntime: enqueuing({}) waiting for({})",
                             finalized_block_height, next_block_height
                         );
