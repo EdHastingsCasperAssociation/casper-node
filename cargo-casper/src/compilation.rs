@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use cargo_metadata::MetadataCommand;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -51,6 +52,31 @@ impl<'a> CompileJob<'a> {
     pub fn in_directory(mut self, directory: PathBuf) -> Self {
         self.in_dir = Some(directory);
         self
+    }
+
+    /// Predicts the target directory for this compilation
+    pub fn get_target_directory(&self) -> Option<PathBuf> {
+        let metadata = MetadataCommand::new().exec().ok()?;
+
+        let package = match self.package_name {
+            Some(package_name) => metadata
+                .packages
+                .iter()
+                .find(|p| p.name == package_name)?
+                .manifest_path
+                .to_path_buf(),
+            None => {
+                let manifest_path_target = PathBuf::from("./Cargo.toml").canonicalize().ok()?;
+                metadata
+                    .packages
+                    .iter()
+                    .find(|p| p.manifest_path.canonicalize().unwrap() == manifest_path_target)?
+                    .manifest_path
+                    .to_path_buf()
+            }
+        };
+
+        package.parent().map(|x| x.join("target").into())
     }
 
     /// Dispatches the compilation job. This builds the Cargo project into a temporary target

@@ -17,7 +17,10 @@ pub fn build_with_schema_injected(
 ) -> Result<PathBuf, anyhow::Error> {
     // Compile the schema-inject crate, with the appropriate schema string
     // injected into it.
-    let schema_crate_path = extract_embedded_dir(&PathBuf::from("./target/.schema"), &INJECTED_DIR)
+    let target = user_lib_compilation
+        .get_target_directory()
+        .context("Failed selecting target directory")?;
+    let schema_crate_path = extract_embedded_dir(&target.join(".schema"), &INJECTED_DIR)
         .with_context(|| "Failed extracting the schema-inject crate")?;
 
     let schema_lib_path = schema_crate_path.join("src/lib.rs");
