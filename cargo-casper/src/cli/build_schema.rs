@@ -58,15 +58,16 @@ pub fn build_schema_impl<W: Write>(output_writer: &mut W) -> Result<(), anyhow::
     // In practice, we only care about casper-sdk and casper-macros being used, and there is
     // little to no reason to feature gate them. So this approach should be good enough.
     let dependencies: Vec<String> = {
-        let metadata = MetadataCommand::new()
-            .exec()?;
-            
+        let metadata = MetadataCommand::new().exec()?;
+
         // Find the root package (the one whose manifest path matches our Cargo.toml)
         let manifest_path_target = PathBuf::from("./Cargo.toml").canonicalize()?;
-        let package = metadata.packages.iter().find(|p| {
-            p.manifest_path.canonicalize().unwrap() == manifest_path_target
-        }).context("Root package not found in metadata")?;
-            
+        let package = metadata
+            .packages
+            .iter()
+            .find(|p| p.manifest_path.canonicalize().unwrap() == manifest_path_target)
+            .context("Root package not found in metadata")?;
+
         // Extract the direct dependency names from the package.
         package
             .dependencies
@@ -87,10 +88,7 @@ pub fn build_schema_impl<W: Write>(output_writer: &mut W) -> Result<(), anyhow::
     }
 
     let build_result = compilation
-        .dispatch(
-            env!("TARGET"),
-            &features,
-        )
+        .dispatch(env!("TARGET"), &features)
         .context("ABI-rich wasm compilation failure")?;
 
     // Extract ABI information from the built contract

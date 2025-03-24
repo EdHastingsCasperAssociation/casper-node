@@ -1,5 +1,8 @@
 use std::{
-    ffi::OsStr, io::{BufRead, BufReader}, path::PathBuf, process::{Command, Stdio}
+    ffi::OsStr,
+    io::{BufRead, BufReader},
+    path::PathBuf,
+    process::{Command, Stdio},
 };
 
 use anyhow::{anyhow, Context, Result};
@@ -9,9 +12,7 @@ use serde::Deserialize;
 #[serde(tag = "reason")]
 enum CargoMessage {
     #[serde(rename = "compiler-artifact")]
-    CompilerArtifact {
-        filenames: Vec<String>,
-    },
+    CompilerArtifact { filenames: Vec<String> },
     #[serde(other)]
     Other,
 }
@@ -103,7 +104,8 @@ impl<'a> CompileJob<'a> {
                         if path
                             .parent()
                             .and_then(|p| p.file_name())
-                            .and_then(OsStr::to_str) != Some("deps")
+                            .and_then(OsStr::to_str)
+                            != Some("deps")
                         {
                             artifacts.push(PathBuf::from(artifact));
                         }
