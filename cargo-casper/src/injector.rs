@@ -30,8 +30,7 @@ pub fn build_with_schema_injected(
     std::fs::write(&schema_lib_path, schema_lib_contents)
         .with_context(|| "Failed writing to schema-inject's lib.rs")?;
 
-    let schema_manifest = schema_crate_path.join("Cargo.toml");
-    let schema_compilation = CompileJob::new(schema_manifest.to_str().unwrap(), None, None);
+    let schema_compilation = CompileJob::new(None, None, None).in_directory(schema_crate_path);
 
     let schema_compilation_results = schema_compilation
         .dispatch("wasm32-unknown-unknown", Option::<String>::None)

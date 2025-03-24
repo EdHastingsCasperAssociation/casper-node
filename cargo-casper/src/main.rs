@@ -1,6 +1,5 @@
 use std::{fs::File, io::Write};
 
-use anyhow::Context;
 use clap::Parser;
 use cli::{Cli, Command};
 
@@ -20,10 +19,7 @@ fn main() -> anyhow::Result<()> {
             };
 
             // Select the package to build
-            let package_name = workspace
-                .package
-                .first()
-                .context("Failed selecting package to compile")?;
+            let package_name = workspace.package.first().map(|x| x.as_str());
 
             cli::build_schema::build_schema_impl(package_name, &mut schema_writer)?
         }
@@ -33,10 +29,7 @@ fn main() -> anyhow::Result<()> {
             workspace,
         } => {
             // Select the package to build
-            let package_name = workspace
-                .package
-                .first()
-                .context("Failed selecting package to compile")?;
+            let package_name = workspace.package.first().map(|x| x.as_str());
 
             cli::build::build_impl(package_name, output, embed_schema.unwrap_or(true))?
         }

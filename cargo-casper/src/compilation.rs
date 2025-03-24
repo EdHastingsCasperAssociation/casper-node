@@ -19,16 +19,17 @@ enum CargoMessage {
 
 /// Represents a job to compile a Cargo project.
 pub(crate) struct CompileJob<'a> {
-    package_name: &'a str,
+    package_name: Option<&'a str>,
     features: Vec<String>,
     rustflags: Option<String>,
+    in_dir: Option<PathBuf>,
 }
 
 impl<'a> CompileJob<'a> {
     /// Creates a new compile job with the given manifest path, optional features,
     /// and optional *additional* rustflags.
     pub fn new(
-        package_name: &'a str,
+        package_name: Option<&'a str>,
         features: Option<Vec<String>>,
         rustflags: Option<String>,
     ) -> Self {
@@ -36,12 +37,19 @@ impl<'a> CompileJob<'a> {
             package_name,
             features: features.unwrap_or_default(),
             rustflags,
+            in_dir: None,
         }
     }
 
     /// Adds or replaces the additional rustflags for the compilation.
     pub fn with_rustflags(mut self, rustflags: String) -> Self {
         self.rustflags = Some(rustflags);
+        self
+    }
+
+    /// Adds or replaces the directory within which this job is executed.
+    pub fn in_directory(mut self, directory: PathBuf) -> Self {
+        self.in_dir = Some(directory);
         self
     }
 
@@ -60,10 +68,14 @@ impl<'a> CompileJob<'a> {
         features.extend(extra_features.into_iter().map(Into::into));
         let features_str = features.join(",");
 
-        let build_args = [
-            "build",
-            "-p",
-            self.package_name,
+        let mut build_args = vec!["build"];
+
+        if let Some(package_name) = self.package_name {
+            build_args.push("-p");
+            build_args.push(&package_name);
+        }
+
+        build_args.extend_from_slice(&[
             "--target",
             target.as_str(),
             "--features",
@@ -71,7 +83,7 @@ impl<'a> CompileJob<'a> {
             "--lib",
             "--release",
             "--message-format=json",
-        ];
+        ]);
 
         // Get any rustflags from the environment and combine with the additional rustflags
         let env_rustflags = std::env::var("RUSTFLAGS").unwrap_or_default();
@@ -83,13 +95,17 @@ impl<'a> CompileJob<'a> {
         };
 
         // Run the cargo build command and capture the output
-        let mut handle = Command::new("cargo")
-            .args(&build_args)
-            .env("RUSTFLAGS", rustflags)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("Failed spawning child process")?;
+        let mut command = Command::new("cargo");
+        command.args(&build_args);
+        command.env("RUSTFLAGS", rustflags);
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+
+        if let Some(in_directory) = &self.in_dir {
+            command.current_dir(in_directory);
+        }
+
+        let mut handle = command.spawn().context("Failed spawning child process")?;
 
         let stdout = handle.stdout.take().unwrap();
         let reader = BufReader::new(stdout);

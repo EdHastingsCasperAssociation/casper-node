@@ -5,7 +5,11 @@ use anyhow::Context;
 use crate::{compilation::CompileJob, injector};
 
 /// The `build` subcommand flow.
-pub fn build_impl(package_name: &str, output_dir: Option<PathBuf>, embed_schema: bool) -> Result<(), anyhow::Error> {
+pub fn build_impl(
+    package_name: Option<&str>,
+    output_dir: Option<PathBuf>,
+    embed_schema: bool,
+) -> Result<(), anyhow::Error> {
     // Build the contract package targetting wasm32-unknown-unknown without
     // extra feature flags - this is the production contract wasm file.
     //
