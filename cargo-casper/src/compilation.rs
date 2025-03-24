@@ -1,9 +1,20 @@
 use std::{
-    path::PathBuf,
-    process::{Command, Stdio},
+    ffi::OsStr, io::{BufRead, BufReader}, path::PathBuf, process::{Command, Stdio}
 };
 
 use anyhow::{anyhow, Context, Result};
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+#[serde(tag = "reason")]
+enum CargoMessage {
+    #[serde(rename = "compiler-artifact")]
+    CompilerArtifact {
+        filenames: Vec<String>,
+    },
+    #[serde(other)]
+    Other,
+}
 
 /// Represents a job to compile a Cargo project.
 pub(crate) struct CompileJob<'a> {
@@ -58,8 +69,7 @@ impl<'a> CompileJob<'a> {
             &features_str,
             "--lib",
             "--release",
-            "--target-dir",
-            "target",
+            "--message-format=json",
         ];
 
         // Get any rustflags from the environment and combine with the additional rustflags
@@ -72,13 +82,35 @@ impl<'a> CompileJob<'a> {
         };
 
         // Run the cargo build command and capture the output
-        let handle = Command::new("cargo")
+        let mut handle = Command::new("cargo")
             .args(&build_args)
             .env("RUSTFLAGS", rustflags)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .context("Failed spawning child process")?;
+
+        let stdout = handle.stdout.take().unwrap();
+        let reader = BufReader::new(stdout);
+
+        let mut artifacts = Vec::new();
+        for line in reader.lines() {
+            let line = line?;
+            if let Ok(msg) = serde_json::from_str::<CargoMessage>(&line) {
+                if let CargoMessage::CompilerArtifact { filenames } = msg {
+                    for artifact in &filenames {
+                        let path = PathBuf::from(artifact);
+                        if path
+                            .parent()
+                            .and_then(|p| p.file_name())
+                            .and_then(OsStr::to_str) != Some("deps")
+                        {
+                            artifacts.push(PathBuf::from(artifact));
+                        }
+                    }
+                }
+            }
+        }
 
         let output = handle
             .wait_with_output()
@@ -91,18 +123,6 @@ impl<'a> CompileJob<'a> {
                 String::from_utf8_lossy(&output.stdout)
             ));
         }
-
-        // Determine where the build artifacts are located and read them
-        // into a vector
-        let artifact_dir = PathBuf::from("./target").join(target).join("release");
-
-        let artifacts = std::fs::read_dir(&artifact_dir)
-            .with_context(|| format!("Failed to read artifact directory: {:?}", artifact_dir))?
-            .filter_map(|entry| match entry {
-                Ok(entry) if entry.path().is_file() => Some(entry.path()),
-                _ => None,
-            })
-            .collect();
 
         Ok(CompilationResults { artifacts })
     }

@@ -1,6 +1,7 @@
-use std::{ffi::c_void, io::Write, ptr::NonNull};
+use std::{ffi::c_void, io::Write, path::PathBuf, ptr::NonNull};
 
 use anyhow::Context;
+use cargo_metadata::MetadataCommand;
 use casper_sdk::{
     abi_generator::Message,
     schema::{Schema, SchemaMessage, SchemaType},
@@ -51,13 +52,44 @@ pub fn build_schema_impl<W: Write>(output_writer: &mut W) -> Result<(), anyhow::
     eprintln!("Building contract schema...");
     let compilation = CompileJob::new("./Cargo.toml", None, Some("-C link-dead-code".into()));
 
+    // Get all of the direct user contract dependencies.
+    //
+    // This is a naive approach -- if a dep is feature gated, it won't be resolved correctly.
+    // In practice, we only care about casper-sdk and casper-macros being used, and there is
+    // little to no reason to feature gate them. So this approach should be good enough.
+    let dependencies: Vec<String> = {
+        let metadata = MetadataCommand::new()
+            .exec()?;
+            
+        // Find the root package (the one whose manifest path matches our Cargo.toml)
+        let manifest_path_target = PathBuf::from("./Cargo.toml").canonicalize()?;
+        let package = metadata.packages.iter().find(|p| {
+            p.manifest_path.canonicalize().unwrap() == manifest_path_target
+        }).context("Root package not found in metadata")?;
+            
+        // Extract the direct dependency names from the package.
+        package
+            .dependencies
+            .iter()
+            .map(|dep| dep.name.clone())
+            .collect()
+    };
+
+    // Determine extra features based on the dependencies detected
+    let mut features = Vec::new();
+
+    if dependencies.contains(&"casper-sdk".into()) {
+        features.push("casper-sdk/__abi_generator".to_owned());
+    }
+
+    if dependencies.contains(&"casper-macros".into()) {
+        features.push("casper-macros/__abi_generator".to_owned());
+    }
+
     let build_result = compilation
         .dispatch(
             env!("TARGET"),
-            [
-                "casper-sdk/__abi_generator".to_string(),
-                "casper-macros/__abi_generator".to_string(),
-            ],
+            &features,
         )
         .context("ABI-rich wasm compilation failure")?;
 
