@@ -1,4 +1,7 @@
-use std::{io, path::{Path, PathBuf}};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 use clap::Subcommand;
 use include_dir::{Dir, DirEntry};
@@ -11,7 +14,7 @@ pub mod new;
 fn extract_dir(dir: &Dir, target: &Path) -> io::Result<()> {
     // Ensure the target directory exists.
     std::fs::create_dir_all(target)?;
-    
+
     // Iterate over each entry in the directory.
     for entry in dir.entries() {
         match entry {
@@ -34,7 +37,7 @@ fn extract_dir(dir: &Dir, target: &Path) -> io::Result<()> {
 /// Returns the path to the extracted dir.
 pub(crate) fn extract_embedded_dir(
     extract_to: &Path,
-    virtual_dir: &Dir
+    virtual_dir: &Dir,
 ) -> std::io::Result<PathBuf> {
     extract_dir(virtual_dir, &extract_to)?;
     Ok(extract_to.into())
@@ -61,7 +64,7 @@ pub(crate) enum Command {
     New {
         /// Name of the project to create
         name: String,
-    }
+    },
 }
 
 #[derive(Debug, clap::Parser)]

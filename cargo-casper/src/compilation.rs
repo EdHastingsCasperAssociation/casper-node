@@ -1,5 +1,6 @@
 use std::{
-    io::{BufRead, BufReader, Read}, path::PathBuf, process::{Command, Stdio}
+    path::PathBuf,
+    process::{Command, Stdio},
 };
 
 use anyhow::{anyhow, Context, Result};
@@ -32,12 +33,9 @@ impl<'a> CompileJob<'a> {
         self
     }
 
-    /// Dispatches the compilation job. This builds the Cargo project into a temporary target directory.
-    pub fn dispatch<T, I, S>(
-        &self,
-        target: T,
-        extra_features: I,
-    ) -> Result<CompilationResults>
+    /// Dispatches the compilation job. This builds the Cargo project into a temporary target
+    /// directory.
+    pub fn dispatch<T, I, S>(&self, target: T, extra_features: I) -> Result<CompilationResults>
     where
         T: Into<String>,
         I: IntoIterator<Item = S>,
@@ -106,9 +104,7 @@ impl<'a> CompileJob<'a> {
             })
             .collect();
 
-        Ok(CompilationResults {
-            artifacts,
-        })
+        Ok(CompilationResults { artifacts })
     }
 }
 

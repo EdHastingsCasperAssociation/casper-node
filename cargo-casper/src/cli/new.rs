@@ -8,9 +8,7 @@ static TEMPLATE_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/project-template");
 const TEMPLATE_NAME_MARKER: &str = "project-template";
 
 /// The `new` subcommand flow.
-pub fn new_impl(
-    name: &str,
-) -> Result<(), anyhow::Error> {
+pub fn new_impl(name: &str) -> Result<(), anyhow::Error> {
     let name = name
         .trim()
         .to_lowercase()
@@ -18,10 +16,8 @@ pub fn new_impl(
         .collect::<Vec<_>>()
         .join("-");
 
-    let template_dir = super::extract_embedded_dir(
-        &PathBuf::from(&name),
-        &TEMPLATE_DIR
-    ).context("Failed extracting template directory")?;
+    let template_dir = super::extract_embedded_dir(&PathBuf::from(&name), &TEMPLATE_DIR)
+        .context("Failed extracting template directory")?;
 
     let toml_path = template_dir.join("Cargo.toml");
 
@@ -29,8 +25,7 @@ pub fn new_impl(
         .context("Failed reading template Cargo.toml file")?
         .replace(TEMPLATE_NAME_MARKER, &name);
 
-    std::fs::write(toml_path, toml_content)
-        .context("Failed updating template Cargo.toml file")?;
+    std::fs::write(toml_path, toml_content).context("Failed updating template Cargo.toml file")?;
 
     Ok(())
 }

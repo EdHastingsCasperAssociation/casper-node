@@ -5,7 +5,7 @@ use casper_sdk::prelude::*;
 
 #[casper(contract_state)]
 pub struct Contract {
-    counter: u64
+    counter: u64,
 }
 
 impl Default for Contract {
@@ -18,9 +18,7 @@ impl Default for Contract {
 impl Contract {
     #[casper(constructor)]
     pub fn new() -> Self {
-        Self {
-            counter: 0
-        }
+        Self { counter: 0 }
     }
 
     #[casper(constructor)]

@@ -2,45 +2,35 @@ use std::{io::Cursor, path::PathBuf, process::Command};
 
 use anyhow::Context;
 
-use crate::{injector, compilation::CompileJob};
+use crate::{compilation::CompileJob, injector};
 
 /// The `build` subcommand flow.
-pub fn build_impl(
-    output_dir: Option<PathBuf>,
-    embed_schema: bool,
-) -> Result<(), anyhow::Error> {
+pub fn build_impl(output_dir: Option<PathBuf>, embed_schema: bool) -> Result<(), anyhow::Error> {
     // Build the contract package targetting wasm32-unknown-unknown without
     // extra feature flags - this is the production contract wasm file.
     //
     // Optionally (but by default) create an entrypoint in the wasm that will have
     // embedded schema JSON file for discoverability (aka internal schema).
-    let compilation = CompileJob::new(
-        "./Cargo.toml",
-        None,
-        None
-    );
+    let compilation = CompileJob::new("./Cargo.toml", None, None);
 
     // Build the contract with or without the schema.
     let production_wasm_path = if embed_schema {
         // Build the schema first
         let mut buffer = Cursor::new(Vec::new());
-        super::build_schema::build_schema_impl(
-            &mut buffer,
-        ).context("Failed to build contract schema")?;
-    
-        let contract_schema = String::from_utf8(buffer.into_inner())
-            .context("Failed to read contract schema")?;
+        super::build_schema::build_schema_impl(&mut buffer)
+            .context("Failed to build contract schema")?;
+
+        let contract_schema =
+            String::from_utf8(buffer.into_inner()).context("Failed to read contract schema")?;
 
         // Build the contract with above schema injected
         eprintln!("Building contract with schema injected...");
-        let production_wasm_path = injector::build_with_schema_injected(
-            compilation,
-            &contract_schema,
-        ).context("Failed compiling user wasm with schema")?;
+        let production_wasm_path =
+            injector::build_with_schema_injected(compilation, &contract_schema)
+                .context("Failed compiling user wasm with schema")?;
 
         // Write the schema next to the wasm
-        let schema_file_path = production_wasm_path
-            .with_extension("json");
+        let schema_file_path = production_wasm_path.with_extension("json");
 
         std::fs::create_dir_all(&schema_file_path.parent().unwrap())
             .context("Failed creating directory for wasm schema")?;
@@ -71,7 +61,9 @@ pub fn build_impl(
     let mut out_schema_path = None;
 
     if let Some(output_dir) = output_dir {
-        out_wasm_path = output_dir.join(out_wasm_path.file_stem().unwrap()).join("wasm");
+        out_wasm_path = output_dir
+            .join(out_wasm_path.file_stem().unwrap())
+            .with_extension("wasm");
         std::fs::copy(&production_wasm_path, &out_wasm_path)
             .context("Couldn't write to the specified output directory.")?;
     }

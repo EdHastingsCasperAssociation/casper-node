@@ -2,8 +2,7 @@ use anyhow::Context;
 use include_dir::{include_dir, Dir};
 use std::path::PathBuf;
 
-use crate::cli::extract_embedded_dir;
-use crate::compilation::CompileJob;
+use crate::{cli::extract_embedded_dir, compilation::CompileJob};
 
 // Embed the entire "injected" directory into the binary.
 static INJECTED_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/schema-inject");
@@ -18,36 +17,25 @@ pub fn build_with_schema_injected(
 ) -> Result<PathBuf, anyhow::Error> {
     // Compile the schema-inject crate, with the appropriate schema string
     // injected into it.
-    let schema_crate_path = extract_embedded_dir(
-        &PathBuf::from("./target/.schema"),
-        &INJECTED_DIR,
-    ).with_context(|| "Failed extracting the schema-inject crate")?;
+    let schema_crate_path = extract_embedded_dir(&PathBuf::from("./target/.schema"), &INJECTED_DIR)
+        .with_context(|| "Failed extracting the schema-inject crate")?;
 
-    let schema_lib_path = schema_crate_path
-        .join("src/lib.rs");
+    let schema_lib_path = schema_crate_path.join("src/lib.rs");
 
     let mut schema_lib_contents = std::fs::read_to_string(&schema_lib_path)
         .with_context(|| "Failed reading schema-inject's lib.rs")?;
 
-    schema_lib_contents = schema_lib_contents.replace(
-        INJECT_SCHEMA_MARKER,
-        schema
-    );
+    schema_lib_contents = schema_lib_contents.replace(INJECT_SCHEMA_MARKER, schema);
 
     std::fs::write(&schema_lib_path, schema_lib_contents)
         .with_context(|| "Failed writing to schema-inject's lib.rs")?;
 
     let schema_manifest = schema_crate_path.join("Cargo.toml");
-    let schema_compilation = CompileJob::new(
-        schema_manifest.to_str().unwrap(),
-        None,
-        None
-    );
+    let schema_compilation = CompileJob::new(schema_manifest.to_str().unwrap(), None, None);
 
-    let schema_compilation_results = schema_compilation.dispatch(
-        "wasm32-unknown-unknown",
-        Option::<String>::None,
-    ).with_context(|| "Failed compiling the schema-inject crate")?;
+    let schema_compilation_results = schema_compilation
+        .dispatch("wasm32-unknown-unknown", Option::<String>::None)
+        .with_context(|| "Failed compiling the schema-inject crate")?;
 
     let schema_lib = schema_compilation_results
         .artifacts()
