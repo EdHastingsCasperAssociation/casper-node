@@ -113,8 +113,11 @@ impl TransactionAcceptor {
         debug!(%source, %input_transaction, "checking transaction before accepting");
         let verification_start_timestamp = Timestamp::now();
         let transaction_config = &self.chainspec.as_ref().transaction_config;
-        let maybe_meta_transaction =
-            MetaTransaction::from_transaction(&input_transaction, transaction_config);
+        let maybe_meta_transaction = MetaTransaction::from_transaction(
+            &input_transaction,
+            self.chainspec.as_ref().core_config.pricing_handling,
+            transaction_config,
+        );
         let meta_transaction = match maybe_meta_transaction {
             Ok(transaction) => transaction,
             Err(err) => {

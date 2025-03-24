@@ -1240,8 +1240,12 @@ fn inject_balance_check_for_peer(
     let txn = txn.clone();
     let block = TestBlockBuilder::new().build(rng);
     let block_header = Box::new(block.header().clone().into());
-    let meta_transaction =
-        MetaTransaction::from_transaction(&txn, &chainspec.transaction_config).unwrap();
+    let meta_transaction = MetaTransaction::from_transaction(
+        &txn,
+        chainspec.core_config.pricing_handling,
+        &chainspec.transaction_config,
+    )
+    .unwrap();
     |effect_builder: EffectBuilder<Event>| {
         let event_metadata = Box::new(EventMetadata::new(
             txn,
@@ -2738,8 +2742,8 @@ async fn should_reject_deploy_with_payment_amount_larger_than_max_wasm_lane_limi
     let result = run_transaction_acceptor(TestScenario::WasmDeployWithTooBigPayment).await;
     assert!(matches!(
         result,
-        Err(super::Error::InvalidTransaction(
-            InvalidTransaction::Deploy(InvalidDeploy::ExceededWasmLaneGasLimit { .. })
-        ))
-    ))
+        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
+            InvalidTransactionV1::NoWasmLaneMatchesTransaction()
+        )))
+    ));
 }
