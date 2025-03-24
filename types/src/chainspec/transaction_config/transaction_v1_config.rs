@@ -167,7 +167,8 @@ pub struct TransactionV1Config {
         data_size(skip)
     )]
     #[cfg(any(feature = "once_cell", test))]
-    wasm_lanes_ordered_by_transaction_gas_limit: OnceCell<Vec<TransactionLaneDefinition>>,
+    wasm_lanes_ordered_by_transaction_gas_limit_transaction_size_args_length:
+        OnceCell<Vec<TransactionLaneDefinition>>,
 }
 
 impl PartialEq for TransactionV1Config {
@@ -181,7 +182,7 @@ impl PartialEq for TransactionV1Config {
             #[cfg(any(feature = "once_cell", test))]
                 wasm_lanes_ordered_by_transaction_size: _,
             #[cfg(any(feature = "once_cell", test))]
-                wasm_lanes_ordered_by_transaction_gas_limit: _,
+                wasm_lanes_ordered_by_transaction_gas_limit_transaction_size_args_length: _,
         } = self;
         *native_mint_lane == other.native_mint_lane
             && *native_auction_lane == other.native_auction_lane
@@ -203,9 +204,8 @@ impl TransactionV1Config {
             Self::build_wasm_lanes_ordered_by_transaction_size(wasm_lanes.clone()),
         );
         #[cfg(any(feature = "once_cell", test))]
-        let wasm_lanes_ordered_by_transaction_gas_limit = OnceCell::with_value(
-            Self::build_wasm_lanes_ordered_by_transaction_gas_limit(wasm_lanes.clone()),
-        );
+        let wasm_lanes_ordered_by_transaction_gas_limit =
+            OnceCell::with_value(Self::build_wasm_lanes_ordered(wasm_lanes.clone()));
         TransactionV1Config {
             native_mint_lane,
             native_auction_lane,
@@ -214,7 +214,8 @@ impl TransactionV1Config {
             #[cfg(any(feature = "once_cell", test))]
             wasm_lanes_ordered_by_transaction_size,
             #[cfg(any(feature = "once_cell", test))]
-            wasm_lanes_ordered_by_transaction_gas_limit,
+            wasm_lanes_ordered_by_transaction_gas_limit_transaction_size_args_length:
+                wasm_lanes_ordered_by_transaction_gas_limit,
         }
     }
 
@@ -406,7 +407,7 @@ impl TransactionV1Config {
     }
 
     pub fn get_max_payment_limit_for_wasm(&self) -> u64 {
-        self.get_wasm_lanes_ordered_by_gas_limit()
+        self.get_wasm_lanes_ordered()
             .iter()
             .map(|lane_def| lane_def.max_transaction_gas_limit)
             .max()
@@ -420,14 +421,14 @@ impl TransactionV1Config {
         runtime_args_size: u64,
     ) -> Option<u8> {
         let mut maybe_adequate_lane_index = None;
-        let lanes = self.get_wasm_lanes_ordered_by_gas_limit();
+        let lanes = self.get_wasm_lanes_ordered();
         for (i, lane) in lanes.iter().enumerate() {
             let max_transaction_gas = lane.max_transaction_gas_limit;
             let max_transaction_size = lane.max_transaction_length;
             let max_runtime_args_size = lane.max_transaction_args_length;
-            if max_transaction_gas >= gas_limit
-                && (max_transaction_size >= transaction_size
-                    || max_runtime_args_size >= runtime_args_size)
+            if gas_limit <= max_transaction_gas
+                && transaction_size <= max_transaction_size
+                && runtime_args_size <= max_runtime_args_size
             {
                 maybe_adequate_lane_index = Some(i);
                 break;
@@ -450,23 +451,31 @@ impl TransactionV1Config {
     #[allow(unreachable_code)]
     //We're allowing unreachable code here because there's a possibility that someone might
     // want to use the types crate without once_cell
-    fn get_wasm_lanes_ordered_by_gas_limit(&self) -> &Vec<TransactionLaneDefinition> {
+    // This function will take the wasm lanes odered by:
+    //   - firstly gas limit
+    //   - secondly max_transaction_length
+    //   - thirdly max runtime args
+    //   - fourthly lane id (this has no "business" value, but it ensures that the ordering
+    //        is always reproducible since ids should be unique)
+    fn get_wasm_lanes_ordered(&self) -> &Vec<TransactionLaneDefinition> {
         #[cfg(any(feature = "once_cell", test))]
         return self
-            .wasm_lanes_ordered_by_transaction_gas_limit
-            .get_or_init(|| {
-                Self::build_wasm_lanes_ordered_by_transaction_gas_limit(self.wasm_lanes.clone())
-            });
-        &Self::build_wasm_lanes_ordered_by_transaction_gas_limit(self.wasm_lanes.clone())
+            .wasm_lanes_ordered_by_transaction_gas_limit_transaction_size_args_length
+            .get_or_init(|| Self::build_wasm_lanes_ordered(self.wasm_lanes.clone()));
+        &Self::build_wasm_lanes_ordered(self.wasm_lanes.clone())
     }
 
-    fn build_wasm_lanes_ordered_by_transaction_gas_limit(
+    fn build_wasm_lanes_ordered(
         wasm_lanes: Vec<TransactionLaneDefinition>,
     ) -> Vec<TransactionLaneDefinition> {
         let mut ordered = wasm_lanes;
-        ordered.sort_by(|a, b| {
-            a.max_transaction_gas_limit
-                .cmp(&b.max_transaction_gas_limit)
+        ordered.sort_by_key(|item| {
+            (
+                item.max_transaction_gas_limit,
+                item.max_transaction_length,
+                item.max_transaction_args_length,
+                item.id,
+            )
         });
         ordered
     }
@@ -492,10 +501,9 @@ impl TransactionV1Config {
                 Self::build_wasm_lanes_ordered_by_transaction_size(self.wasm_lanes.clone()),
             );
             self.wasm_lanes_ordered_by_transaction_size = wasm_lanes_ordered_by_transaction_size;
-            let wasm_lanes_ordered_by_transaction_gas_limit = OnceCell::with_value(
-                Self::build_wasm_lanes_ordered_by_transaction_gas_limit(self.wasm_lanes.clone()),
-            );
-            self.wasm_lanes_ordered_by_transaction_gas_limit =
+            let wasm_lanes_ordered_by_transaction_gas_limit =
+                OnceCell::with_value(Self::build_wasm_lanes_ordered(self.wasm_lanes.clone()));
+            self.wasm_lanes_ordered_by_transaction_gas_limit_transaction_size_args_length =
                 wasm_lanes_ordered_by_transaction_gas_limit;
         }
     }
@@ -908,6 +916,81 @@ mod tests {
         let got = serde_json::from_str::<Value>(&raw).unwrap();
         let expected: Value = serde_json::from_str::<Value>(EXAMPLE_JSON).unwrap();
         assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn should_order_by_nested_predicates() {
+        // Firstly, order by max_transaction_gas_limit
+        let definition_1 = TransactionLaneDefinition::new(0, 0, 0, 4, 0);
+        let definition_2 = TransactionLaneDefinition::new(1, 0, 0, 3, 0);
+        let definition_3 = TransactionLaneDefinition::new(2, 0, 0, 2, 0);
+        let res = TransactionV1Config::build_wasm_lanes_ordered(vec![
+            definition_1.clone(),
+            definition_2.clone(),
+            definition_3.clone(),
+        ]);
+        assert_eq!(res, vec![definition_3, definition_2, definition_1,]);
+
+        // If max_transaction_gas_limit equal, order by
+        let definition_1 = TransactionLaneDefinition::new(0, 3, 0, 1, 0);
+        let definition_2 = TransactionLaneDefinition::new(1, 4, 0, 1, 0);
+        let definition_3 = TransactionLaneDefinition::new(2, 2, 0, 1, 0);
+        let res = TransactionV1Config::build_wasm_lanes_ordered(vec![
+            definition_1.clone(),
+            definition_2.clone(),
+            definition_3.clone(),
+        ]);
+        assert_eq!(res, vec![definition_3, definition_1, definition_2,]);
+
+        // If max_transaction_gas_limit and max_transaction_length equal, order by max_transaction_args_length
+        let definition_1 = TransactionLaneDefinition::new(0, 2, 4, 1, 0);
+        let definition_2 = TransactionLaneDefinition::new(1, 2, 2, 1, 0);
+        let definition_3 = TransactionLaneDefinition::new(2, 2, 3, 1, 0);
+        let res = TransactionV1Config::build_wasm_lanes_ordered(vec![
+            definition_1.clone(),
+            definition_2.clone(),
+            definition_3.clone(),
+        ]);
+        assert_eq!(res, vec![definition_2, definition_3, definition_1,]);
+
+        // If max_transaction_gas_limit and max_transaction_length equal and max_transaction_args_length, order by id
+        let definition_1 = TransactionLaneDefinition::new(2, 2, 3, 1, 0);
+        let definition_2 = TransactionLaneDefinition::new(0, 2, 3, 1, 0);
+        let definition_3 = TransactionLaneDefinition::new(1, 2, 3, 1, 0);
+        let res = TransactionV1Config::build_wasm_lanes_ordered(vec![
+            definition_2.clone(),
+            definition_3.clone(),
+            definition_1.clone(),
+        ]);
+        assert_eq!(res, vec![definition_2, definition_3, definition_1,]);
+
+        // Should apply those rules mixed
+        let definition_1 = TransactionLaneDefinition::new(10, 0, 2, 2, 0);
+        let definition_2 = TransactionLaneDefinition::new(1, 2, 3, 1, 0);
+        let definition_3 = TransactionLaneDefinition::new(2, 4, 3, 1, 0);
+        let definition_4 = TransactionLaneDefinition::new(3, 4, 2, 1, 0);
+        let definition_5 = TransactionLaneDefinition::new(4, 0, 0, 2, 0);
+        let definition_6 = TransactionLaneDefinition::new(5, 4, 3, 1, 0);
+
+        let res = TransactionV1Config::build_wasm_lanes_ordered(vec![
+            definition_1.clone(),
+            definition_2.clone(),
+            definition_3.clone(),
+            definition_4.clone(),
+            definition_5.clone(),
+            definition_6.clone(),
+        ]);
+        assert_eq!(
+            res,
+            vec![
+                definition_2,
+                definition_4,
+                definition_3,
+                definition_6,
+                definition_5,
+                definition_1
+            ]
+        );
     }
 
     fn example_native() -> TransactionLaneDefinition {
