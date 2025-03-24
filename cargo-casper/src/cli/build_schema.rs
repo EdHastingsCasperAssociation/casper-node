@@ -46,11 +46,11 @@ unsafe extern "C" fn collect_messages_cb(messages: *const Message, count: usize,
 
 /// The `build-schema` subcommand flow. The schema is written to the specified
 /// [`Write`] implementer.
-pub fn build_schema_impl<W: Write>(output_writer: &mut W) -> Result<(), anyhow::Error> {
+pub fn build_schema_impl<W: Write>(package_name: &str, output_writer: &mut W) -> Result<(), anyhow::Error> {
     // Compile contract package to a native library with extra code that will
     // produce ABI information including entrypoints, types, etc.
     eprintln!("Building contract schema...");
-    let compilation = CompileJob::new("./Cargo.toml", None, Some("-C link-dead-code".into()));
+    let compilation = CompileJob::new(package_name, None, Some("-C link-dead-code".into()));
 
     // Get all of the direct user contract dependencies.
     //
@@ -61,11 +61,10 @@ pub fn build_schema_impl<W: Write>(output_writer: &mut W) -> Result<(), anyhow::
         let metadata = MetadataCommand::new().exec()?;
 
         // Find the root package (the one whose manifest path matches our Cargo.toml)
-        let manifest_path_target = PathBuf::from("./Cargo.toml").canonicalize()?;
         let package = metadata
             .packages
             .iter()
-            .find(|p| p.manifest_path.canonicalize().unwrap() == manifest_path_target)
+            .find(|p| p.name == package_name)
             .context("Root package not found in metadata")?;
 
         // Extract the direct dependency names from the package.

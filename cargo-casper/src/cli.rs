@@ -42,6 +42,9 @@ pub(crate) enum Command {
         /// Where should the build artifacts be saved?
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// The cargo workspace
+        #[command(flatten)]
+        workspace: clap_cargo::Workspace,
     },
     /// Build the contract with its JSON schema embedded.
     Build {
@@ -51,6 +54,9 @@ pub(crate) enum Command {
         /// Should the schema be embedded and exposed in the contract? (Default: true)
         #[arg(short, long)]
         embed_schema: Option<bool>,
+        /// The cargo workspace
+        #[command(flatten)]
+        workspace: clap_cargo::Workspace,
     },
     /// Creates a new VM2 smart contract project from a template.
     New {

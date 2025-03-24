@@ -5,19 +5,19 @@ use anyhow::Context;
 use crate::{compilation::CompileJob, injector};
 
 /// The `build` subcommand flow.
-pub fn build_impl(output_dir: Option<PathBuf>, embed_schema: bool) -> Result<(), anyhow::Error> {
+pub fn build_impl(package_name: &str, output_dir: Option<PathBuf>, embed_schema: bool) -> Result<(), anyhow::Error> {
     // Build the contract package targetting wasm32-unknown-unknown without
     // extra feature flags - this is the production contract wasm file.
     //
     // Optionally (but by default) create an entrypoint in the wasm that will have
     // embedded schema JSON file for discoverability (aka internal schema).
-    let compilation = CompileJob::new("./Cargo.toml", None, None);
+    let compilation = CompileJob::new(package_name, None, None);
 
     // Build the contract with or without the schema.
     let production_wasm_path = if embed_schema {
         // Build the schema first
         let mut buffer = Cursor::new(Vec::new());
-        super::build_schema::build_schema_impl(&mut buffer)
+        super::build_schema::build_schema_impl(package_name, &mut buffer)
             .context("Failed to build contract schema")?;
 
         let contract_schema =

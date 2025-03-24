@@ -19,7 +19,7 @@ enum CargoMessage {
 
 /// Represents a job to compile a Cargo project.
 pub(crate) struct CompileJob<'a> {
-    manifest_path: &'a str,
+    package_name: &'a str,
     features: Vec<String>,
     rustflags: Option<String>,
 }
@@ -28,12 +28,12 @@ impl<'a> CompileJob<'a> {
     /// Creates a new compile job with the given manifest path, optional features,
     /// and optional *additional* rustflags.
     pub fn new(
-        manifest_path: &'a str,
+        package_name: &'a str,
         features: Option<Vec<String>>,
         rustflags: Option<String>,
     ) -> Self {
         Self {
-            manifest_path,
+            package_name,
             features: features.unwrap_or_default(),
             rustflags,
         }
@@ -62,8 +62,8 @@ impl<'a> CompileJob<'a> {
 
         let build_args = [
             "build",
-            "--manifest-path",
-            self.manifest_path,
+            "-p",
+            self.package_name,
             "--target",
             target.as_str(),
             "--features",
