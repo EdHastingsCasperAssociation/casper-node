@@ -18,7 +18,7 @@ impl MetaDeploy {
         deploy: Deploy,
         config: &TransactionV1Config,
     ) -> Result<Self, InvalidTransaction> {
-        let maybe_biggest_lane_limit = Self::calculate_lane_id_of_biggest_wasm(config.wasm_lanes());
+        let maybe_biggest_lane_limit = calculate_lane_id_of_biggest_wasm(config.wasm_lanes());
         if let Some(largest_wasm_id) = maybe_biggest_lane_limit {
             Ok(MetaDeploy {
                 deploy,
@@ -40,16 +40,6 @@ impl MetaDeploy {
         }
     }
 
-    fn calculate_lane_id_of_biggest_wasm(wasm_lanes: &[TransactionLaneDefinition]) -> Option<u8> {
-        wasm_lanes
-            .iter()
-            .max_by(|left, right| {
-                left.max_transaction_length
-                    .cmp(&right.max_transaction_length)
-            })
-            .map(|definition| definition.id)
-    }
-
     pub(crate) fn session(&self) -> &ExecutableDeployItem {
         self.deploy.session()
     }
@@ -59,14 +49,25 @@ impl MetaDeploy {
     }
 }
 
+pub(crate) fn calculate_lane_id_of_biggest_wasm(
+    wasm_lanes: &[TransactionLaneDefinition],
+) -> Option<u8> {
+    wasm_lanes
+        .iter()
+        .max_by(|left, right| {
+            left.max_transaction_length
+                .cmp(&right.max_transaction_length)
+        })
+        .map(|definition| definition.id)
+}
 #[cfg(test)]
 mod tests {
-    use super::MetaDeploy;
+    use super::calculate_lane_id_of_biggest_wasm;
     use casper_types::TransactionLaneDefinition;
     #[test]
     fn calculate_lane_id_of_biggest_wasm_should_return_none_on_empty() {
         let wasms = vec![];
-        assert!(MetaDeploy::calculate_lane_id_of_biggest_wasm(&wasms).is_none());
+        assert!(calculate_lane_id_of_biggest_wasm(&wasms).is_none());
     }
 
     #[test]
@@ -87,10 +88,7 @@ mod tests {
                 max_transaction_count: 4,
             },
         ];
-        assert_eq!(
-            MetaDeploy::calculate_lane_id_of_biggest_wasm(&wasms),
-            Some(1)
-        );
+        assert_eq!(calculate_lane_id_of_biggest_wasm(&wasms), Some(1));
         let wasms = vec![
             TransactionLaneDefinition {
                 id: 0,
@@ -114,10 +112,7 @@ mod tests {
                 max_transaction_count: 4,
             },
         ];
-        assert_eq!(
-            MetaDeploy::calculate_lane_id_of_biggest_wasm(&wasms),
-            Some(1)
-        );
+        assert_eq!(calculate_lane_id_of_biggest_wasm(&wasms), Some(1));
 
         let wasms = vec![
             TransactionLaneDefinition {
@@ -142,9 +137,6 @@ mod tests {
                 max_transaction_count: 4,
             },
         ];
-        assert_eq!(
-            MetaDeploy::calculate_lane_id_of_biggest_wasm(&wasms),
-            Some(2)
-        );
+        assert_eq!(calculate_lane_id_of_biggest_wasm(&wasms), Some(2));
     }
 }

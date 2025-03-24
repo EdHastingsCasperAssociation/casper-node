@@ -94,6 +94,8 @@ pub(super) async fn exec_or_requeue<REv>(
     let contract_runtime_metrics = metrics.clone();
     let is_era_end = executable_block.era_report.is_some();
     let current_gas_price = executable_block.current_gas_price;
+    let era_id = executable_block.era_id;
+    let block_height = executable_block.height;
 
     if is_era_end && executable_block.rewards.is_none() {
         executable_block.rewards = Some(if chainspec.core_config.compute_rewards {
@@ -127,7 +129,7 @@ pub(super) async fn exec_or_requeue<REv>(
         let go_down = chainspec.vacancy_config.lower_threshold;
         let max = chainspec.vacancy_config.max_gas_price;
         let min = chainspec.vacancy_config.min_gas_price;
-        info!("End of era calculating new gas price");
+        info!(%era_id, %block_height, "End of era calculating new gas price");
         let era_id = executable_block.era_id;
         let block_height = executable_block.height;
 
@@ -216,6 +218,12 @@ pub(super) async fn exec_or_requeue<REv>(
         let maybe_utilization = effect_builder
             .get_block_utilization(era_id, block_height, switch_block_utilization_score)
             .await;
+        debug!(
+            %era_id,
+            %block_height,
+            ?maybe_utilization,
+            "Calculated utilization for block"
+        );
 
         match maybe_utilization {
             None => {
@@ -247,6 +255,12 @@ pub(super) async fn exec_or_requeue<REv>(
             }
         }
     } else if executable_block.next_era_gas_price.is_some() {
+        debug!(
+            %era_id,
+            %block_height,
+            next_era_gas_price = executable_block.next_era_gas_price,
+            "New gas price obtained from block"
+        );
         executable_block.next_era_gas_price
     } else {
         None
@@ -359,10 +373,20 @@ pub(super) async fn exec_or_requeue<REv>(
         .collect();
 
     if meta_block_state.register_as_stored().was_updated() {
+        debug!(
+            %era_id,
+            %block_height,
+            "Storing block after execution"
+        );
         effect_builder
             .put_executed_block_to_storage(Arc::clone(&block), approvals_hashes, artifacts_map)
             .await;
     } else {
+        debug!(
+            %era_id,
+            %block_height,
+            "Block was already stored before execution, storing approvals"
+        );
         effect_builder
             .put_approvals_hashes_to_storage(approvals_hashes)
             .await;

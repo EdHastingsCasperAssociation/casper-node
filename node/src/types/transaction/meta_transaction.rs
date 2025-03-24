@@ -2,9 +2,6 @@ mod lane_id;
 mod meta_deploy;
 mod meta_transaction_v1;
 mod transaction_header;
-use meta_deploy::MetaDeploy;
-pub(crate) use transaction_header::*;
-
 use casper_execution_engine::engine_state::{SessionDataDeploy, SessionDataV1, SessionInputData};
 use casper_types::{
     account::AccountHash, bytesrepr::ToBytes, Approval, Chainspec, Digest, ExecutableDeployItem,
@@ -12,10 +9,21 @@ use casper_types::{
     Timestamp, Transaction, TransactionArgs, TransactionConfig, TransactionEntryPoint,
     TransactionHash, TransactionTarget, INSTALL_UPGRADE_LANE_ID,
 };
+#[cfg(test)]
+use casper_types::{InvalidDeploy, InvalidTransactionV1, MINT_LANE_ID};
 use core::fmt::{self, Debug, Display, Formatter};
+#[cfg(test)]
+use lane_id::calculate_transaction_lane;
+#[cfg(test)]
+use meta_deploy::calculate_lane_id_of_biggest_wasm;
+use meta_deploy::MetaDeploy;
 pub(crate) use meta_transaction_v1::MetaTransactionV1;
 use serde::Serialize;
 use std::{borrow::Cow, collections::BTreeSet};
+pub(crate) use transaction_header::*;
+
+#[cfg(test)]
+use super::fields_container::{ARGS_MAP_KEY, ENTRY_POINT_MAP_KEY, TARGET_MAP_KEY};
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) enum MetaTransaction {
@@ -410,6 +418,62 @@ impl Display for MetaTransaction {
         match self {
             MetaTransaction::Deploy(meta_deploy) => Display::fmt(meta_deploy.deploy(), formatter),
             MetaTransaction::V1(txn) => Display::fmt(txn, formatter),
+        }
+    }
+}
+
+#[cfg(test)]
+/// Calculates the laned based on properties of the transaction
+pub(crate) fn calculate_transaction_lane_for_transaction(
+    transaction: &Transaction,
+    chainspec: &Chainspec,
+) -> Result<u8, InvalidTransaction> {
+    match transaction {
+        Transaction::Deploy(deploy) => {
+            if deploy.is_transfer() {
+                Ok(MINT_LANE_ID)
+            } else {
+                let wasm_lanes = chainspec
+                    .transaction_config
+                    .transaction_v1_config
+                    .wasm_lanes();
+                let maybe_biggest_lane_limit = calculate_lane_id_of_biggest_wasm(wasm_lanes);
+                if let Some(largest_wasm_id) = maybe_biggest_lane_limit {
+                    Ok(largest_wasm_id)
+                } else {
+                    // Seems like chainspec didn't have any wasm lanes configured
+                    Err(InvalidTransaction::Deploy(
+                        InvalidDeploy::ChainspecHasNoWasmLanesDefined,
+                    ))
+                }
+            }
+        }
+        Transaction::V1(v1) => {
+            let args_binary_len = v1
+                .payload()
+                .fields()
+                .get(&ARGS_MAP_KEY)
+                .map(|field| field.len())
+                .unwrap_or(0);
+            let target: TransactionTarget =
+                v1.deserialize_field(TARGET_MAP_KEY).map_err(|error| {
+                    InvalidTransaction::V1(InvalidTransactionV1::CouldNotDeserializeField { error })
+                })?;
+            let entry_point: TransactionEntryPoint =
+                v1.deserialize_field(ENTRY_POINT_MAP_KEY).map_err(|error| {
+                    InvalidTransaction::V1(InvalidTransactionV1::CouldNotDeserializeField { error })
+                })?;
+            let serialized_length = v1.serialized_length();
+            let pricing_mode = v1.payload().pricing_mode();
+            calculate_transaction_lane(
+                &entry_point,
+                &target,
+                pricing_mode,
+                &chainspec.transaction_config.transaction_v1_config,
+                serialized_length as u64,
+                args_binary_len as u64,
+            )
+            .map_err(InvalidTransaction::V1)
         }
     }
 }
