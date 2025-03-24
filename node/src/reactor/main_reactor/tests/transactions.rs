@@ -20,7 +20,10 @@ use once_cell::sync::Lazy;
 use crate::reactor::main_reactor::tests::{
     configs_override::ConfigsOverride, initial_stakes::InitialStakes,
 };
-use casper_types::{bytesrepr::Bytes, execution::ExecutionResultV1};
+use casper_types::{
+    bytesrepr::{Bytes, ToBytes},
+    execution::ExecutionResultV1,
+};
 
 static ALICE_SECRET_KEY: Lazy<Arc<SecretKey>> = Lazy::new(|| {
     Arc::new(SecretKey::ed25519_from_bytes([0xAA; SecretKey::ED25519_LENGTH]).unwrap())
@@ -5304,4 +5307,152 @@ async fn should_correctly_assign_wasm_deploys_in_lanes_for_payment_limited_by_ga
 #[tokio::test]
 async fn should_correctly_assign_wasm_deploys_in_lanes_for_payment_limited_by_serialized_length() {
     run_sizing_scenario(SizingScenario::SerializedLength).await
+}
+
+#[tokio::test]
+async fn should_assign_deploy_to_largest_lane_by_payment_amount_only_in_payment_limited() {
+    let mut rng = TestRng::new();
+    let alice_stake = 200_000_000_000_u64;
+    let bob_stake = 300_000_000_000_u64;
+    let charlie_stake = 300_000_000_000_u64;
+    let initial_stakes: Vec<U512> =
+        vec![alice_stake.into(), bob_stake.into(), charlie_stake.into()];
+
+    let secret_keys: Vec<Arc<SecretKey>> = (0..3)
+        .map(|_| Arc::new(SecretKey::random(&mut rng)))
+        .collect();
+
+    let stakes = secret_keys
+        .iter()
+        .zip(initial_stakes)
+        .map(|(secret_key, stake)| (PublicKey::from(secret_key.as_ref()), stake))
+        .collect();
+
+    let mut fixture = TestFixture::new_with_keys(rng, secret_keys, stakes, None).await;
+
+    fixture
+        .run_until_stored_switch_block_header(ERA_ONE, ONE_MIN)
+        .await;
+
+    fixture.run_until_consensus_in_era(ERA_ONE, ONE_MIN).await;
+
+    let base_path = RESOURCES_PATH
+        .parent()
+        .unwrap()
+        .join("target")
+        .join("wasm32-unknown-unknown")
+        .join("release");
+
+    let mut wasm_lanes = fixture
+        .chainspec
+        .transaction_config
+        .transaction_v1_config
+        .wasm_lanes()
+        .clone();
+
+    wasm_lanes.sort_by(|a, b| {
+        a.max_transaction_gas_limit
+            .cmp(&b.max_transaction_gas_limit)
+    });
+
+    let (smallest_lane_id, smallest_gas_limt, smallest_size_limit_for_deploy) = wasm_lanes
+        .first()
+        .map(|lane_def| {
+            (
+                lane_def.id,
+                lane_def.max_transaction_gas_limit,
+                lane_def.max_transaction_length,
+            )
+        })
+        .expect("must have at least one lane");
+
+    let payment = ExecutableDeployItem::ModuleBytes {
+        module_bytes: Bytes::new(),
+        args: runtime_args! {
+        "amount" =>  U512::from(smallest_gas_limt),
+                    },
+    };
+
+    let session = ExecutableDeployItem::ModuleBytes {
+        module_bytes: std::fs::read(base_path.join("do_nothing.wasm"))
+            .unwrap()
+            .into(),
+        args: runtime_args! {},
+    };
+
+    let timestamp = Timestamp::now();
+    let ttl = TimeDiff::from_seconds(100);
+    let gas_price = 1;
+    let chain_name = fixture.chainspec.network_config.name.clone();
+
+    let transaction = Transaction::Deploy(Deploy::new_signed(
+        timestamp,
+        ttl,
+        gas_price,
+        vec![],
+        chain_name.clone(),
+        payment,
+        session,
+        &ALICE_SECRET_KEY,
+        Some(ALICE_PUBLIC_KEY.clone()),
+    ));
+
+    let small_txn_hash = transaction.hash();
+    let small_txn_size = transaction.serialized_length() as u64;
+    assert!(small_txn_size < smallest_size_limit_for_deploy);
+
+    fixture.inject_transaction(transaction).await;
+
+    fixture
+        .assert_execution_in_lane(&small_txn_hash, smallest_lane_id, TEN_SECS)
+        .await;
+
+    let (largest_lane_id, largest_gas_limt) = wasm_lanes
+        .last()
+        .map(|lane_def| (lane_def.id, lane_def.max_transaction_gas_limit))
+        .expect("must have at least one lane");
+
+    assert_ne!(largest_lane_id, smallest_lane_id);
+    assert!(largest_gas_limt > smallest_gas_limt);
+
+    let payment = ExecutableDeployItem::ModuleBytes {
+        module_bytes: Bytes::new(),
+        args: runtime_args! {
+        "amount" =>  U512::from(largest_gas_limt),
+                    },
+    };
+
+    let session = ExecutableDeployItem::ModuleBytes {
+        module_bytes: std::fs::read(base_path.join("do_nothing.wasm"))
+            .unwrap()
+            .into(),
+        args: runtime_args! {},
+    };
+
+    let chain_name = fixture.chainspec.network_config.name.clone();
+
+    let transaction = Transaction::Deploy(Deploy::new_signed(
+        timestamp,
+        ttl,
+        gas_price,
+        vec![],
+        chain_name.clone(),
+        payment,
+        session,
+        &ALICE_SECRET_KEY,
+        Some(ALICE_PUBLIC_KEY.clone()),
+    ));
+
+    let largest_txn_hash = transaction.hash();
+
+    let largest_txn_size = transaction.serialized_length() as u64;
+    // This is misnomer, its the size of the deploy meant to be in the
+    // largest lane.
+    assert!(largest_txn_size < smallest_size_limit_for_deploy);
+
+    fixture.inject_transaction(transaction).await;
+
+    fixture
+        .assert_execution_in_lane(&largest_txn_hash, largest_lane_id, TEN_SECS)
+        .await;
 }

@@ -66,7 +66,6 @@ impl MetaDeploy {
             size_estimation,
             runtime_args_size,
         )?;
-        println!("{lane_id} for {}", deploy.hash());
         Ok(MetaDeploy { deploy, lane_id })
     }
 

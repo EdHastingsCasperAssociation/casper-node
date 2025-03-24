@@ -451,12 +451,12 @@ impl TransactionV1Config {
     #[allow(unreachable_code)]
     //We're allowing unreachable code here because there's a possibility that someone might
     // want to use the types crate without once_cell
-    // This function will take the wasm lanes odered by:
+    // This function will take the wasm lanes ordered by:
     //   - firstly gas limit
     //   - secondly max_transaction_length
     //   - thirdly max runtime args
-    //   - fourthly lane id (this has no "business" value, but it ensures that the ordering
-    //        is always reproducible since ids should be unique)
+    //   - fourthly lane id (this has no "business" value, but it ensures that the ordering is
+    //     always reproducible since ids should be unique)
     fn get_wasm_lanes_ordered(&self) -> &Vec<TransactionLaneDefinition> {
         #[cfg(any(feature = "once_cell", test))]
         return self
@@ -942,7 +942,8 @@ mod tests {
         ]);
         assert_eq!(res, vec![definition_3, definition_1, definition_2,]);
 
-        // If max_transaction_gas_limit and max_transaction_length equal, order by max_transaction_args_length
+        // If max_transaction_gas_limit and max_transaction_length equal, order by
+        // max_transaction_args_length
         let definition_1 = TransactionLaneDefinition::new(0, 2, 4, 1, 0);
         let definition_2 = TransactionLaneDefinition::new(1, 2, 2, 1, 0);
         let definition_3 = TransactionLaneDefinition::new(2, 2, 3, 1, 0);
@@ -953,7 +954,8 @@ mod tests {
         ]);
         assert_eq!(res, vec![definition_2, definition_3, definition_1,]);
 
-        // If max_transaction_gas_limit and max_transaction_length equal and max_transaction_args_length, order by id
+        // If max_transaction_gas_limit and max_transaction_length equal and
+        // max_transaction_args_length, order by id
         let definition_1 = TransactionLaneDefinition::new(2, 2, 3, 1, 0);
         let definition_2 = TransactionLaneDefinition::new(0, 2, 3, 1, 0);
         let definition_3 = TransactionLaneDefinition::new(1, 2, 3, 1, 0);
