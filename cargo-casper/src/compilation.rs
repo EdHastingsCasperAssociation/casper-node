@@ -1,6 +1,5 @@
 use std::{
-    path::PathBuf,
-    process::Command,
+    io::{BufRead, BufReader, Read}, path::PathBuf, process::{Command, Stdio}
 };
 
 use anyhow::{anyhow, Context, Result};
@@ -34,17 +33,15 @@ impl<'a> CompileJob<'a> {
     }
 
     /// Dispatches the compilation job. This builds the Cargo project into a temporary target directory.
-    pub fn dispatch<T, I, S, P>(
+    pub fn dispatch<T, I, S>(
         &self,
         target: T,
         extra_features: I,
-        in_dir: Option<P>,
     ) -> Result<CompilationResults>
     where
         T: Into<String>,
         I: IntoIterator<Item = S>,
         S: Into<String>,
-        P: Into<PathBuf>,
     {
         let target: String = target.into();
 
@@ -53,14 +50,7 @@ impl<'a> CompileJob<'a> {
         features.extend(extra_features.into_iter().map(Into::into));
         let features_str = features.join(",");
 
-        let target_dir = in_dir
-            .map(|x| x.into())
-            .unwrap_or(PathBuf::from("target"));
-        let target_dir_str = target_dir
-            .to_str()
-            .context("Invalid target dir")?;
-
-        let args = [
+        let build_args = [
             "build",
             "--manifest-path",
             self.manifest_path,
@@ -71,7 +61,7 @@ impl<'a> CompileJob<'a> {
             "--lib",
             "--release",
             "--target-dir",
-            target_dir_str
+            "target",
         ];
 
         // Get any rustflags from the environment and combine with the additional rustflags
@@ -84,11 +74,17 @@ impl<'a> CompileJob<'a> {
         };
 
         // Run the cargo build command and capture the output
-        let output = Command::new("cargo")
-            .args(&args)
+        let handle = Command::new("cargo")
+            .args(&build_args)
             .env("RUSTFLAGS", rustflags)
-            .output()
-            .context("Failed to execute cargo build command")?;
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("Failed spawning child process")?;
+
+        let output = handle
+            .wait_with_output()
+            .context("Failed compiling user wasm")?;
 
         if !output.status.success() {
             return Err(anyhow!(
@@ -100,8 +96,7 @@ impl<'a> CompileJob<'a> {
 
         // Determine where the build artifacts are located and read them
         // into a vector
-        let artifact_dir = target_dir.join(target).join("release");
-        eprintln!("Artifact directory: {:?}", artifact_dir);
+        let artifact_dir = PathBuf::from("./target").join(target).join("release");
 
         let artifacts = std::fs::read_dir(&artifact_dir)
             .with_context(|| format!("Failed to read artifact directory: {:?}", artifact_dir))?
@@ -128,32 +123,11 @@ impl CompilationResults {
         &self.artifacts
     }
 
-    /// Consumes self, saving the produced artifacts into the
-    /// specified directory.
-    /// 
-    /// Returns the extracted WASM path.
-    pub fn flush_artifacts_to_dir(
-        self,
-        output_dir: &PathBuf
-    ) -> anyhow::Result<PathBuf> {
-        let built_wasm_path = self
-            .artifacts()
+    pub fn get_artifact_by_extension(&self, extension: &str) -> Option<PathBuf> {
+        self.artifacts()
             .iter()
-            .find(|x| x.extension().unwrap() == "wasm")
-            .context("Failed to locate user wasm")?;
-
-        let production_wasm_path = output_dir
-            .join(built_wasm_path.file_name().unwrap())
-            .with_extension(built_wasm_path.extension().unwrap());
-
-        std::fs::create_dir_all(&production_wasm_path.parent().unwrap())
-            .context("Failed creating output directory for the compiled wasm")?;
-
-        std::fs::copy(
-            &built_wasm_path,
-            &production_wasm_path
-        ).context("Failed moving production wasm to output location")?;
-
-        Ok(production_wasm_path)
+            .filter(|x| x.extension().map(|y| y.to_str()).flatten() == Some(extension))
+            .next()
+            .map(|x| x.into())
     }
 }

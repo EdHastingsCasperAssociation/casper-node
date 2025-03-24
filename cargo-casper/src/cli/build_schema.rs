@@ -1,4 +1,4 @@
-use std::{ffi::c_void, io::Write, path::PathBuf, ptr::NonNull};
+use std::{ffi::c_void, io::Write, ptr::NonNull};
 
 use anyhow::Context;
 use casper_sdk::{abi_generator::Message, schema::{Schema, SchemaMessage, SchemaType}};
@@ -45,9 +45,9 @@ unsafe extern "C" fn collect_messages_cb(messages: *const Message, count: usize,
 pub fn build_schema_impl<W: Write>(
     output_writer: &mut W,
 ) -> Result<(), anyhow::Error> {
-    eprintln!("Building schema...");
     // Compile contract package to a native library with extra code that will
     // produce ABI information including entrypoints, types, etc.
+    eprintln!("Building contract schema...");
     let compilation = CompileJob::new(
         "./Cargo.toml",
         None,
@@ -59,7 +59,6 @@ pub fn build_schema_impl<W: Write>(
             "casper-sdk/__abi_generator".to_string(),
             "casper-macros/__abi_generator".to_string(),
         ],
-        Option::<PathBuf>::None
     ).context("ABI-rich wasm compilation failure")?;
 
     // Extract ABI information from the built contract
@@ -68,7 +67,6 @@ pub fn build_schema_impl<W: Write>(
         .into_iter()
         .find(|x| x.extension().unwrap_or_default() == "so")
         .context("Failed loading the built contract")?;
-    eprintln!("Loading: {artifact_path:?}");
 
     let lib = unsafe { libloading::Library::new(&artifact_path).unwrap() };
 
@@ -115,7 +113,6 @@ pub fn build_schema_impl<W: Write>(
     };
 
     // Construct a schema object from the extracted information
-    // TODO: Move schema outside sdk to avoid importing unnecessary deps into wasm build
     let schema = Schema {
         name: "contract".to_string(),
         version: None,
@@ -128,6 +125,7 @@ pub fn build_schema_impl<W: Write>(
         messages,
     };
 
+    // Write the schema using the provided writer
     serde_json::to_writer_pretty(output_writer, &schema)
         .context("Failed writing schema")?;
 

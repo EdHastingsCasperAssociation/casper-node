@@ -1,7 +1,6 @@
 use anyhow::Context;
 use include_dir::{include_dir, Dir};
 use std::path::PathBuf;
-use tempfile::TempDir;
 
 use crate::cli::extract_embedded_dir;
 use crate::compilation::CompileJob;
@@ -16,16 +15,11 @@ const INJECT_SCHEMA_MARKER: &str = "{{__CARGO_CASPER_INJECT_SCHEMA_MARKER}}";
 pub fn build_with_schema_injected(
     user_lib_compilation: CompileJob,
     schema: &str,
-    production_wasm_output_dir: &PathBuf,
 ) -> Result<PathBuf, anyhow::Error> {
-    // Construct a temp directory for compilation
-    let temp_dir = TempDir::new()
-        .with_context(|| "Failed creating temporary directory")?;
-
     // Compile the schema-inject crate, with the appropriate schema string
     // injected into it.
     let schema_crate_path = extract_embedded_dir(
-        &temp_dir.path().join("schema-inject"),
+        &PathBuf::from("./target/.schema"),
         &INJECTED_DIR,
     ).with_context(|| "Failed extracting the schema-inject crate")?;
 
@@ -53,14 +47,15 @@ pub fn build_with_schema_injected(
     let schema_compilation_results = schema_compilation.dispatch(
         "wasm32-unknown-unknown",
         Option::<String>::None,
-        Some(temp_dir.path())
     ).with_context(|| "Failed compiling the schema-inject crate")?;
 
     let schema_lib = schema_compilation_results
         .artifacts()
         .iter()
         .find(|x| x.extension().unwrap_or_default() == "a")
-        .with_context(|| "Couldn't find the compiled schema-inject lib")?;
+        .context("Couldn't find the compiled schema-inject lib")?
+        .canonicalize()
+        .context("Couldn't resolve compiled schema's path")?;
 
     // Build user's wasm with the schema lib statically linked and exported
     let rustflags = format!(
@@ -68,12 +63,14 @@ pub fn build_with_schema_injected(
         schema_lib.to_string_lossy()
     );
 
-    let production_wasm_path = user_lib_compilation
+    let compilation_results = user_lib_compilation
         .with_rustflags(rustflags)
-        .dispatch("wasm32-unknown-unknown", Option::<String>::None, Option::<PathBuf>::None)
-        .context("Failed to compile user wasm")?
-        .flush_artifacts_to_dir(production_wasm_output_dir)
-        .context("Failed extracting build artifacts to directory")?;
+        .dispatch("wasm32-unknown-unknown", Option::<String>::None)
+        .context("Failed to compile user wasm")?;
 
-    Ok(production_wasm_path)
+    let production_wasm_path = compilation_results
+        .get_artifact_by_extension("wasm")
+        .context("Build artifacts for contract wasm didn't include a wasm file")?;
+
+    Ok(production_wasm_path.into())
 }
