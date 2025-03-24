@@ -10,8 +10,9 @@ pub mod build;
 pub mod build_schema;
 pub mod new;
 
-/// Recursively extracts a virtual (embedded) directory into the specified path.
-fn extract_dir(dir: &Dir, target: &Path) -> io::Result<()> {
+/// Writes the binary-embedded directory into a filesystem directory.
+/// Returns the path to the extracted dir.
+pub(crate) fn extract_embedded_dir(target: &Path, dir: &Dir) -> io::Result<PathBuf> {
     // Ensure the target directory exists.
     std::fs::create_dir_all(target)?;
 
@@ -26,21 +27,12 @@ fn extract_dir(dir: &Dir, target: &Path) -> io::Result<()> {
                 std::fs::write(file_path, file.contents())?;
             }
             DirEntry::Dir(sub_dir) => {
-                extract_dir(sub_dir, &target)?;
+                extract_embedded_dir(&target, sub_dir)?;
             }
         }
     }
-    Ok(())
-}
 
-/// Writes the binary-embedded into a filesystem directory.
-/// Returns the path to the extracted dir.
-pub(crate) fn extract_embedded_dir(
-    extract_to: &Path,
-    virtual_dir: &Dir,
-) -> std::io::Result<PathBuf> {
-    extract_dir(virtual_dir, &extract_to)?;
-    Ok(extract_to.into())
+    Ok(target.into())
 }
 
 #[derive(Debug, Subcommand)]

@@ -56,7 +56,7 @@ pub fn build_impl(output_dir: Option<PathBuf>, embed_schema: bool) -> Result<(),
         .spawn()
         .context("Failed to execute wasm-strip command. Is wabt installed?")?;
 
-    // Copy to output_dir if specified
+    // Move to output_dir if specified
     let mut out_wasm_path = production_wasm_path.clone();
     let mut out_schema_path = None;
 
@@ -64,14 +64,14 @@ pub fn build_impl(output_dir: Option<PathBuf>, embed_schema: bool) -> Result<(),
         out_wasm_path = output_dir
             .join(out_wasm_path.file_stem().unwrap())
             .with_extension("wasm");
-        std::fs::copy(&production_wasm_path, &out_wasm_path)
+        std::fs::rename(&production_wasm_path, &out_wasm_path)
             .context("Couldn't write to the specified output directory.")?;
     }
 
     if embed_schema {
         out_schema_path = Some(out_wasm_path.with_extension("json"));
         let production_schema_path = production_wasm_path.with_extension("json");
-        std::fs::copy(&production_schema_path, out_schema_path.as_ref().unwrap())
+        std::fs::rename(&production_schema_path, out_schema_path.as_ref().unwrap())
             .context("Couldn't write to the specified output directory.")?;
     }
 
