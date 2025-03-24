@@ -155,10 +155,10 @@ impl MainReactor {
                 highest_switch_block_header.timestamp(),
                 &highest_orphaned_block_header,
             ) {
-                debug!(%self.state,"{}: sufficient deploy TTL awareness to safely participate in consensus", self.state);
+                debug!(%self.state,"{}: sufficient TTL awareness to safely participate in consensus", self.state);
             } else {
                 info!(
-                    "{}: insufficient deploy TTL awareness to safely participate in consensus",
+                    "{}: insufficient TTL awareness to safely participate in consensus",
                     self.state
                 );
                 return Ok(None);
