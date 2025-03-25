@@ -1225,6 +1225,7 @@ where
 
                 let max_delegators_per_validator =
                     self.context.engine_config().max_delegators_per_validator();
+                let minimum_bid_amount = self.context.engine_config().minimum_bid_amount();
                 runtime
                     .run_auction(
                         era_end_timestamp_millis,
@@ -1232,6 +1233,7 @@ where
                         max_delegators_per_validator,
                         true,
                         Ratio::new_raw(U512::from(1), U512::from(5)),
+                        minimum_bid_amount,
                     )
                     .map_err(Self::reverter)?;
 
@@ -1272,7 +1274,9 @@ where
 
                 let validator = Self::get_named_argument(runtime_args, auction::ARG_VALIDATOR)?;
 
-                runtime.activate_bid(validator).map_err(Self::reverter)?;
+                runtime
+                    .activate_bid(validator, engine_config.minimum_bid_amount())
+                    .map_err(Self::reverter)?;
 
                 CLValue::from_t(()).map_err(Self::reverter)
             })(),
