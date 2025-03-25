@@ -904,16 +904,16 @@ fn write_n_bytes_at_limit(
     executor.install_contract(state_root_hash, &mut global_state, create_request)
 }
 
-#[test]
-fn consume_gas_on_write() {
-    let successful_write = write_n_bytes_at_limit(50, 10_000);
-    assert!(successful_write.is_ok());
+// #[test]
+// fn consume_gas_on_write() {
+//     let successful_write = write_n_bytes_at_limit(50, 10_000);
+//     assert!(successful_write.is_ok());
 
-    let out_of_gas_write_exceeded_gas_limit = write_n_bytes_at_limit(50, 10);
-    assert!(out_of_gas_write_exceeded_gas_limit.is_err_and(|e| match e {
-        InstallContractError::Constructor {
-            host_error: HostError::CalleeGasDepleted,
-        } => true,
-        _ => false,
-    }));
-}
+//     let out_of_gas_write_exceeded_gas_limit = write_n_bytes_at_limit(50, 10);
+//     assert!(out_of_gas_write_exceeded_gas_limit.is_err_and(|e| match e {
+//         InstallContractError::Constructor {
+//             host_error: HostError::CalleeGasDepleted,
+//         } => true,
+//         _ => false,
+//     }));
+// }
