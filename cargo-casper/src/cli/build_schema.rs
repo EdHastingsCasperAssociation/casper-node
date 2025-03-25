@@ -53,7 +53,13 @@ pub fn build_schema_impl<W: Write>(
     // Compile contract package to a native library with extra code that will
     // produce ABI information including entrypoints, types, etc.
     eprintln!("Building contract schema...");
-    let compilation = CompileJob::new(package_name, None, Some("-C link-dead-code".into()));
+
+    let rustflags = {
+        let current = std::env::var("RUSTFLAGS").unwrap_or_default();
+        format!("-C link-dead-code {current}")
+    };
+
+    let compilation = CompileJob::new(package_name, None, vec![("RUSTFLAGS", &rustflags)]);
 
     // Get all of the direct user contract dependencies.
     //

@@ -5,7 +5,6 @@ use cli::{Cli, Command};
 
 pub(crate) mod cli;
 pub(crate) mod compilation;
-pub(crate) mod injector;
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();

@@ -6,7 +6,6 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use cargo_metadata::MetadataCommand;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -22,61 +21,24 @@ enum CargoMessage {
 pub(crate) struct CompileJob<'a> {
     package_name: Option<&'a str>,
     features: Vec<String>,
-    rustflags: Option<String>,
+    env_vars: Vec<(&'a str, &'a str)>,
     in_dir: Option<PathBuf>,
 }
 
 impl<'a> CompileJob<'a> {
     /// Creates a new compile job with the given manifest path, optional features,
-    /// and optional *additional* rustflags.
+    /// and environmental variables.
     pub fn new(
         package_name: Option<&'a str>,
         features: Option<Vec<String>>,
-        rustflags: Option<String>,
+        env_vars: Vec<(&'a str, &'a str)>,
     ) -> Self {
         Self {
             package_name,
             features: features.unwrap_or_default(),
-            rustflags,
+            env_vars,
             in_dir: None,
         }
-    }
-
-    /// Adds or replaces the additional rustflags for the compilation.
-    pub fn with_rustflags(mut self, rustflags: String) -> Self {
-        self.rustflags = Some(rustflags);
-        self
-    }
-
-    /// Adds or replaces the directory within which this job is executed.
-    pub fn in_directory(mut self, directory: PathBuf) -> Self {
-        self.in_dir = Some(directory);
-        self
-    }
-
-    /// Predicts the target directory for this compilation
-    pub fn get_target_directory(&self) -> Option<PathBuf> {
-        let metadata = MetadataCommand::new().exec().ok()?;
-
-        let package = match self.package_name {
-            Some(package_name) => metadata
-                .packages
-                .iter()
-                .find(|p| p.name == package_name)?
-                .manifest_path
-                .to_path_buf(),
-            None => {
-                let manifest_path_target = PathBuf::from("./Cargo.toml").canonicalize().ok()?;
-                metadata
-                    .packages
-                    .iter()
-                    .find(|p| p.manifest_path.canonicalize().unwrap() == manifest_path_target)?
-                    .manifest_path
-                    .to_path_buf()
-            }
-        };
-
-        package.parent().map(|x| x.join("target").into())
     }
 
     /// Dispatches the compilation job. This builds the Cargo project into a temporary target
@@ -111,21 +73,14 @@ impl<'a> CompileJob<'a> {
             "--message-format=json",
         ]);
 
-        // Get any rustflags from the environment and combine with the additional rustflags
-        let env_rustflags = std::env::var("RUSTFLAGS").unwrap_or_default();
-
-        let rustflags = match self.rustflags.as_ref() {
-            Some(additional) if env_rustflags.is_empty() => additional.clone(),
-            Some(additional) => format!("{} {}", env_rustflags, additional),
-            None => env_rustflags,
-        };
-
         // Run the cargo build command and capture the output
         let mut command = Command::new("cargo");
         command.args(&build_args);
-        command.env("RUSTFLAGS", rustflags);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
+        for (key, value) in &self.env_vars {
+            command.env(key, value);
+        }
 
         if let Some(in_directory) = &self.in_dir {
             command.current_dir(in_directory);

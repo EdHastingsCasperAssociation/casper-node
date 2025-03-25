@@ -2,7 +2,7 @@ use std::{io::Cursor, path::PathBuf, process::Command};
 
 use anyhow::Context;
 
-use crate::{compilation::CompileJob, injector};
+use crate::compilation::CompileJob;
 
 /// The `build` subcommand flow.
 pub fn build_impl(
@@ -15,9 +15,6 @@ pub fn build_impl(
     //
     // Optionally (but by default) create an entrypoint in the wasm that will have
     // embedded schema JSON file for discoverability (aka internal schema).
-    let compilation = CompileJob::new(package_name, None, None);
-
-    // Build the contract with or without the schema.
     let production_wasm_path = if embed_schema {
         // Build the schema first
         let mut buffer = Cursor::new(Vec::new());
@@ -29,9 +26,15 @@ pub fn build_impl(
 
         // Build the contract with above schema injected
         eprintln!("Building contract with schema injected...");
-        let production_wasm_path =
-            injector::build_with_schema_injected(compilation, &contract_schema)
-                .context("Failed compiling user wasm with schema")?;
+        let production_wasm_path = CompileJob::new(
+            package_name,
+            None,
+            vec![("__CARGO_CASPER_INJECT_SCHEMA_MARKER", &contract_schema)],
+        )
+        .dispatch("wasm32-unknown-unknown", ["casper-sdk/__embed_schema"])
+        .context("Failed to compile user wasm")?
+        .get_artifact_by_extension("wasm")
+        .context("Build artifacts for contract wasm didn't include a wasm file")?;
 
         // Write the schema next to the wasm
         let schema_file_path = production_wasm_path.with_extension("json");
@@ -46,7 +49,7 @@ pub fn build_impl(
     } else {
         // Compile and move to specified output directory
         eprintln!("Building contract...");
-        compilation
+        CompileJob::new(package_name, None, vec![])
             .dispatch("wasm32-unknown-unknown", Option::<String>::None)
             .context("Failed to compile user wasm")?
             .get_artifact_by_extension("wasm")

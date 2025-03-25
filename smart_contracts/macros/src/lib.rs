@@ -291,6 +291,54 @@ fn generate_impl_for_contract(
     let mut manifest_entry_point_enum_match_name = Vec::new();
     let mut manifest_entry_point_input_data = Vec::new();
     let mut extra_code = Vec::new();
+
+    // First pass, filter out reserved names, error out if any
+    // are present at this stage
+    for entry_point in &entry_points.items {
+        if let syn::ImplItem::Fn(ref func) = entry_point {
+            let func_name = func.sig.ident.clone();
+            if func_name.to_string().starts_with("__casper_") {
+                return TokenStream::from(
+                    syn::Error::new(
+                        Span::call_site(),
+                        "Function names starting with '__casper_' are reserved",
+                    )
+                    .to_compile_error(),
+                );
+            }
+        }
+    }
+
+    // (Optionally) stick any macro-generated entrypoints here.
+    //
+    // These can use the reserved naming scheme, since the filtering
+    // pass should've prevented any name collision.
+
+    #[cfg(feature = "__embed_schema")]
+    {
+        let casper_schema = syn::parse::<syn::ImplItem>(
+            quote! {
+                pub fn __casper_schema() -> String {
+                    use casper_sdk::casper::*;
+                    use casper_sdk::casper_executor_wasm_common::flags::ReturnFlags;
+
+                    const SCHEMA: &str = match option_env!("__CARGO_CASPER_INJECT_SCHEMA_MARKER") {
+                        Some(schema) => schema,
+                        None => "{}",
+                    };
+
+                    SCHEMA.into()
+                }
+            }
+            .into(),
+        )
+        .expect("Failed parsing macro-generated casper_schema");
+
+        entry_points.items.push(casper_schema);
+    }
+
+    // Second pass, generate implementations for all the entry-points.
+
     for entry_point in &mut entry_points.items {
         let mut populate_definitions = Vec::new();
 
@@ -323,16 +371,6 @@ fn generate_impl_for_contract(
                 func.attrs.clear();
 
                 let func_name = func.sig.ident.clone();
-
-                if func_name.to_string().starts_with("__casper_") {
-                    return TokenStream::from(
-                        syn::Error::new(
-                            Span::call_site(),
-                            "Function names starting with '__casper_' are reserved",
-                        )
-                        .to_compile_error(),
-                    );
-                }
 
                 let export_name = if method_attribute.fallback {
                     format_ident!("{}", CASPER_RESERVED_FALLBACK_EXPORT)
