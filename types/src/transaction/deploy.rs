@@ -1227,17 +1227,17 @@ impl Deploy {
         chain_name: String,
         auction_contract_hash: AddressableEntityHash,
         public_key: PublicKey,
-        amount: U512,
+        bid_amount: U512,
         delegation_rate: u8,
         timestamp: Timestamp,
         ttl: TimeDiff,
     ) -> Self {
         let payment = ExecutableDeployItem::ModuleBytes {
             module_bytes: Bytes::new(),
-            args: runtime_args! { ARG_AMOUNT => U512::from(6_000_000_000_000u64) },
+            args: runtime_args! { ARG_AMOUNT => U512::from(100_000_000_000u64) },
         };
         let args = runtime_args! {
-            ARG_AUCTION_AMOUNT => amount,
+            ARG_AUCTION_AMOUNT => bid_amount,
             ARG_AUCTION_PUBLIC_KEY => public_key.clone(),
             ARG_DELEGATION_RATE => delegation_rate,
         };
