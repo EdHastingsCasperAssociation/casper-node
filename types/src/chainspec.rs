@@ -257,13 +257,6 @@ impl Chainspec {
             .transaction_v1_config
             .get_max_transaction_count(lane)
     }
-
-    /// Returns the max payment defined by the wasm lanes.
-    pub fn get_max_payment_limit_for_wasm(&self) -> u64 {
-        self.transaction_config
-            .transaction_v1_config
-            .get_max_payment_limit_for_wasm()
-    }
 }
 
 #[cfg(any(feature = "testing", test))]
@@ -313,6 +306,12 @@ impl Chainspec {
     /// Set allow prepaid.
     pub fn with_allow_prepaid(&mut self, allow_prepaid: bool) -> &mut Self {
         self.core_config.allow_prepaid = allow_prepaid;
+        self
+    }
+
+    /// Set block gas limit.
+    pub fn with_block_gas_limit(&mut self, block_gas_limit: u64) -> &mut Self {
+        self.transaction_config.block_gas_limit = block_gas_limit;
         self
     }
 }

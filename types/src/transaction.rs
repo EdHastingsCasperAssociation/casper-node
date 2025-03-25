@@ -20,25 +20,14 @@ mod transaction_target;
 mod transaction_v1;
 mod transfer_target;
 
+#[cfg(feature = "json-schema")]
+use crate::URef;
 use alloc::{
     collections::BTreeSet,
     string::{String, ToString},
     vec::Vec,
 };
 use core::fmt::{self, Debug, Display, Formatter};
-#[cfg(any(feature = "std", test))]
-use serde::{de, ser, Deserializer, Serializer};
-#[cfg(any(feature = "std", test))]
-use serde_bytes::ByteBuf;
-#[cfg(any(feature = "std", test))]
-use std::hash::Hash;
-#[cfg(any(feature = "std", test))]
-use thiserror::Error;
-#[cfg(any(feature = "std", test))]
-use transaction_v1::TransactionV1Json;
-
-#[cfg(feature = "json-schema")]
-use crate::URef;
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
 #[cfg(feature = "json-schema")]
@@ -48,8 +37,20 @@ use rand::Rng;
 #[cfg(feature = "json-schema")]
 use schemars::JsonSchema;
 #[cfg(any(feature = "std", test))]
+use serde::{de, ser, Deserializer, Serializer};
+#[cfg(any(feature = "std", test))]
 use serde::{Deserialize, Serialize};
+#[cfg(any(feature = "std", test))]
+use serde_bytes::ByteBuf;
+#[cfg(any(feature = "std", test))]
+use std::hash::Hash;
+#[cfg(any(feature = "std", test))]
+use thiserror::Error;
 use tracing::error;
+#[cfg(any(feature = "std", test))]
+pub use transaction_v1::calculate_transaction_lane;
+#[cfg(any(feature = "std", test))]
+use transaction_v1::TransactionV1Json;
 
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
 use crate::testing::TestRng;
@@ -59,10 +60,12 @@ use crate::{
     Digest, Phase, SecretKey, TimeDiff, Timestamp,
 };
 #[cfg(any(feature = "std", test))]
-use crate::{Chainspec, Gas, Motes};
+use crate::{Chainspec, Gas, Motes, TransactionV1Config};
 pub use addressable_entity_identifier::AddressableEntityIdentifier;
 pub use approval::Approval;
 pub use approvals_hash::ApprovalsHash;
+#[cfg(any(feature = "std", test))]
+pub use deploy::calculate_lane_id_for_deploy;
 pub use deploy::{
     Deploy, DeployDecodeFromJsonError, DeployError, DeployExcessiveSizeError, DeployHash,
     DeployHeader, DeployId, ExecutableDeployItem, ExecutableDeployItemIdentifier, InvalidDeploy,
@@ -585,6 +588,61 @@ impl Display for Transaction {
             Transaction::Deploy(deploy) => Display::fmt(deploy, formatter),
             Transaction::V1(txn) => Display::fmt(txn, formatter),
         }
+    }
+}
+
+#[cfg(any(feature = "std", test))]
+pub(crate) enum GetLaneError {
+    NoLaneMatch,
+    PricingModeNotSupported,
+}
+
+#[cfg(any(feature = "std", test))]
+impl From<GetLaneError> for InvalidTransactionV1 {
+    fn from(value: GetLaneError) -> Self {
+        match value {
+            GetLaneError::NoLaneMatch => InvalidTransactionV1::NoLaneMatch,
+            GetLaneError::PricingModeNotSupported => InvalidTransactionV1::PricingModeNotSupported,
+        }
+    }
+}
+
+#[cfg(any(feature = "std", test))]
+impl From<GetLaneError> for InvalidDeploy {
+    fn from(value: GetLaneError) -> Self {
+        match value {
+            GetLaneError::NoLaneMatch => InvalidDeploy::NoLaneMatch,
+            GetLaneError::PricingModeNotSupported => InvalidDeploy::PricingModeNotSupported,
+        }
+    }
+}
+
+#[cfg(any(feature = "std", test))]
+pub(crate) fn get_lane_for_non_install_wasm(
+    config: &TransactionV1Config,
+    pricing_mode: &PricingMode,
+    transaction_size: u64,
+    runtime_args_size: u64,
+) -> Result<u8, GetLaneError> {
+    match pricing_mode {
+        PricingMode::PaymentLimited { payment_amount, .. } => config
+            .get_wasm_lane_id_by_payment_limited(
+                *payment_amount,
+                transaction_size,
+                runtime_args_size,
+            )
+            .ok_or(GetLaneError::NoLaneMatch),
+        PricingMode::Fixed {
+            additional_computation_factor,
+            ..
+        } => config
+            .get_wasm_lane_id_by_size(
+                transaction_size,
+                *additional_computation_factor,
+                runtime_args_size,
+            )
+            .ok_or(GetLaneError::NoLaneMatch),
+        PricingMode::Prepaid { .. } => Err(GetLaneError::PricingModeNotSupported),
     }
 }
 

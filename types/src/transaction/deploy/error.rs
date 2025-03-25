@@ -139,8 +139,8 @@ pub enum InvalidDeploy {
     /// Invalid runtime.
     InvalidRuntime,
 
-    /// Invalid chainspec configuration - seems that chainspec has no wasm lanes defined
-    ChainspecHasNoWasmLanesDefined,
+    /// Could not match deploy with transaction lane
+    NoLaneMatch,
 
     /// The payment amount associated with the deploy exceeds the block gas limit.
     ExceededWasmLaneGasLimit {
@@ -152,146 +152,150 @@ pub enum InvalidDeploy {
 
     /// Invalid payment amount.
     InvalidPaymentAmount,
+
+    /// Pricing mode not supported
+    PricingModeNotSupported,
 }
 
 impl Display for InvalidDeploy {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         match self {
             InvalidDeploy::InvalidChainName { expected, got } => {
-                write!(
-                    formatter,
-                    "invalid chain name: expected {}, got {}",
-                    expected, got
-                )
-            }
+                        write!(
+                            formatter,
+                            "invalid chain name: expected {}, got {}",
+                            expected, got
+                        )
+                    }
             InvalidDeploy::DependenciesNoLongerSupported => {
-                write!(formatter, "dependencies no longer supported",)
-            }
+                        write!(formatter, "dependencies no longer supported",)
+                    }
             InvalidDeploy::ExcessiveSize(error) => {
-                write!(formatter, "deploy size too large: {}", error)
-            }
+                        write!(formatter, "deploy size too large: {}", error)
+                    }
             InvalidDeploy::ExcessiveTimeToLive { max_ttl, got } => {
-                write!(
-                    formatter,
-                    "time-to-live of {} exceeds limit of {}",
-                    got, max_ttl
-                )
-            }
+                        write!(
+                            formatter,
+                            "time-to-live of {} exceeds limit of {}",
+                            got, max_ttl
+                        )
+                    }
             InvalidDeploy::TimestampInFuture {
-                validation_timestamp,
-                timestamp_leeway,
-                got,
-            } => {
-                write!(
-                    formatter,
-                    "timestamp of {} is later than node's timestamp of {} plus leeway of {}",
-                    got, validation_timestamp, timestamp_leeway
-                )
-            }
+                        validation_timestamp,
+                        timestamp_leeway,
+                        got,
+                    } => {
+                        write!(
+                            formatter,
+                            "timestamp of {} is later than node's timestamp of {} plus leeway of {}",
+                            got, validation_timestamp, timestamp_leeway
+                        )
+                    }
             InvalidDeploy::InvalidBodyHash => {
-                write!(
-                    formatter,
-                    "the provided body hash does not match the actual hash of the body"
-                )
-            }
+                        write!(
+                            formatter,
+                            "the provided body hash does not match the actual hash of the body"
+                        )
+                    }
             InvalidDeploy::InvalidDeployHash => {
-                write!(
-                    formatter,
-                    "the provided hash does not match the actual hash of the deploy"
-                )
-            }
+                        write!(
+                            formatter,
+                            "the provided hash does not match the actual hash of the deploy"
+                        )
+                    }
             InvalidDeploy::EmptyApprovals => {
-                write!(formatter, "the deploy has no approvals")
-            }
+                        write!(formatter, "the deploy has no approvals")
+                    }
             InvalidDeploy::InvalidApproval { index, error } => {
-                write!(
-                    formatter,
-                    "the approval at index {} is invalid: {}",
-                    index, error
-                )
-            }
+                        write!(
+                            formatter,
+                            "the approval at index {} is invalid: {}",
+                            index, error
+                        )
+                    }
             InvalidDeploy::ExcessiveSessionArgsLength { max_length, got } => {
-                write!(
-                    formatter,
-                    "serialized session code runtime args of {} exceeds limit of {}",
-                    got, max_length
-                )
-            }
+                        write!(
+                            formatter,
+                            "serialized session code runtime args of {} exceeds limit of {}",
+                            got, max_length
+                        )
+                    }
             InvalidDeploy::ExcessivePaymentArgsLength { max_length, got } => {
-                write!(
-                    formatter,
-                    "serialized payment code runtime args of {} exceeds limit of {}",
-                    got, max_length
-                )
-            }
+                        write!(
+                            formatter,
+                            "serialized payment code runtime args of {} exceeds limit of {}",
+                            got, max_length
+                        )
+                    }
             InvalidDeploy::MissingPaymentAmount => {
-                write!(formatter, "missing payment 'amount' runtime argument")
-            }
+                        write!(formatter, "missing payment 'amount' runtime argument")
+                    }
             InvalidDeploy::FailedToParsePaymentAmount => {
-                write!(formatter, "failed to parse payment 'amount' as U512")
-            }
+                        write!(formatter, "failed to parse payment 'amount' as U512")
+                    }
             InvalidDeploy::ExceededBlockGasLimit {
-                block_gas_limit,
-                got,
-            } => {
-                write!(
-                    formatter,
-                    "payment amount of {} exceeds the block gas limit of {}",
-                    got, block_gas_limit
-                )
-            }
+                        block_gas_limit,
+                        got,
+                    } => {
+                        write!(
+                            formatter,
+                            "payment amount of {} exceeds the block gas limit of {}",
+                            got, block_gas_limit
+                        )
+                    }
             InvalidDeploy::MissingTransferAmount => {
-                write!(formatter, "missing transfer 'amount' runtime argument")
-            }
+                        write!(formatter, "missing transfer 'amount' runtime argument")
+                    }
             InvalidDeploy::FailedToParseTransferAmount => {
-                write!(formatter, "failed to parse transfer 'amount' as U512")
-            }
+                        write!(formatter, "failed to parse transfer 'amount' as U512")
+                    }
             InvalidDeploy::InsufficientTransferAmount { minimum, attempted } => {
-                write!(
-                    formatter,
-                    "insufficient transfer amount; minimum: {} attempted: {}",
-                    minimum, attempted
-                )
-            }
+                        write!(
+                            formatter,
+                            "insufficient transfer amount; minimum: {} attempted: {}",
+                            minimum, attempted
+                        )
+                    }
             InvalidDeploy::ExcessiveApprovals {
-                got,
-                max_associated_keys,
-            } => {
-                write!(
-                    formatter,
-                    "number of approvals {} exceeds the maximum number of associated keys {}",
-                    got, max_associated_keys
-                )
-            }
+                        got,
+                        max_associated_keys,
+                    } => {
+                        write!(
+                            formatter,
+                            "number of approvals {} exceeds the maximum number of associated keys {}",
+                            got, max_associated_keys
+                        )
+                    }
             InvalidDeploy::UnableToCalculateGasLimit => {
-                write!(formatter, "unable to calculate gas limit",)
-            }
+                        write!(formatter, "unable to calculate gas limit",)
+                    }
             InvalidDeploy::UnableToCalculateGasCost => {
-                write!(formatter, "unable to calculate gas cost",)
-            }
+                        write!(formatter, "unable to calculate gas cost",)
+                    }
             InvalidDeploy::GasLimitNotSupported => {
-                write!(formatter, "gas limit is not supported in legacy deploys",)
-            }
+                        write!(formatter, "gas limit is not supported in legacy deploys",)
+                    }
             InvalidDeploy::GasPriceToleranceTooLow { min_gas_price_tolerance, provided_gas_price_tolerance } => write!(
-                formatter,
-                "received a deploy with gas price tolerance {} but this chain will only go as low as {}",
-                provided_gas_price_tolerance, min_gas_price_tolerance
-            ),
+                        formatter,
+                        "received a deploy with gas price tolerance {} but this chain will only go as low as {}",
+                        provided_gas_price_tolerance, min_gas_price_tolerance
+                    ),
             InvalidDeploy::InvalidRuntime => {
-                write!(formatter, "invalid runtime",)
-            }
-            InvalidDeploy::ChainspecHasNoWasmLanesDefined => write!(formatter, "chainspec didnt have any wasm lanes defined which is required for wasm based deploys",),
+                        write!(formatter, "invalid runtime",)
+                    }
+            InvalidDeploy::NoLaneMatch => write!(formatter, "chainspec didnt have any wasm lanes defined which is required for wasm based deploys",),
             InvalidDeploy::ExceededWasmLaneGasLimit {
-                wasm_lane_gas_limit,
-                got,
-            } => {
-                write!(
-                    formatter,
-                    "payment amount of {} exceeds the largest wasm lane gas limit of {}",
-                    got, wasm_lane_gas_limit
-                )
-            }
+                        wasm_lane_gas_limit,
+                        got,
+                    } => {
+                        write!(
+                            formatter,
+                            "payment amount of {} exceeds the largest wasm lane gas limit of {}",
+                            got, wasm_lane_gas_limit
+                        )
+                    }
             InvalidDeploy::InvalidPaymentAmount => write!(formatter, "invalid payment amount",),
+            InvalidDeploy::PricingModeNotSupported => write!(formatter, "pricing mode not supported",),
         }
     }
 }
@@ -329,9 +333,10 @@ impl StdError for InvalidDeploy {
             | InvalidDeploy::UnableToCalculateGasCost
             | InvalidDeploy::GasPriceToleranceTooLow { .. }
             | InvalidDeploy::InvalidRuntime
-            | InvalidDeploy::ChainspecHasNoWasmLanesDefined
+            | InvalidDeploy::NoLaneMatch
             | InvalidDeploy::ExceededWasmLaneGasLimit { .. }
-            | InvalidDeploy::InvalidPaymentAmount => None,
+            | InvalidDeploy::InvalidPaymentAmount
+            | InvalidDeploy::PricingModeNotSupported => None,
         }
     }
 }

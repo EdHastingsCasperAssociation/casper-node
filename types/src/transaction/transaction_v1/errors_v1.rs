@@ -179,8 +179,8 @@ pub enum InvalidTransaction {
     },
     /// The transaction provided is not supported.
     InvalidTransactionLane(u8),
-    /// No wasm lane matches transaction
-    NoWasmLaneMatchesTransaction(),
+    /// Could not match v1 with transaction lane
+    NoLaneMatch,
     /// Gas price tolerance too low.
     GasPriceToleranceTooLow {
         /// The minimum gas price tolerance.
@@ -394,7 +394,7 @@ impl Display for InvalidTransaction {
             InvalidTransaction::EntryPointMustBeCall { entry_point } => {
                 write!(formatter, "entry point must be call: {entry_point}")
             }
-            InvalidTransaction::NoWasmLaneMatchesTransaction() => write!(formatter, "Could not match any generic wasm lane to the specified transaction"),
+            InvalidTransaction::NoLaneMatch => write!(formatter, "Could not match any lane to the specified transaction"),
             InvalidTransaction::UnexpectedTransactionFieldEntries => write!(formatter, "There were entries in the fields map of the payload that could not be matched"),
             InvalidTransaction::ExpectedNamedArguments => {
                 write!(formatter, "transaction requires named arguments")
@@ -466,7 +466,7 @@ impl StdError for InvalidTransaction {
             | InvalidTransaction::GasPriceToleranceTooLow { .. }
             | InvalidTransaction::InvalidTransactionLane(_)
             | InvalidTransaction::CannotCalculateFieldsHash
-            | InvalidTransaction::NoWasmLaneMatchesTransaction()
+            | InvalidTransaction::NoLaneMatch
             | InvalidTransaction::UnexpectedTransactionFieldEntries => None,
             InvalidTransaction::CouldNotDeserializeField { error } => match error {
                 FieldDeserializationError::IndexNotExists { .. }

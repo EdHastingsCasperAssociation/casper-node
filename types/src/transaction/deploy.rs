@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
 #[cfg(any(feature = "std", test))]
-use super::{InitiatorAddr, InitiatorAddrAndSecretKey};
+use super::{get_lane_for_non_install_wasm, InitiatorAddr, InitiatorAddrAndSecretKey, PricingMode};
 #[cfg(any(
     all(feature = "std", feature = "testing"),
     feature = "json-schema",
@@ -60,7 +60,7 @@ use crate::{
 };
 
 #[cfg(any(feature = "std", test))]
-use crate::{chainspec::PricingHandling, Chainspec};
+use crate::{chainspec::PricingHandling, Chainspec, Phase, TransactionV1Config, MINT_LANE_ID};
 #[cfg(any(feature = "std", test))]
 use crate::{system::auction::ARG_AMOUNT, transaction::GasLimited, Gas, Motes, U512};
 pub use deploy_hash::DeployHash;
@@ -418,14 +418,14 @@ impl Deploy {
             // Not config compliant if V1 runtime is disabled.
             return Err(InvalidDeploy::InvalidRuntime);
         }
+        let pricing_handling = chainspec.core_config.pricing_handling;
+        let v1_config = &chainspec.transaction_config.transaction_v1_config;
+        let lane_id = calculate_lane_id_for_deploy(self, pricing_handling, v1_config)?;
+        let lane_definition = v1_config
+            .get_lane_by_id(lane_id)
+            .ok_or(InvalidDeploy::NoLaneMatch)?;
 
-        // We're assuming that Deploy can have a maximum size of an InstallUpgrade transaction.
-        //  We're passing 0 as transaction size since determining max transaction size for
-        //  InstallUpgrade doesn't rely on the size of transaction
-        let max_transaction_size = config
-            .transaction_v1_config
-            .get_max_serialized_length_for_wasm();
-        self.is_valid_size(max_transaction_size as u32)?;
+        self.is_valid_size(lane_definition.max_transaction_length as u32)?;
 
         let header = self.header();
         let chain_name = &chainspec.network_config.name;
@@ -485,10 +485,7 @@ impl Deploy {
                 got: Box::new(gas_limit.value()),
             });
         }
-
-        let wasm_lane_limit = config
-            .transaction_v1_config
-            .get_max_payment_limit_for_wasm();
+        let wasm_lane_limit = lane_definition.max_transaction_gas_limit;
         let wasm_lane_limit_as_gas = Gas::new(wasm_lane_limit);
         if gas_limit > wasm_lane_limit_as_gas {
             debug!(
@@ -1500,13 +1497,12 @@ impl GasLimited for Deploy {
                 }
             }
             PricingHandling::Fixed => {
-                // in fixed, the computation limit is fixed per the chainspec settings
-                //THIS SHOULD USE MINT_LANE_ID
-                let computation_limit = if self.is_transfer() {
-                    costs.mint_costs().transfer as u64
-                } else {
-                    chainspec.get_max_payment_limit_for_wasm()
-                };
+                let v1_config = &chainspec.transaction_config.transaction_v1_config;
+                let lane_id = calculate_lane_id_for_deploy(self, pricing_handling, v1_config)?;
+                let lane_definition = v1_config
+                    .get_lane_by_id(lane_id)
+                    .ok_or(InvalidDeploy::NoLaneMatch)?;
+                let computation_limit = lane_definition.max_transaction_gas_limit;
                 Gas::new(computation_limit)
             } // legacy deploys do not support prepaid
         };
@@ -1703,6 +1699,51 @@ fn validate_deploy(deploy: &Deploy) -> Result<(), InvalidDeploy> {
     }
 
     Ok(())
+}
+
+#[cfg(any(feature = "std", test))]
+/// Calculate lane id for deploy
+pub fn calculate_lane_id_for_deploy(
+    deploy: &Deploy,
+    pricing_handling: PricingHandling,
+    config: &TransactionV1Config,
+) -> Result<u8, InvalidDeploy> {
+    if deploy.is_transfer() {
+        return Ok(MINT_LANE_ID);
+    }
+    let size_estimation = deploy.serialized_length() as u64;
+    let runtime_args_size = (deploy.payment().args().serialized_length()
+        + deploy.session().args().serialized_length()) as u64;
+
+    let gas_price_tolerance = deploy.gas_price_tolerance()?;
+    let pricing_mode = match pricing_handling {
+        PricingHandling::PaymentLimited => {
+            let is_standard_payment = deploy.payment().is_standard_payment(Phase::Payment);
+            let value = deploy
+                .payment()
+                .args()
+                .get(ARG_AMOUNT)
+                .ok_or(InvalidDeploy::MissingPaymentAmount)?;
+            let payment_amount = value
+                .clone()
+                .into_t::<U512>()
+                .map_err(|_| InvalidDeploy::FailedToParsePaymentAmount)?
+                .as_u64();
+            PricingMode::PaymentLimited {
+                payment_amount,
+                gas_price_tolerance,
+                standard_payment: is_standard_payment,
+            }
+        }
+        PricingHandling::Fixed => PricingMode::Fixed {
+            gas_price_tolerance,
+            // additional_computation_factor is not representable for Deploys, we default to 0
+            additional_computation_factor: 0,
+        },
+    };
+
+    get_lane_for_non_install_wasm(config, &pricing_mode, size_estimation, runtime_args_size)
+        .map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -2207,7 +2248,7 @@ mod tests {
     }
 
     #[test]
-    fn not_acceptable_due_to_excessive_payment_amount() {
+    fn not_acceptable_if_doesnt_fit_in_any_lane() {
         const GAS_PRICE_TOLERANCE: u8 = u8::MAX;
 
         let mut rng = TestRng::new();
@@ -2217,7 +2258,73 @@ mod tests {
         chainspec.with_chain_name(chain_name.to_string());
         chainspec.with_pricing_handling(PricingHandling::PaymentLimited);
         let config = chainspec.transaction_config.clone();
-        let amount = U512::from(config.block_gas_limit + 1);
+        let max_lane = chainspec
+            .transaction_config
+            .transaction_v1_config
+            .get_max_wasm_lane_by_gas_limit()
+            .unwrap();
+        let amount = U512::from(max_lane.max_transaction_gas_limit + 1);
+
+        let payment = ExecutableDeployItem::ModuleBytes {
+            module_bytes: Bytes::new(),
+            args: runtime_args! {
+                "amount" => amount
+            },
+        };
+
+        // Create an empty session object that is not transfer to ensure
+        // that the payment amount is checked.
+        let session = ExecutableDeployItem::StoredContractByName {
+            name: "".to_string(),
+            entry_point: "".to_string(),
+            args: Default::default(),
+        };
+
+        let mut deploy = create_deploy(
+            &mut rng,
+            config.max_ttl,
+            0,
+            chain_name,
+            GAS_PRICE_TOLERANCE as u64,
+        );
+
+        deploy.payment = payment;
+        deploy.session = session;
+
+        let expected_error = InvalidDeploy::NoLaneMatch;
+
+        let current_timestamp = deploy.header().timestamp();
+        assert_eq!(
+            deploy.is_config_compliant(&chainspec, TimeDiff::default(), current_timestamp),
+            Err(expected_error)
+        );
+        assert!(
+            deploy.is_valid.get().is_none(),
+            "deploy should not have run expensive `is_valid` call"
+        );
+    }
+
+    #[test]
+    fn not_acceptable_due_to_transaction_bigger_than_block_limit() {
+        //TODO we should consider validating on startup if the
+        // chainspec doesn't defined wasm lanes that are bigger than
+        // the block limit
+        const GAS_PRICE_TOLERANCE: u8 = u8::MAX;
+
+        let mut rng = TestRng::new();
+        let chain_name = "net-1";
+
+        let mut chainspec = Chainspec::default();
+        chainspec.with_block_gas_limit(100); // The default wasm lane is much bigger than
+        chainspec.with_chain_name(chain_name.to_string());
+        chainspec.with_pricing_handling(PricingHandling::PaymentLimited);
+        let config = chainspec.transaction_config.clone();
+        let max_lane = chainspec
+            .transaction_config
+            .transaction_v1_config
+            .get_max_wasm_lane_by_gas_limit()
+            .unwrap();
+        let amount = U512::from(max_lane.max_transaction_gas_limit);
 
         let payment = ExecutableDeployItem::ModuleBytes {
             module_bytes: Bytes::new(),
