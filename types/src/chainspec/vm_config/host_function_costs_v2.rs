@@ -18,30 +18,28 @@ const NOT_USED: Cost = 0;
 /// An arbitrary default fixed cost for host functions that were not researched yet.
 const DEFAULT_FIXED_COST: Cost = 200;
 
-const DEFAULT_CALL_COST: u32 = 300_000_000;
-
-const DEFAULT_ENV_TRANSFERRED_VALUE_COST: u32 = 2_500_000_000;
-const DEFAULT_ENV_BALANCE_COST: u32 = 3_000_000;
-const DEFAULT_ENV_BLOCK_TIME_COST: u32 = 330;
-const DEFAULT_GET_CALLER_COST: u32 = 380;
-const DEFAULT_NEW_UREF_COST: u32 = 17_000;
+const DEFAULT_CALL_COST: u32 = 10_000;
+const DEFAULT_ENV_TRANSFERRED_VALUE_COST: u32 = 10_000;
+const DEFAULT_ENV_BALANCE_COST: u32 = 100;
+const DEFAULT_ENV_BLOCK_TIME_COST: u32 = 100;
+const DEFAULT_GET_CALLER_COST: u32 = 100;
 
 const DEFAULT_PRINT_COST: u32 = 20_000;
 const DEFAULT_PRINT_TEXT_SIZE_WEIGHT: u32 = 4_600;
 
-const DEFAULT_READ_VALUE_COST: u32 = 60_000;
+const DEFAULT_READ_COST: u32 = 1_000;
+const DEFAULT_ARG_CHARGE: u32 = 100;
 
-const DEFAULT_RET_COST: u32 = 23_000;
-const DEFAULT_RET_VALUE_SIZE_WEIGHT: u32 = 420_000;
+const DEFAULT_RET_COST: u32 = 300;
+const DEFAULT_RET_VALUE_SIZE_WEIGHT: u32 = 100;
 
 const DEFAULT_TRANSFER_COST: u32 = 2_500_000_000;
 
-const DEFAULT_WRITE_COST: u32 = 14_000;
-const DEFAULT_WRITE_VALUE_SIZE_WEIGHT: u32 = 980;
+const DEFAULT_WRITE_COST: u32 = 5_000;
+const DEFAULT_WRITE_VALUE_SIZE_WEIGHT: u32 = 100;
 
-const DEFAULT_ARG_CHARGE: u32 = 120_000;
 
-const DEFAULT_COPY_INPUT_COST: u32 = 0;
+const DEFAULT_COPY_INPUT_COST: u32 = 300;
 const DEFAULT_COPY_INPUT_VALUE_SIZE_WEIGHT: u32 = 0;
 
 const DEFAULT_CREATE_COST: u32 = 0;
@@ -51,16 +49,9 @@ const DEFAULT_CREATE_INPUT_SIZE_WEIGHT: u32 = 0;
 const DEFAULT_CREATE_SEED_SIZE_WEIGHT: u32 = 0;
 
 const DEFAULT_EMIT_COST: u32 = 200;
-const DEFAULT_EMIT_TOPIC_SIZE_WEIGHT: u32 = 30_000;
-const DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT: u32 = 120_000;
+const DEFAULT_EMIT_TOPIC_SIZE_WEIGHT: u32 = 100;
+const DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT: u32 = 100;
 
-/// Default cost for a new dictionary.
-pub const DEFAULT_NEW_DICTIONARY_COST: u32 = DEFAULT_NEW_UREF_COST;
-
-/// Host function cost unit for a new dictionary.
-#[allow(unused)]
-pub const DEFAULT_HOST_FUNCTION_NEW_DICTIONARY: HostFunction<[Cost; 1]> =
-    HostFunction::new(DEFAULT_NEW_DICTIONARY_COST, [NOT_USED]);
 
 /// Definition of a host function cost table.
 #[derive(Add, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -155,7 +146,7 @@ impl Default for HostFunctionCostsV2 {
     fn default() -> Self {
         Self {
             read: HostFunction::new(
-                DEFAULT_READ_VALUE_COST,
+                DEFAULT_READ_COST,
                 [
                     NOT_USED,
                     DEFAULT_ARG_CHARGE,

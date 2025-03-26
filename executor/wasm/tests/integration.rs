@@ -213,6 +213,8 @@ fn cep18() {
         create_request,
     );
 
+    dbg!(create_result.gas_usage().gas_spent());
+
     let contract_hash = EntityAddr::SmartContract(*create_result.smart_contract_addr());
 
     state_root_hash = global_state
