@@ -42,22 +42,15 @@ jobs:
       - name: Install cargo deb
         run: cargo install cargo-deb
 
-      - name: Cargo build
-        run: cargo build -p global-state-update-gen --release
-
-      - name: Cargo deb
-        run: cargo deb -p global-state-update-gen --no-build --variant ${{ matrix.code_name }}
-
       - name: Build update package
         run: ./ci/build_update_package.sh
 
       - name: Upload artifacts to S3
-        run: aws s3 sync ./target/upgrade_build/* s3://${{ secrets.AWS_BUCKET_GENESIS }}/artifacts/casper-node/$(git rev-parse HEAD)/
+        run: aws s3 sync ./target/upgrade_build/ s3://${{ secrets.AWS_BUCKET_GENESIS }}/artifacts/casper-node/$(git rev-parse HEAD)/
 
       - name: Upload branch_name.latest file to S3
-        run: aws s3 sync ./target/latest/* s3://${{ secrets.AWS_BUCKET_GENESIS }}/artifacts/casper-node/
+        run: aws s3 sync ./target/latest/ s3://${{ secrets.AWS_BUCKET_GENESIS }}/artifacts/casper-node/
 
       # Required in case of overwrite
       - name: Invalidate CloudFront cache
-        run: aws cloudfront create-invalidation --distribution-id ${{ secrets.AWS_CLOUDFRONT_GENESIS }} --paths "/artifacts/casper-node/$(git rev-parse HEAD)/*"
-
+        run: aws cloudfront create-invalidation --distribution-id ${{ secrets.AWS_CLOUDFRONT_GENESIS }} --paths "/artifacts/casper-node/*"

@@ -32,7 +32,6 @@ NODE_VERSION=$(cat "$NODE_BUILD_DIR/Cargo.toml" | python3 -c "import sys, toml; 
 mkdir -p "$LATEST_DIR"
 echo -n "$GIT_HASH" > "$LATEST_DIR/$BRANCH_NAME.latest"
 
-
 echo "Building casper-node"
 cd "$NODE_BUILD_DIR" || exit
 cargo build --release
