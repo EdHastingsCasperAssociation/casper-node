@@ -16,6 +16,7 @@ else
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
+LATEST_DIR="$ROOT_DIR/target/latest"
 GENESIS_FILES_DIR="$ROOT_DIR/resources/production"
 NODE_BUILD_TARGET="$ROOT_DIR/target/release/casper-node"
 NODE_BUILD_DIR="$ROOT_DIR/node"
@@ -27,6 +28,9 @@ TAG_NAME=$(git tag --points-at HEAD)
 BRANCH_NAME=$(git branch --show-current)
 PROTOCOL_VERSION=$(cat "$GENESIS_FILES_DIR/chainspec.toml" | python3 -c "import sys, toml; print(toml.load(sys.stdin)['protocol']['version'].replace('.','_'))")
 NODE_VERSION=$(cat "$NODE_BUILD_DIR/Cargo.toml" | python3 -c "import sys, toml; print(toml.load(sys.stdin)['package']['version'])")
+
+mkdir -p "$LATEST_DIR"
+echo -n "$GIT_HASH" > "$LATEST_DIR/$BRANCH_NAME.latest"
 
 
 echo "Building casper-node"
@@ -73,7 +77,6 @@ cd ..
 rm -rf "$CONFIG_DIR"
 
 echo "Building version.json"
-ls "$UPGRADE_DIR"
 jq --null-input \
 --arg	branch "$BRANCH_NAME" \
 --arg version "$NODE_VERSION" \
