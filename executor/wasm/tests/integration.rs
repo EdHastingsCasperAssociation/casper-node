@@ -67,6 +67,12 @@ const TRANSACTION_HASH: TransactionHash =
 const DEFAULT_GAS_LIMIT: u64 = 1_000_000 * CSPR;
 const DEFAULT_CHAIN_NAME: &str = "casper-test";
 
+// TODO: This is a temporary value, it should be set in the config. Default value from V1 engine
+// does not apply to V2 engine due to different cost structure. Rather than hardcoding it here, we
+// should probably reflect gas costs in a dynamic costs in host function charge. Proper value is
+// pending calculation.
+const DEFAULT_GAS_PER_BYTE_COST: u32 = 1_117_587 / 10;
+
 fn make_address_generator() -> Arc<RwLock<AddressGenerator>> {
     let id = Id::Transaction(TRANSACTION_HASH);
     Arc::new(RwLock::new(AddressGenerator::new(
@@ -165,12 +171,13 @@ fn harness() {
 }
 
 pub(crate) fn make_executor() -> ExecutorV2 {
+    let storage_costs = StorageCosts::new(DEFAULT_GAS_PER_BYTE_COST);
     let execution_engine_v1 = ExecutionEngineV1::default();
     let executor_config = ExecutorConfigBuilder::default()
         .with_memory_limit(17)
         .with_executor_kind(ExecutorKind::Compiled)
         .with_wasm_config(WasmV2Config::default())
-        .with_storage_costs(StorageCosts::default())
+        .with_storage_costs(storage_costs)
         .with_message_limits(MessageLimits::default())
         .build()
         .expect("Should build");
@@ -273,6 +280,7 @@ fn cep18() {
         state_root_hash,
         execute_request,
     );
+    dbg!(result_2.gas_usage().gas_spent());
 
     state_root_hash = global_state
         .commit_effects(state_root_hash, result_2.effects().clone())

@@ -1,5 +1,5 @@
 use core::panic;
-use std::{borrow::Cow, cmp, num::NonZeroU32, sync::Arc};
+use std::{borrow::Cow, cmp, fmt, num::NonZeroU32, sync::Arc};
 
 use crate::system::{self, MintArgs, MintTransferArgs};
 

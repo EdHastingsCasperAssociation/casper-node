@@ -24,20 +24,18 @@ const DEFAULT_ENV_BALANCE_COST: u32 = 100;
 const DEFAULT_ENV_BLOCK_TIME_COST: u32 = 100;
 const DEFAULT_GET_CALLER_COST: u32 = 100;
 
-const DEFAULT_PRINT_COST: u32 = 20_000;
-const DEFAULT_PRINT_TEXT_SIZE_WEIGHT: u32 = 4_600;
+const DEFAULT_PRINT_COST: u32 = 100;
 
 const DEFAULT_READ_COST: u32 = 1_000;
-const DEFAULT_ARG_CHARGE: u32 = 100;
+const DEFAULT_READ_KEY_SIZE_WEIGHT: u32 = 100;
 
 const DEFAULT_RET_COST: u32 = 300;
 const DEFAULT_RET_VALUE_SIZE_WEIGHT: u32 = 100;
 
 const DEFAULT_TRANSFER_COST: u32 = 2_500_000_000;
 
-const DEFAULT_WRITE_COST: u32 = 5_000;
-const DEFAULT_WRITE_VALUE_SIZE_WEIGHT: u32 = 100;
-
+const DEFAULT_WRITE_COST: u32 = 25_000;
+const DEFAULT_WRITE_SIZE_WEIGHT: u32 = 100_000;
 
 const DEFAULT_COPY_INPUT_COST: u32 = 300;
 const DEFAULT_COPY_INPUT_VALUE_SIZE_WEIGHT: u32 = 0;
@@ -51,7 +49,6 @@ const DEFAULT_CREATE_SEED_SIZE_WEIGHT: u32 = 0;
 const DEFAULT_EMIT_COST: u32 = 200;
 const DEFAULT_EMIT_TOPIC_SIZE_WEIGHT: u32 = 100;
 const DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT: u32 = 100;
-
 
 /// Definition of a host function cost table.
 #[derive(Add, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -149,8 +146,8 @@ impl Default for HostFunctionCostsV2 {
                 DEFAULT_READ_COST,
                 [
                     NOT_USED,
-                    DEFAULT_ARG_CHARGE,
                     NOT_USED,
+                    DEFAULT_READ_KEY_SIZE_WEIGHT,
                     NOT_USED,
                     NOT_USED,
                     NOT_USED,
@@ -162,8 +159,8 @@ impl Default for HostFunctionCostsV2 {
                     NOT_USED,
                     NOT_USED,
                     NOT_USED,
-                    DEFAULT_WRITE_VALUE_SIZE_WEIGHT,
                     NOT_USED,
+                    DEFAULT_WRITE_SIZE_WEIGHT,
                 ],
             ),
             copy_input: HostFunction::new(
@@ -202,10 +199,7 @@ impl Default for HostFunctionCostsV2 {
                     NOT_USED,
                 ],
             ),
-            print: HostFunction::new(
-                DEFAULT_PRINT_COST,
-                [NOT_USED, DEFAULT_PRINT_TEXT_SIZE_WEIGHT],
-            ),
+            print: HostFunction::new(DEFAULT_PRINT_COST, [NOT_USED, NOT_USED]),
             emit: HostFunction::new(
                 DEFAULT_EMIT_COST,
                 [
