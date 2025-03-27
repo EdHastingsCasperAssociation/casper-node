@@ -24,11 +24,11 @@ UPGRADE_DIR="$ROOT_DIR/target/upgrade_build/"
 BIN_DIR="$UPGRADE_DIR/bin"
 CONFIG_DIR="$UPGRADE_DIR/config"
 GIT_HASH=$(git rev-parse HEAD)
-TAG_NAME=$(git tag --points-at HEAD)
 BRANCH_NAME=$(git branch --show-current)
 PROTOCOL_VERSION=$(cat "$GENESIS_FILES_DIR/chainspec.toml" | python3 -c "import sys, toml; print(toml.load(sys.stdin)['protocol']['version'].replace('.','_'))")
 NODE_VERSION=$(cat "$NODE_BUILD_DIR/Cargo.toml" | python3 -c "import sys, toml; print(toml.load(sys.stdin)['package']['version'])")
 
+echo "Creating $BRANCH_NAME.latest file"
 mkdir -p "$LATEST_DIR"
 echo -n "$GIT_HASH" > "$LATEST_DIR/$BRANCH_NAME.latest"
 
@@ -38,6 +38,7 @@ cargo build --release
 
 echo "Building global-state-update-gen"
 cd "$ROOT_DIR" || exit
+cargo build --release --package global-state-update-gen
 cargo deb --package global-state-update-gen
 mkdir -p "$UPGRADE_DIR"
 cp "$ROOT_DIR/target/debian/"* "$UPGRADE_DIR" || exit
@@ -81,8 +82,7 @@ jq --null-input \
 --arg version "$NODE_VERSION" \
 --arg pv "$PROTOCOL_VERSION" \
 --arg ghash "$GIT_HASH" \
---arg tag "$TAG_NAME" \
 --arg now "$(jq -nr 'now | strftime("%Y-%m-%dT%H:%M:%SZ")')" \
 --arg files "$(ls "$UPGRADE_DIR" | jq -nRc '[inputs]')" \
-'{"branch": $branch, "version": $version, "protocol_version": $pv, "git-hash": $ghash, "tag": $tag, "timestamp": $now, "files": $files}' \
+'{"branch": $branch, "version": $version, "protocol_version": $pv, "git-hash": $ghash, "timestamp": $now, "files": $files}' \
 > "$UPGRADE_DIR/version.json"
