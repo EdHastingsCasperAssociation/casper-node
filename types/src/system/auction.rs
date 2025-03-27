@@ -71,6 +71,108 @@ pub type ValidatorCredits = BTreeMap<PublicKey, BTreeMap<EraId, Box<ValidatorCre
 /// Weights of validators. "Weight" in this context means a sum of their stakes.
 pub type ValidatorWeights = BTreeMap<PublicKey, U512>;
 
+#[derive(Debug)]
+pub struct WeightsBreakout {
+    locked: ValidatorWeights,
+    unlocked_meets_min: ValidatorWeights,
+    unlocked_below_min: ValidatorWeights,
+}
+
+impl WeightsBreakout {
+    pub fn new() -> Self {
+        WeightsBreakout {
+            locked: BTreeMap::default(),
+            unlocked_meets_min: BTreeMap::default(),
+            unlocked_below_min: BTreeMap::default(),
+        }
+    }
+
+    pub fn register(
+        &mut self,
+        public_key: PublicKey,
+        weight: U512,
+        locked: bool,
+        meets_minimum: bool,
+    ) {
+        if locked {
+            self.locked.insert(public_key, weight);
+        } else if meets_minimum {
+            self.unlocked_meets_min.insert(public_key, weight);
+        } else {
+            self.unlocked_below_min.insert(public_key, weight);
+        }
+    }
+
+    /// The count of locked weights.
+    pub fn locked_count(&self) -> usize {
+        self.locked.len()
+    }
+
+    /// The count of unlocked weights with at least minimum bid amount.
+    pub fn unlocked_meets_min_count(&self) -> usize {
+        self.unlocked_meets_min.len()
+    }
+
+    /// The count of unlocked weights that do not meet minimum bid amount.
+    pub fn unlocked_below_min_count(&self) -> usize {
+        self.unlocked_below_min.len()
+    }
+
+    /// Takes all locked and remaining slots number of unlocked meets min.
+    pub fn take(self, validator_slots: usize, threshold: usize) -> ValidatorWeights {
+        let locked_count = self.locked.len();
+        if locked_count >= validator_slots {
+            // locked validators are taken even if exceeding validator_slots count
+            // they are literally locked in
+            return self.locked;
+        }
+        let remaining_auction_slots = validator_slots.saturating_sub(locked_count);
+        let mut unlocked_hi = self
+            .unlocked_meets_min
+            .iter()
+            .map(|(public_key, validator_bid)| (public_key.clone(), *validator_bid))
+            .collect::<Vec<(PublicKey, U512)>>();
+        // sort highest to lowest (rhs to lhs)
+        unlocked_hi.sort_by(|(_, lhs), (_, rhs)| rhs.cmp(lhs));
+        let unlocked_hi_count = unlocked_hi.len();
+        let combined_count = unlocked_hi_count.saturating_add(locked_count);
+        let unlocked_low_count = self.unlocked_below_min.len();
+        if unlocked_low_count == 0
+            || unlocked_hi_count >= remaining_auction_slots
+            || combined_count >= threshold
+        {
+            return self
+                .locked
+                .into_iter()
+                .chain(unlocked_hi.into_iter().take(remaining_auction_slots))
+                .collect();
+        }
+
+        // we have fewer locked bids and bids >= min bid than the safety threshold,
+        // so we will attempt to backfill slots up to the safety threshold from otherwise
+        // valid bids that have less than the min bid
+        let backfill_count = threshold.saturating_sub(combined_count);
+        let mut unlocked_low = self
+            .unlocked_below_min
+            .iter()
+            .map(|(public_key, validator_bid)| (public_key.clone(), *validator_bid))
+            .collect::<Vec<(PublicKey, U512)>>();
+        // sort highest to lowest (rhs to lhs)
+        unlocked_low.sort_by(|(_, lhs), (_, rhs)| rhs.cmp(lhs));
+        self.locked
+            .into_iter()
+            .chain(unlocked_hi.into_iter().take(remaining_auction_slots))
+            .chain(unlocked_low.into_iter().take(backfill_count))
+            .collect()
+    }
+}
+
+impl Default for WeightsBreakout {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// List of era validators
 pub type EraValidators = BTreeMap<EraId, ValidatorWeights>;
 
