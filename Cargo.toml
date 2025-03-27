@@ -21,6 +21,7 @@ members = [
     "smart_contracts/sdk-sys",
     "smart_contracts/macros",
     "cargo-casper",
+    "cargo-casper/project-template",
 #    "utils/highway-rewards-analysis",
 #    "utils/highway-state-grapher",
     "executor/wasm-common",
