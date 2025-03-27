@@ -7,7 +7,7 @@ const FLOATING_POINTS_NOT_ALLOWED: &str = "Floating point opcodes are not allowe
 fn extension_not_allowed_error(extension: &str) -> MiddlewareError {
     MiddlewareError::new(
         MIDDLEWARE_NAME,
-        format!("Wasm `{}` extension is not allowed", extension),
+        format!("Wasm `{extension}` extension is not allowed"),
     )
 }
 
