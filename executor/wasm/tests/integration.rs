@@ -71,7 +71,7 @@ const DEFAULT_CHAIN_NAME: &str = "casper-test";
 // does not apply to V2 engine due to different cost structure. Rather than hardcoding it here, we
 // should probably reflect gas costs in a dynamic costs in host function charge. Proper value is
 // pending calculation.
-const DEFAULT_GAS_PER_BYTE_COST: u32 = 1_117_587 / 10;
+const DEFAULT_GAS_PER_BYTE_COST: u32 = 1_117_587;
 
 fn make_address_generator() -> Arc<RwLock<AddressGenerator>> {
     let id = Id::Transaction(TRANSACTION_HASH);
@@ -185,6 +185,7 @@ pub(crate) fn make_executor() -> ExecutorV2 {
 }
 
 #[test]
+
 fn cep18() {
     let mut executor = make_executor();
 
