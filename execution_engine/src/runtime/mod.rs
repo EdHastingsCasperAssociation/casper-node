@@ -3905,12 +3905,10 @@ where
     ) -> Result<Result<(), ApiError>, ExecError> {
         if self.context.engine_config().enable_entity {
             let mut package: Package = self.context.get_validated_package(package_key)?;
-
             let group_to_remove = Group::new(label);
-            let groups = package.groups_mut();
 
             // Ensure group exists in groups
-            if !groups.contains(&group_to_remove) {
+            if !package.groups().contains(&group_to_remove) {
                 return Ok(Err(addressable_entity::Error::GroupDoesNotExist.into()));
             }
 
@@ -3945,12 +3943,10 @@ where
             let mut contract_package = self
                 .context
                 .get_validated_contract_package(package_key.value())?;
-
             let group_to_remove = Group::new(label);
-            let groups = contract_package.groups_mut();
 
             // Ensure group exists in groups
-            if !groups.contains(&group_to_remove) {
+            if !contract_package.groups().contains(&group_to_remove) {
                 return Ok(Err(addressable_entity::Error::GroupDoesNotExist.into()));
             }
 
