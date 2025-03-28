@@ -35,9 +35,9 @@ pub const DEFAULT_WITHDRAW_DELEGATOR_REWARD_COST: u64 = 5_000_000_000;
 /// Default cost of the `withdraw_validator_reward` auction entry point.
 pub const DEFAULT_WITHDRAW_VALIDATOR_REWARD_COST: u64 = 5_000_000_000;
 /// Default cost of the `read_era_id` auction entry point.
-pub const DEFAULT_READ_ERA_ID_COST: u64 = 10_000;
+pub const DEFAULT_READ_ERA_ID_COST: u64 = 2_500_000_000;
 /// Default cost of the `activate_bid` auction entry point.
-pub const DEFAULT_ACTIVATE_BID_COST: u64 = 10_000;
+pub const DEFAULT_ACTIVATE_BID_COST: u64 = 2_500_000_000;
 /// Default cost of the `change_bid_public_key` auction entry point.
 pub const DEFAULT_CHANGE_BID_PUBLIC_KEY_COST: u64 = 5_000_000_000;
 /// Default cost of the `add_reservations` auction entry point.

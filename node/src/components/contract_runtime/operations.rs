@@ -215,9 +215,12 @@ pub fn execute_finalized_block(
             baseline_motes_amount, // <-- default minimum cost, may be overridden later in logic
             current_gas_price,
         );
-        let transaction =
-            MetaTransaction::from_transaction(&stored_transaction, transaction_config)
-                .map_err(|err| BlockExecutionError::TransactionConversion(err.to_string()))?;
+        let transaction = MetaTransaction::from_transaction(
+            &stored_transaction,
+            chainspec.core_config.pricing_handling,
+            transaction_config,
+        )
+        .map_err(|err| BlockExecutionError::TransactionConversion(err.to_string()))?;
         let initiator_addr = transaction.initiator_addr();
         let transaction_hash = transaction.hash();
         let transaction_args = transaction.session_args().clone();
@@ -553,6 +556,11 @@ pub fn execute_finalized_block(
                             .with_added_consumed(gas_limit)
                             .with_burn_result(burn_result)
                             .map_err(|_| BlockExecutionError::RootNotFound(state_root_hash))?;
+                    } else {
+                        artifact_builder.with_error_message(format!(
+                            "Attempt to call unsupported native mint entrypoint: {}",
+                            entry_point
+                        ));
                     }
                 }
                 lane_id if lane_id == AUCTION_LANE_ID => {
@@ -690,11 +698,12 @@ pub fn execute_finalized_block(
 
         // handle refunds per the chainspec determined setting.
         let refund_amount = {
-            let consumed = if balance_identifier.is_penalty() {
-                artifact_builder.cost_to_use() // no refund for penalty
-            } else {
-                artifact_builder.consumed()
-            };
+            let consumed =
+                if balance_identifier.is_penalty() || artifact_builder.error_message().is_some() {
+                    artifact_builder.cost_to_use() // no refund for penalty
+                } else {
+                    artifact_builder.consumed()
+                };
 
             let refund_mode = match refund_handling {
                 RefundHandling::NoRefund => {
@@ -1317,8 +1326,11 @@ where
     S: StateProvider,
 {
     let transaction_config = &chainspec.transaction_config;
-    let maybe_transaction =
-        MetaTransaction::from_transaction(&input_transaction, transaction_config);
+    let maybe_transaction = MetaTransaction::from_transaction(
+        &input_transaction,
+        chainspec.core_config.pricing_handling,
+        transaction_config,
+    );
     if let Err(error) = maybe_transaction {
         return SpeculativeExecutionResult::invalid_transaction(error);
     }

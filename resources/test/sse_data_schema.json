@@ -4591,7 +4591,7 @@
           "description": "All versions (enabled & disabled).",
           "allOf": [
             {
-              "$ref": "#/definitions/Array_of_EntityVersionAndHash"
+              "$ref": "#/definitions/Array_of_EntityVersionAndEntityAddr"
             }
           ]
         },
@@ -4621,13 +4621,13 @@
         }
       }
     },
-    "Array_of_EntityVersionAndHash": {
+    "Array_of_EntityVersionAndEntityAddr": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/EntityVersionAndHash"
+        "$ref": "#/definitions/EntityVersionAndEntityAddr"
       }
     },
-    "EntityVersionAndHash": {
+    "EntityVersionAndEntityAddr": {
       "type": "object",
       "required": [
         "entity_addr",

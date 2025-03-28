@@ -2,20 +2,26 @@ mod lane_id;
 mod meta_deploy;
 mod meta_transaction_v1;
 mod transaction_header;
-use meta_deploy::MetaDeploy;
-pub(crate) use transaction_header::*;
-
 use casper_execution_engine::engine_state::{SessionDataDeploy, SessionDataV1, SessionInputData};
+#[cfg(test)]
+use casper_types::InvalidTransactionV1;
 use casper_types::{
     account::AccountHash, bytesrepr::ToBytes, Approval, Chainspec, Digest, ExecutableDeployItem,
-    Gas, GasLimited, HashAddr, InitiatorAddr, InvalidTransaction, Phase, PricingMode, TimeDiff,
-    Timestamp, Transaction, TransactionArgs, TransactionConfig, TransactionEntryPoint,
-    TransactionHash, TransactionTarget, INSTALL_UPGRADE_LANE_ID,
+    Gas, GasLimited, HashAddr, InitiatorAddr, InvalidTransaction, Phase, PricingHandling,
+    PricingMode, TimeDiff, Timestamp, Transaction, TransactionArgs, TransactionConfig,
+    TransactionEntryPoint, TransactionHash, TransactionTarget, INSTALL_UPGRADE_LANE_ID,
 };
 use core::fmt::{self, Debug, Display, Formatter};
+#[cfg(test)]
+use lane_id::calculate_transaction_lane;
+use meta_deploy::MetaDeploy;
 pub(crate) use meta_transaction_v1::MetaTransactionV1;
 use serde::Serialize;
 use std::{borrow::Cow, collections::BTreeSet};
+pub(crate) use transaction_header::*;
+
+#[cfg(test)]
+use super::fields_container::{ARGS_MAP_KEY, ENTRY_POINT_MAP_KEY, TARGET_MAP_KEY};
 
 #[derive(Clone, Debug, Serialize)]
 pub(crate) enum MetaTransaction {
@@ -233,13 +239,16 @@ impl MetaTransaction {
     /// Create a new `MetaTransaction` from a `Transaction`.
     pub fn from_transaction(
         transaction: &Transaction,
+        pricing_handling: PricingHandling,
         transaction_config: &TransactionConfig,
     ) -> Result<Self, InvalidTransaction> {
         match transaction {
-            Transaction::Deploy(deploy) => {
-                MetaDeploy::from_deploy(deploy.clone(), &transaction_config.transaction_v1_config)
-                    .map(MetaTransaction::Deploy)
-            }
+            Transaction::Deploy(deploy) => MetaDeploy::from_deploy(
+                deploy.clone(),
+                pricing_handling,
+                &transaction_config.transaction_v1_config,
+            )
+            .map(MetaTransaction::Deploy),
             Transaction::V1(v1) => MetaTransactionV1::from_transaction_v1(
                 v1,
                 &transaction_config.transaction_v1_config,
@@ -415,6 +424,51 @@ impl Display for MetaTransaction {
 }
 
 #[cfg(test)]
+/// Calculates the laned based on properties of the transaction
+pub(crate) fn calculate_transaction_lane_for_transaction(
+    transaction: &Transaction,
+    chainspec: &Chainspec,
+) -> Result<u8, InvalidTransaction> {
+    match transaction {
+        Transaction::Deploy(_) => {
+            let meta = MetaTransaction::from_transaction(
+                transaction,
+                chainspec.core_config.pricing_handling,
+                &chainspec.transaction_config,
+            )?;
+            Ok(meta.transaction_lane())
+        }
+        Transaction::V1(v1) => {
+            let args_binary_len = v1
+                .payload()
+                .fields()
+                .get(&ARGS_MAP_KEY)
+                .map(|field| field.len())
+                .unwrap_or(0);
+            let target: TransactionTarget =
+                v1.deserialize_field(TARGET_MAP_KEY).map_err(|error| {
+                    InvalidTransaction::V1(InvalidTransactionV1::CouldNotDeserializeField { error })
+                })?;
+            let entry_point: TransactionEntryPoint =
+                v1.deserialize_field(ENTRY_POINT_MAP_KEY).map_err(|error| {
+                    InvalidTransaction::V1(InvalidTransactionV1::CouldNotDeserializeField { error })
+                })?;
+            let serialized_length = v1.serialized_length();
+            let pricing_mode = v1.payload().pricing_mode();
+            calculate_transaction_lane(
+                &entry_point,
+                &target,
+                pricing_mode,
+                &chainspec.transaction_config.transaction_v1_config,
+                serialized_length as u64,
+                args_binary_len as u64,
+            )
+            .map_err(InvalidTransaction::V1)
+        }
+    }
+}
+
+#[cfg(test)]
 mod proptests {
     use super::*;
     use casper_types::{gens::legal_transaction_arb, TransactionLaneDefinition};
@@ -440,7 +494,7 @@ mod proptests {
                     max_transaction_count: 10,
                 },
                 ]);
-            let maybe_transaction = MetaTransaction::from_transaction(&transaction, &transaction_config);
+            let maybe_transaction = MetaTransaction::from_transaction(&transaction, PricingHandling::PaymentLimited, &transaction_config);
             prop_assert!(maybe_transaction.is_ok(), "{:?}", maybe_transaction);
         }
     }

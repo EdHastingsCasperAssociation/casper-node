@@ -263,7 +263,7 @@ impl KeyValueLabels for EntityVersionLabels {
 
 #[cfg(feature = "json-schema")]
 impl KeyValueJsonSchema for EntityVersionLabels {
-    const JSON_SCHEMA_KV_NAME: Option<&'static str> = Some("EntityVersionAndHash");
+    const JSON_SCHEMA_KV_NAME: Option<&'static str> = Some("EntityVersionAndEntityAddr");
 }
 
 /// Collection of named groups.
