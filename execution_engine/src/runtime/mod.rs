@@ -1052,7 +1052,7 @@ where
 
             auction::METHOD_ADD_BID => (|| {
                 runtime.charge_system_contract_call(auction_costs.add_bid)?;
-                let account_hash = Self::get_named_argument(runtime_args, auction::ARG_PUBLIC_KEY)?;
+                let public_key = Self::get_named_argument(runtime_args, auction::ARG_PUBLIC_KEY)?;
                 let delegation_rate =
                     Self::get_named_argument(runtime_args, auction::ARG_DELEGATION_RATE)?;
                 let amount = Self::get_named_argument(runtime_args, auction::ARG_AMOUNT)?;
@@ -1090,7 +1090,7 @@ where
 
                 let result = runtime
                     .add_bid(
-                        account_hash,
+                        public_key,
                         delegation_rate,
                         amount,
                         minimum_delegation_amount,
@@ -1240,7 +1240,7 @@ where
                 CLValue::from_t(()).map_err(Self::reverter)
             })(),
 
-            // Type: `fn slash(validator_account_hashes: &[AccountHash]) -> Result<(), ExecError>`
+            // Type: `fn slash(validator_public_keys: &[PublicKey]) -> Result<(), ExecError>`
             auction::METHOD_SLASH => (|| {
                 runtime.charge_system_contract_call(auction_costs.slash)?;
 
@@ -1457,7 +1457,7 @@ where
         } else {
             match entity_addr {
                 EntityAddr::System(system_hash_addr) => Key::Hash(system_hash_addr),
-                EntityAddr::Account(account_hash) => Key::Account(AccountHash::new(account_hash)),
+                EntityAddr::Account(hash_addr) => Key::Account(AccountHash::new(hash_addr)),
                 EntityAddr::SmartContract(contract_hash_addr) => Key::Hash(contract_hash_addr),
             }
         }
