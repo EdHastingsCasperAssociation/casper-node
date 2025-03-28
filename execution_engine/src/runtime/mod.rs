@@ -704,7 +704,7 @@ where
         }
     }
 
-    /// Checks if a [`Key`] is a system contract.
+    /// Checks if a [`HashAddr`] corresponds to a system contract.
     fn is_system_contract(&self, hash_addr: HashAddr) -> Result<bool, ExecError> {
         self.context.is_system_addressable_entity(&hash_addr)
     }
@@ -881,7 +881,7 @@ where
             })(),
             _ => {
                 // Code should never reach this point as existence of the entrypoint is validated
-                // before reaching this pointt.
+                // before reaching this point.
                 Ok(CLValue::unit())
             }
         };
@@ -1052,7 +1052,7 @@ where
 
             auction::METHOD_ADD_BID => (|| {
                 runtime.charge_system_contract_call(auction_costs.add_bid)?;
-                let account_hash = Self::get_named_argument(runtime_args, auction::ARG_PUBLIC_KEY)?;
+                let public_key = Self::get_named_argument(runtime_args, auction::ARG_PUBLIC_KEY)?;
                 let delegation_rate =
                     Self::get_named_argument(runtime_args, auction::ARG_DELEGATION_RATE)?;
                 let amount = Self::get_named_argument(runtime_args, auction::ARG_AMOUNT)?;
@@ -1090,7 +1090,7 @@ where
 
                 let result = runtime
                     .add_bid(
-                        account_hash,
+                        public_key,
                         delegation_rate,
                         amount,
                         minimum_delegation_amount,
@@ -1225,6 +1225,7 @@ where
 
                 let max_delegators_per_validator =
                     self.context.engine_config().max_delegators_per_validator();
+                let minimum_bid_amount = self.context.engine_config().minimum_bid_amount();
                 runtime
                     .run_auction(
                         era_end_timestamp_millis,
@@ -1232,13 +1233,14 @@ where
                         max_delegators_per_validator,
                         true,
                         Ratio::new_raw(U512::from(1), U512::from(5)),
+                        minimum_bid_amount,
                     )
                     .map_err(Self::reverter)?;
 
                 CLValue::from_t(()).map_err(Self::reverter)
             })(),
 
-            // Type: `fn slash(validator_account_hashes: &[AccountHash]) -> Result<(), ExecError>`
+            // Type: `fn slash(validator_public_keys: &[PublicKey]) -> Result<(), ExecError>`
             auction::METHOD_SLASH => (|| {
                 runtime.charge_system_contract_call(auction_costs.slash)?;
 
@@ -1250,7 +1252,7 @@ where
                 CLValue::from_t(()).map_err(Self::reverter)
             })(),
 
-            // Type: `fn distribute(reward_factors: BTreeMap<PublicKey, u64>) -> Result<(),
+            // Type: `fn distribute(reward_factors: BTreeMap<PublicKey, u512>) -> Result<(),
             // ExecError>`
             auction::METHOD_DISTRIBUTE => (|| {
                 runtime.charge_system_contract_call(auction_costs.distribute)?;
@@ -1272,7 +1274,9 @@ where
 
                 let validator = Self::get_named_argument(runtime_args, auction::ARG_VALIDATOR)?;
 
-                runtime.activate_bid(validator).map_err(Self::reverter)?;
+                runtime
+                    .activate_bid(validator, engine_config.minimum_bid_amount())
+                    .map_err(Self::reverter)?;
 
                 CLValue::from_t(()).map_err(Self::reverter)
             })(),
@@ -1453,7 +1457,7 @@ where
         } else {
             match entity_addr {
                 EntityAddr::System(system_hash_addr) => Key::Hash(system_hash_addr),
-                EntityAddr::Account(account_hash) => Key::Account(AccountHash::new(account_hash)),
+                EntityAddr::Account(hash_addr) => Key::Account(AccountHash::new(hash_addr)),
                 EntityAddr::SmartContract(contract_hash_addr) => Key::Hash(contract_hash_addr),
             }
         }
@@ -2945,7 +2949,7 @@ where
             .map_err(|e| ExecError::Interpreter(e.into()).into())
     }
 
-    /// Generates new unforgable reference and adds it to the context's
+    /// Generates new unforgeable reference and adds it to the context's
     /// access_rights set.
     fn new_uref(&mut self, uref_ptr: u32, value_ptr: u32, value_size: u32) -> Result<(), Trap> {
         let cl_value = self.cl_value_from_mem(value_ptr, value_size)?; // read initial value from memory
@@ -3364,8 +3368,8 @@ where
         Ok(call_result?.into_t()?)
     }
 
-    /// Creates a new account at a given public key, transferring a given amount
-    /// of motes from the given source purse to the new account's purse.
+    /// Creates a new account at `target` hash, transferring `amount`
+    /// of motes from `source` purse to the new account's main purse.
     fn transfer_to_new_account(
         &mut self,
         source: URef,
@@ -3517,7 +3521,7 @@ where
         self.transfer_from_purse_to_account_hash(source, target, amount, id)
     }
 
-    /// Transfers `amount` of motes from `source` purse to `target` account.
+    /// Transfers `amount` of motes from `source` purse to `target` account's main purse.
     /// If that account does not exist, creates one.
     fn transfer_from_purse_to_account_hash(
         &mut self,
@@ -3529,11 +3533,11 @@ where
         let _scoped_host_function_flag = self.host_function_flag.enter_host_function_scope();
         let target_key = Key::Account(target);
 
-        // Look up the account at the given public key's address
+        // Look up the account at the given key
         match self.context.read_gs(&target_key)? {
             None => {
                 // If no account exists, create a new account and transfer the amount to its
-                // purse.
+                // main purse.
 
                 self.transfer_to_new_account(source, target, amount, id)
             }
