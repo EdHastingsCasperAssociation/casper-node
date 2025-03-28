@@ -208,6 +208,7 @@ where
         self.handle_new_round_seigniorage_rate(system_entity_addresses.mint())?;
         self.handle_unbonds_migration()?;
         self.handle_bids_migration(
+            self.config.validator_minimum_bid_amount(),
             self.config.minimum_delegation_amount(),
             self.config.maximum_delegation_amount(),
         )?;
@@ -1223,10 +1224,11 @@ where
     /// Handle bids migration.
     pub fn handle_bids_migration(
         &mut self,
-        chainspec_minimum: u64,
-        chainspec_maximum: u64,
+        validator_minimum: u64,
+        delegation_minimum: u64,
+        delegation_maximum: u64,
     ) -> Result<(), ProtocolUpgradeError> {
-        if chainspec_maximum < chainspec_minimum {
+        if delegation_maximum < delegation_minimum {
             return Err(ProtocolUpgradeError::InvalidUpgradeConfig);
         }
         debug!("handle bids migration");
@@ -1258,8 +1260,10 @@ where
                 let validator_bid_addr = BidAddr::from(validator_public_key.clone());
                 let validator_bid = {
                     let validator_bid = ValidatorBid::from(*existing_bid.clone());
+                    let is_inactive = validator_bid.staked_amount() < U512::from(validator_minimum);
                     validator_bid
-                        .with_min_max_delegation_amount(chainspec_maximum, chainspec_minimum)
+                        .with_inactive(is_inactive)
+                        .with_min_max_delegation_amount(delegation_maximum, delegation_minimum)
                 };
                 tc.write(
                     validator_bid_addr.into(),
