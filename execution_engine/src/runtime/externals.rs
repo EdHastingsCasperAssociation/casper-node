@@ -742,7 +742,7 @@ where
                 Ok(Some(RuntimeValue::I32(api_error::i32_from(ret))))
             }
 
-            FunctionIndex::AddPackageVersion => {
+            FunctionIndex::AddPackageVersionWithMessageTopics => {
                 // args(0)  = pointer to package hash in wasm memory
                 // args(1)  = size of package hash in wasm memory
                 // args(2)  = pointer to entity version in wasm memory
@@ -769,7 +769,7 @@ where
                 ) = Args::parse(args)?;
 
                 self.charge_host_function_call(
-                    &host_function_costs.add_package_version,
+                    &host_function_costs.add_package_version_with_message_topics,
                     [
                         contract_package_hash_ptr,
                         contract_package_hash_size,
