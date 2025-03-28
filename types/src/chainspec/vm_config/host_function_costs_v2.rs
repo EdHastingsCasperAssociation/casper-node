@@ -2,6 +2,7 @@
 use datasize::DataSize;
 use derive_more::Add;
 use num_traits::Zero;
+#[cfg(any(feature = "testing", test))]
 use rand::{distributions::Standard, prelude::Distribution, Rng};
 use serde::{Deserialize, Serialize};
 

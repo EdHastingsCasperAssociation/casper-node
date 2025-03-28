@@ -1,4 +1,4 @@
-use wasmer::{FunctionMiddleware, MiddlewareError, ModuleMiddleware};
+use wasmer::{wasmparser::Operator, FunctionMiddleware, MiddlewareError, ModuleMiddleware};
 
 const MIDDLEWARE_NAME: &str = "Gatekeeper";
 const FLOATING_POINTS_NOT_ALLOWED: &str = "Floating point opcodes are not allowed";
@@ -62,159 +62,158 @@ pub(crate) struct GatekeeperConfig {
 /// Check if the operator is a floating point operator.
 #[inline]
 const fn is_floating_point(operator: &wasmer::wasmparser::Operator<'_>) -> bool {
-    use wasmer::wasmparser::Operator::*;
     match operator {
-    // mvp
-    F32Load {..} |
-    F64Load {..} |
-    F32Store {..} |
-    F64Store {..} |
-    F32Const {..} |
-    F64Const {..} |
-    F32Abs |
-    F32Neg |
-    F32Ceil |
-    F32Floor |
-    F32Trunc |
-    F32Nearest |
-    F32Sqrt |
-    F32Add |
-    F32Sub |
-    F32Mul |
-    F32Div |
-    F32Min |
-    F32Max |
-    F32Copysign |
-    F64Abs |
-    F64Neg |
-    F64Ceil |
-    F64Floor |
-    F64Trunc |
-    F64Nearest |
-    F64Sqrt |
-    F64Add |
-    F64Sub |
-    F64Mul |
-    F64Div |
-    F64Min |
-    F64Max |
-    F64Copysign |
-    F32Eq |
-    F32Ne |
-    F32Lt |
-    F32Gt |
-    F32Le |
-    F32Ge |
-    F64Eq |
-    F64Ne |
-    F64Lt |
-    F64Gt |
-    F64Le |
-    F64Ge |
-    I32TruncF32S |
-    I32TruncF32U |
-    I32TruncF64S |
-    I32TruncF64U |
-    I64TruncF32S |
-    I64TruncF32U |
-    I64TruncF64S |
-    I64TruncF64U |
-    F32ConvertI32S |
-    F32ConvertI32U |
-    F32ConvertI64S |
-    F32ConvertI64U |
-    F32DemoteF64 |
-    F64ConvertI32S |
-    F64ConvertI32U |
-    F64ConvertI64S |
-    F64ConvertI64U |
-    F64PromoteF32 |
-    I32ReinterpretF32 |
-    I64ReinterpretF64 |
-    F32ReinterpretI32 |
-    F64ReinterpretI64 |
-    // saturating_float_to_int
-    I32TruncSatF32S |
-    I32TruncSatF32U |
-    I32TruncSatF64S |
-    I32TruncSatF64U |
-    I64TruncSatF32S |
-    I64TruncSatF32U |
-    I64TruncSatF64S |
-    I64TruncSatF64U |
-    // simd
-    F32x4ExtractLane{..} |
-    F32x4ReplaceLane{..} |
-    F64x2ExtractLane{..} |
-    F64x2ReplaceLane{..} |
-    F32x4Splat |
-    F64x2Splat |
-    F32x4Eq |
-    F32x4Ne |
-    F32x4Lt |
-    F32x4Gt |
-    F32x4Le |
-    F32x4Ge |
-    F64x2Eq |
-    F64x2Ne |
-    F64x2Lt |
-    F64x2Gt |
-    F64x2Le |
-    F64x2Ge |
-    F32x4Ceil |
-    F32x4Floor |
-    F32x4Trunc |
-    F32x4Nearest |
-    F32x4Abs |
-    F32x4Neg |
-    F32x4Sqrt |
-    F32x4Add |
-    F32x4Sub |
-    F32x4Mul |
-    F32x4Div |
-    F32x4Min |
-    F32x4Max |
-    F32x4PMin |
-    F32x4PMax |
-    F64x2Ceil |
-    F64x2Floor |
-    F64x2Trunc |
-    F64x2Nearest |
-    F64x2Abs |
-    F64x2Neg |
-    F64x2Sqrt |
-    F64x2Add |
-    F64x2Sub |
-    F64x2Mul |
-    F64x2Div |
-    F64x2Min |
-    F64x2Max |
-    F64x2PMin |
-    F64x2PMax |
-    I32x4TruncSatF32x4S |
-    I32x4TruncSatF32x4U |
-    F32x4ConvertI32x4S |
-    F32x4ConvertI32x4U |
-    I32x4TruncSatF64x2SZero |
-    I32x4TruncSatF64x2UZero |
-    F64x2ConvertLowI32x4S |
-    F64x2ConvertLowI32x4U |
-    F32x4DemoteF64x2Zero |
-    F64x2PromoteLowF32x4 |
-    // relaxed_simd extension
-    I32x4RelaxedTruncF32x4S |
-    I32x4RelaxedTruncF32x4U |
-    I32x4RelaxedTruncF64x2SZero |
-    I32x4RelaxedTruncF64x2UZero |
-    F32x4RelaxedMadd |
-    F32x4RelaxedNmadd |
-    F64x2RelaxedMadd |
-    F64x2RelaxedNmadd |
-    F32x4RelaxedMin |
-    F32x4RelaxedMax |
-    F64x2RelaxedMin |
-    F64x2RelaxedMax => true,
-    _ => false,
+        // mvp
+        Operator::F32Load {..} |
+        Operator::F64Load {..} |
+        Operator::F32Store {..} |
+        Operator::F64Store {..} |
+        Operator::F32Const {..} |
+        Operator::F64Const {..} |
+        Operator::F32Abs |
+        Operator::F32Neg |
+        Operator::F32Ceil |
+        Operator::F32Floor |
+        Operator::F32Trunc |
+        Operator::F32Nearest |
+        Operator::F32Sqrt |
+        Operator::F32Add |
+        Operator::F32Sub |
+        Operator::F32Mul |
+        Operator::F32Div |
+        Operator::F32Min |
+        Operator::F32Max |
+        Operator::F32Copysign |
+        Operator::F64Abs |
+        Operator::F64Neg |
+        Operator::F64Ceil |
+        Operator::F64Floor |
+        Operator::F64Trunc |
+        Operator::F64Nearest |
+        Operator::F64Sqrt |
+        Operator::F64Add |
+        Operator::F64Sub |
+        Operator::F64Mul |
+        Operator::F64Div |
+        Operator::F64Min |
+        Operator::F64Max |
+        Operator::F64Copysign |
+        Operator::F32Eq |
+        Operator::F32Ne |
+        Operator::F32Lt |
+        Operator::F32Gt |
+        Operator::F32Le |
+        Operator::F32Ge |
+        Operator::F64Eq |
+        Operator::F64Ne |
+        Operator::F64Lt |
+        Operator::F64Gt |
+        Operator::F64Le |
+        Operator::F64Ge |
+        Operator::I32TruncF32S |
+        Operator::I32TruncF32U |
+        Operator::I32TruncF64S |
+        Operator::I32TruncF64U |
+        Operator::I64TruncF32S |
+        Operator::I64TruncF32U |
+        Operator::I64TruncF64S |
+        Operator::I64TruncF64U |
+        Operator::F32ConvertI32S |
+        Operator::F32ConvertI32U |
+        Operator::F32ConvertI64S |
+        Operator::F32ConvertI64U |
+        Operator::F32DemoteF64 |
+        Operator::F64ConvertI32S |
+        Operator::F64ConvertI32U |
+        Operator::F64ConvertI64S |
+        Operator::F64ConvertI64U |
+        Operator::F64PromoteF32 |
+        Operator::I32ReinterpretF32 |
+        Operator::I64ReinterpretF64 |
+        Operator::F32ReinterpretI32 |
+        Operator::F64ReinterpretI64 |
+        // saturating_float_to_int
+        Operator::I32TruncSatF32S |
+        Operator::I32TruncSatF32U |
+        Operator::I32TruncSatF64S |
+        Operator::I32TruncSatF64U |
+        Operator::I64TruncSatF32S |
+        Operator::I64TruncSatF32U |
+        Operator::I64TruncSatF64S |
+        Operator::I64TruncSatF64U |
+        // simd
+        Operator::F32x4ExtractLane{..} |
+        Operator::F32x4ReplaceLane{..} |
+        Operator::F64x2ExtractLane{..} |
+        Operator::F64x2ReplaceLane{..} |
+        Operator::F32x4Splat |
+        Operator::F64x2Splat |
+        Operator::F32x4Eq |
+        Operator::F32x4Ne |
+        Operator::F32x4Lt |
+        Operator::F32x4Gt |
+        Operator::F32x4Le |
+        Operator::F32x4Ge |
+        Operator::F64x2Eq |
+        Operator::F64x2Ne |
+        Operator::F64x2Lt |
+        Operator::F64x2Gt |
+        Operator::F64x2Le |
+        Operator::F64x2Ge |
+        Operator::F32x4Ceil |
+        Operator::F32x4Floor |
+        Operator::F32x4Trunc |
+        Operator::F32x4Nearest |
+        Operator::F32x4Abs |
+        Operator::F32x4Neg |
+        Operator::F32x4Sqrt |
+        Operator::F32x4Add |
+        Operator::F32x4Sub |
+        Operator::F32x4Mul |
+        Operator::F32x4Div |
+        Operator::F32x4Min |
+        Operator::F32x4Max |
+        Operator::F32x4PMin |
+        Operator::F32x4PMax |
+        Operator::F64x2Ceil |
+        Operator::F64x2Floor |
+        Operator::F64x2Trunc |
+        Operator::F64x2Nearest |
+        Operator::F64x2Abs |
+        Operator::F64x2Neg |
+        Operator::F64x2Sqrt |
+        Operator::F64x2Add |
+        Operator::F64x2Sub |
+        Operator::F64x2Mul |
+        Operator::F64x2Div |
+        Operator::F64x2Min |
+        Operator::F64x2Max |
+        Operator::F64x2PMin |
+        Operator::F64x2PMax |
+        Operator::I32x4TruncSatF32x4S |
+        Operator::I32x4TruncSatF32x4U |
+        Operator::F32x4ConvertI32x4S |
+        Operator::F32x4ConvertI32x4U |
+        Operator::I32x4TruncSatF64x2SZero |
+        Operator::I32x4TruncSatF64x2UZero |
+        Operator::F64x2ConvertLowI32x4S |
+        Operator::F64x2ConvertLowI32x4U |
+        Operator::F32x4DemoteF64x2Zero |
+        Operator::F64x2PromoteLowF32x4 |
+        // relaxed_simd extension
+        Operator::I32x4RelaxedTruncF32x4S |
+        Operator::I32x4RelaxedTruncF32x4U |
+        Operator::I32x4RelaxedTruncF64x2SZero |
+        Operator::I32x4RelaxedTruncF64x2UZero |
+        Operator::F32x4RelaxedMadd |
+        Operator::F32x4RelaxedNmadd |
+        Operator::F64x2RelaxedMadd |
+        Operator::F64x2RelaxedNmadd |
+        Operator::F32x4RelaxedMin |
+        Operator::F32x4RelaxedMax |
+        Operator::F64x2RelaxedMin |
+        Operator::F64x2RelaxedMax => true,
+        _ => false,
     }
 }
 
