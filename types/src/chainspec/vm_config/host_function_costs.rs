@@ -946,7 +946,7 @@ impl FromBytes for HostFunctionCostsV1 {
         let (create_contract_user_group, rem) = FromBytes::from_bytes(rem)?;
         let (add_contract_version_with_message_topics, rem) = FromBytes::from_bytes(rem)?;
         let (add_contract_version, rem) = FromBytes::from_bytes(rem)?;
-        let (add_package_version, rem) = FromBytes::from_bytes(rem)?;
+        let (add_package_version_with_message_topics, rem) = FromBytes::from_bytes(rem)?;
         let (disable_contract_version, rem) = FromBytes::from_bytes(rem)?;
         let (call_contract, rem) = FromBytes::from_bytes(rem)?;
         let (call_versioned_contract, rem) = FromBytes::from_bytes(rem)?;
@@ -1001,7 +1001,7 @@ impl FromBytes for HostFunctionCostsV1 {
                 create_contract_user_group,
                 add_contract_version_with_message_topics,
                 add_contract_version,
-                add_package_version_with_message_topics: add_package_version,
+                add_package_version_with_message_topics,
                 disable_contract_version,
                 call_contract,
                 call_versioned_contract,
@@ -1136,7 +1136,7 @@ pub mod gens {
             create_contract_user_group in host_function_cost_arb(),
             add_contract_version_with_message_topics in host_function_cost_arb(),
             add_contract_version in host_function_cost_arb(),
-            add_package_version in host_function_cost_arb(),
+            add_package_version_with_message_topics in host_function_cost_arb(),
             disable_contract_version in host_function_cost_arb(),
             call_contract in host_function_cost_arb(),
             call_versioned_contract in host_function_cost_arb(),
