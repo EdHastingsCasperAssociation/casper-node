@@ -704,7 +704,7 @@ where
         }
     }
 
-    /// Checks if a [`Key`] is a system contract.
+    /// Checks if a [`HashAddr`] corresponds to a system contract.
     fn is_system_contract(&self, hash_addr: HashAddr) -> Result<bool, ExecError> {
         self.context.is_system_addressable_entity(&hash_addr)
     }
@@ -1252,7 +1252,7 @@ where
                 CLValue::from_t(()).map_err(Self::reverter)
             })(),
 
-            // Type: `fn distribute(reward_factors: BTreeMap<PublicKey, u64>) -> Result<(),
+            // Type: `fn distribute(reward_factors: BTreeMap<PublicKey, u512>) -> Result<(),
             // ExecError>`
             auction::METHOD_DISTRIBUTE => (|| {
                 runtime.charge_system_contract_call(auction_costs.distribute)?;
@@ -3368,8 +3368,8 @@ where
         Ok(call_result?.into_t()?)
     }
 
-    /// Creates a new account at a given public key, transferring a given amount
-    /// of motes from the given source purse to the new account's purse.
+    /// Creates a new account at `target` hash, transferring `amount`
+    /// of motes from `source` purse to the new account's main purse.
     fn transfer_to_new_account(
         &mut self,
         source: URef,
@@ -3521,7 +3521,7 @@ where
         self.transfer_from_purse_to_account_hash(source, target, amount, id)
     }
 
-    /// Transfers `amount` of motes from `source` purse to `target` account.
+    /// Transfers `amount` of motes from `source` purse to `target` account's main purse.
     /// If that account does not exist, creates one.
     fn transfer_from_purse_to_account_hash(
         &mut self,
@@ -3533,11 +3533,11 @@ where
         let _scoped_host_function_flag = self.host_function_flag.enter_host_function_scope();
         let target_key = Key::Account(target);
 
-        // Look up the account at the given public key's address
+        // Look up the account at the given key
         match self.context.read_gs(&target_key)? {
             None => {
                 // If no account exists, create a new account and transfer the amount to its
-                // purse.
+                // main purse.
 
                 self.transfer_to_new_account(source, target, amount, id)
             }
