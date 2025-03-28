@@ -353,6 +353,7 @@ pub trait CommitProvider: StateProvider {
         let max_delegators_per_validator = config.max_delegators_per_validator();
         let include_credits = config.include_credits();
         let credit_cap = config.credit_cap();
+        let minimum_bid_amount = config.minimum_bid_amount();
 
         if let Err(err) = runtime.run_auction(
             era_end_timestamp_millis,
@@ -360,6 +361,7 @@ pub trait CommitProvider: StateProvider {
             max_delegators_per_validator,
             include_credits,
             credit_cap,
+            minimum_bid_amount,
         ) {
             error!("{}", err);
             return StepResult::Failure(StepError::Auction);
@@ -1298,7 +1300,7 @@ pub trait StateProvider: Send + Sync + Sized {
         let id = Id::Transaction(transaction_hash);
         let address_generator = AddressGenerator::new(&id.seed(), phase);
         let max_delegators_per_validator = config.max_delegators_per_validator();
-
+        let minimum_bid_amount = config.minimum_bid_amount();
         let mut runtime = RuntimeNative::new(
             config,
             protocol_version,
@@ -1315,7 +1317,7 @@ pub trait StateProvider: Send + Sync + Sized {
 
         let result = match auction_method {
             AuctionMethod::ActivateBid { validator } => runtime
-                .activate_bid(validator)
+                .activate_bid(validator, minimum_bid_amount)
                 .map(|_| AuctionMethodRet::Unit)
                 .map_err(|auc_err| {
                     TrackingCopyError::SystemContract(system::Error::Auction(auc_err))

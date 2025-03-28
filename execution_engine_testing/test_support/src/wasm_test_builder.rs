@@ -823,6 +823,7 @@ where
         let allow_auction_bids = config.core_config.allow_auction_bids;
         let compute_rewards = config.core_config.compute_rewards;
         let max_delegators_per_validator = config.core_config.max_delegators_per_validator;
+        let minimum_bid_amount = config.core_config.minimum_bid_amount;
         let minimum_delegation_amount = config.core_config.minimum_delegation_amount;
         let balance_hold_interval = config.core_config.gas_hold_interval.millis();
         let include_credits = config.core_config.fee_handling == FeeHandling::NoFee;
@@ -839,6 +840,7 @@ where
             allow_auction_bids,
             compute_rewards,
             max_delegators_per_validator,
+            minimum_bid_amount,
             minimum_delegation_amount,
             balance_hold_interval,
             include_credits,
@@ -1007,6 +1009,7 @@ where
             self.chainspec.core_config.allow_auction_bids,
             self.chainspec.core_config.compute_rewards,
             self.chainspec.core_config.max_delegators_per_validator,
+            self.chainspec.core_config.minimum_bid_amount,
             self.chainspec.core_config.minimum_delegation_amount,
             self.chainspec.core_config.gas_hold_interval.millis(),
             include_credits,
