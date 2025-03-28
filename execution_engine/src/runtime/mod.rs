@@ -881,7 +881,7 @@ where
             })(),
             _ => {
                 // Code should never reach this point as existence of the entrypoint is validated
-                // before reaching this pointt.
+                // before reaching this point.
                 Ok(CLValue::unit())
             }
         };
@@ -2949,7 +2949,7 @@ where
             .map_err(|e| ExecError::Interpreter(e.into()).into())
     }
 
-    /// Generates new unforgable reference and adds it to the context's
+    /// Generates new unforgeable reference and adds it to the context's
     /// access_rights set.
     fn new_uref(&mut self, uref_ptr: u32, value_ptr: u32, value_size: u32) -> Result<(), Trap> {
         let cl_value = self.cl_value_from_mem(value_ptr, value_size)?; // read initial value from memory
