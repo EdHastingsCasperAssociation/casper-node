@@ -1195,6 +1195,7 @@ impl EraSupervisor {
                     execute_finalized_block(effect_builder, finalized_approvals, finalized_block)
                         .ignore(),
                 );
+                self.last_progress = Timestamp::now();
                 let effects_from_updating_pause =
                     self.update_consensus_pause(effect_builder, rng, era_id);
                 effects.extend(effects_from_updating_pause);
