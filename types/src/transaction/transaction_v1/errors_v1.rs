@@ -5,6 +5,8 @@ use core::{
 };
 #[cfg(feature = "std")]
 use std::error::Error as StdError;
+#[cfg(any(feature = "testing", test))]
+use strum::EnumIter;
 
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
@@ -26,11 +28,25 @@ pub enum FieldDeserializationError {
     LingeringBytesInField { index: u16 },
 }
 
+// This impl is provided due to a completeness test that we
+// have in binary-port. It checks if all variants of this
+// error have corresponding binary port error codes
+#[cfg(any(feature = "testing", test))]
+impl Default for FieldDeserializationError {
+    fn default() -> Self {
+        Self::IndexNotExists { index: 0 }
+    }
+}
+
 /// Returned when a [`TransactionV1`] fails validation.
 #[derive(Clone, Eq, PartialEq, Debug)]
 #[cfg_attr(feature = "std", derive(Serialize))]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[non_exhaustive]
+// This derive should not be removed due to a completeness
+// test that we have in binary-port. It checks if all variants
+// of this error have corresponding binary port error codes
+#[cfg_attr(any(feature = "testing", test), derive(EnumIter))]
 pub enum InvalidTransaction {
     /// Invalid chain name.
     InvalidChainName {
@@ -113,9 +129,9 @@ pub enum InvalidTransaction {
         /// The name of the invalid arg.
         arg_name: String,
         /// The choice of valid types for the given runtime arg.
-        expected: Vec<CLType>,
+        expected: Vec<String>,
         /// The provided type of the given runtime arg.
-        got: CLType,
+        got: String,
     },
 
     /// Failed to deserialize the given runtime arg.
@@ -219,212 +235,215 @@ pub enum InvalidTransaction {
         entry_point: TransactionEntryPoint,
         lane_id: u8,
     },
+    /// Could not serialize transaction
+    CouldNotSerializeTransaction,
 }
 
 impl Display for InvalidTransaction {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         match self {
             InvalidTransaction::InvalidChainName { expected, got } => {
-                write!(
-                    formatter,
-                    "invalid chain name: expected {expected}, got {got}"
-                )
-            }
+                        write!(
+                            formatter,
+                            "invalid chain name: expected {expected}, got {got}"
+                        )
+                    }
             InvalidTransaction::ExcessiveSize(error) => {
-                write!(formatter, "transaction size too large: {error}")
-            }
+                        write!(formatter, "transaction size too large: {error}")
+                    }
             InvalidTransaction::ExcessiveTimeToLive { max_ttl, got } => {
-                write!(
-                    formatter,
-                    "time-to-live of {got} exceeds limit of {max_ttl}"
-                )
-            }
+                        write!(
+                            formatter,
+                            "time-to-live of {got} exceeds limit of {max_ttl}"
+                        )
+                    }
             InvalidTransaction::TimestampInFuture {
-                validation_timestamp,
-                timestamp_leeway,
-                got,
-            } => {
-                write!(
-                    formatter,
-                    "timestamp of {got} is later than node's validation timestamp of \
+                        validation_timestamp,
+                        timestamp_leeway,
+                        got,
+                    } => {
+                        write!(
+                            formatter,
+                            "timestamp of {got} is later than node's validation timestamp of \
                     {validation_timestamp} plus leeway of {timestamp_leeway}"
-                )
-            }
+                        )
+                    }
             InvalidTransaction::InvalidBodyHash => {
-                write!(
-                    formatter,
-                    "the provided hash does not match the actual hash of the transaction body"
-                )
-            }
+                        write!(
+                            formatter,
+                            "the provided hash does not match the actual hash of the transaction body"
+                        )
+                    }
             InvalidTransaction::InvalidTransactionHash => {
-                write!(
-                    formatter,
-                    "the provided hash does not match the actual hash of the transaction"
-                )
-            }
+                        write!(
+                            formatter,
+                            "the provided hash does not match the actual hash of the transaction"
+                        )
+                    }
             InvalidTransaction::EmptyApprovals => {
-                write!(formatter, "the transaction has no approvals")
-            }
+                        write!(formatter, "the transaction has no approvals")
+                    }
             InvalidTransaction::InvalidApproval { index, error } => {
-                write!(
-                    formatter,
-                    "the transaction approval at index {index} is invalid: {error}"
-                )
-            }
+                        write!(
+                            formatter,
+                            "the transaction approval at index {index} is invalid: {error}"
+                        )
+                    }
             InvalidTransaction::ExcessiveArgsLength { max_length, got } => {
-                write!(
-                    formatter,
-                    "serialized transaction runtime args of {got} bytes exceeds limit of \
+                        write!(
+                            formatter,
+                            "serialized transaction runtime args of {got} bytes exceeds limit of \
                     {max_length} bytes"
-                )
-            }
+                        )
+                    }
             InvalidTransaction::ExcessiveApprovals {
-                max_associated_keys,
-                got,
-            } => {
-                write!(
-                    formatter,
-                    "number of transaction approvals {got} exceeds the maximum number of \
+                        max_associated_keys,
+                        got,
+                    } => {
+                        write!(
+                            formatter,
+                            "number of transaction approvals {got} exceeds the maximum number of \
                     associated keys {max_associated_keys}",
-                )
-            }
+                        )
+                    }
             InvalidTransaction::ExceedsBlockGasLimit {
-                block_gas_limit,
-                got,
-            } => {
-                write!(
-                    formatter,
-                    "payment amount of {got} exceeds the block gas limit of {block_gas_limit}"
-                )
-            }
+                        block_gas_limit,
+                        got,
+                    } => {
+                        write!(
+                            formatter,
+                            "payment amount of {got} exceeds the block gas limit of {block_gas_limit}"
+                        )
+                    }
             InvalidTransaction::MissingArg { arg_name } => {
-                write!(formatter, "missing required runtime argument '{arg_name}'")
-            }
+                        write!(formatter, "missing required runtime argument '{arg_name}'")
+                    }
             InvalidTransaction::UnexpectedArgType {
-                arg_name,
-                expected,
-                got,
-            } => {
-                write!(
-                    formatter,
-                    "expected type of '{arg_name}' runtime argument to be one of {}, but got {got}",
-                    DisplayIter::new(expected)
-                )
-            }
+                        arg_name,
+                        expected,
+                        got,
+                    } => {
+                        write!(
+                            formatter,
+                            "expected type of '{arg_name}' runtime argument to be one of {}, but got {got}",
+                            DisplayIter::new(expected)
+                        )
+                    }
             InvalidTransaction::InvalidArg { arg_name, error } => {
-                write!(formatter, "invalid runtime argument '{arg_name}': {error}")
-            }
+                        write!(formatter, "invalid runtime argument '{arg_name}': {error}")
+                    }
             InvalidTransaction::InsufficientTransferAmount { minimum, attempted } => {
-                write!(
-                    formatter,
-                    "insufficient transfer amount; minimum: {minimum} attempted: {attempted}"
-                )
-            }
+                        write!(
+                            formatter,
+                            "insufficient transfer amount; minimum: {minimum} attempted: {attempted}"
+                        )
+                    }
             InvalidTransaction::EntryPointCannotBeCall => {
-                write!(formatter, "entry point cannot be call")
-            }
+                        write!(formatter, "entry point cannot be call")
+                    }
             InvalidTransaction::EntryPointCannotBeCustom { entry_point } => {
-                write!(formatter, "entry point cannot be custom: {entry_point}")
-            }
+                        write!(formatter, "entry point cannot be custom: {entry_point}")
+                    }
             InvalidTransaction::EntryPointMustBeCustom { entry_point } => {
-                write!(formatter, "entry point must be custom: {entry_point}")
-            }
+                        write!(formatter, "entry point must be custom: {entry_point}")
+                    }
             InvalidTransaction::EmptyModuleBytes => {
-                write!(formatter, "the transaction has empty module bytes")
-            }
+                        write!(formatter, "the transaction has empty module bytes")
+                    }
             InvalidTransaction::GasPriceConversion { amount, gas_price } => {
-                write!(
-                    formatter,
-                    "failed to divide the amount {} by the gas price {}",
-                    amount, gas_price
-                )
-            }
+                        write!(
+                            formatter,
+                            "failed to divide the amount {} by the gas price {}",
+                            amount, gas_price
+                        )
+                    }
             InvalidTransaction::UnableToCalculateGasLimit => {
-                write!(formatter, "unable to calculate gas limit", )
-            }
+                        write!(formatter, "unable to calculate gas limit", )
+                    }
             InvalidTransaction::UnableToCalculateGasCost => {
-                write!(formatter, "unable to calculate gas cost", )
-            }
+                        write!(formatter, "unable to calculate gas cost", )
+                    }
             InvalidTransaction::InvalidPricingMode { price_mode } => {
-                write!(
-                    formatter,
-                    "received a transaction with an invalid mode {price_mode}"
-                )
-            }
+                        write!(
+                            formatter,
+                            "received a transaction with an invalid mode {price_mode}"
+                        )
+                    }
             InvalidTransaction::InvalidTransactionLane(kind) => {
-                write!(
-                    formatter,
-                    "received a transaction with an invalid kind {kind}"
-                )
-            }
+                        write!(
+                            formatter,
+                            "received a transaction with an invalid kind {kind}"
+                        )
+                    }
             InvalidTransaction::GasPriceToleranceTooLow {
-                min_gas_price_tolerance,
-                provided_gas_price_tolerance,
-            } => {
-                write!(
-                    formatter,
-                    "received a transaction with gas price tolerance {} but this chain will only go as low as {}",
-                    provided_gas_price_tolerance, min_gas_price_tolerance
-                )
-            }
+                        min_gas_price_tolerance,
+                        provided_gas_price_tolerance,
+                    } => {
+                        write!(
+                            formatter,
+                            "received a transaction with gas price tolerance {} but this chain will only go as low as {}",
+                            provided_gas_price_tolerance, min_gas_price_tolerance
+                        )
+                    }
             InvalidTransaction::CouldNotDeserializeField { error } => {
-                match error {
-                    FieldDeserializationError::IndexNotExists { index } => write!(
-                        formatter,
-                        "tried to deserialize a field under index {} but it is not present in the payload",
-                        index
-                    ),
-                    FieldDeserializationError::FromBytesError { index, error } => write!(
-                        formatter,
-                        "tried to deserialize a field under index {} but it failed with error: {}",
-                        index,
-                        error
-                    ),
-                    FieldDeserializationError::LingeringBytesInField { index } => write!(
-                        formatter,
-                        "tried to deserialize a field under index {} but after deserialization there were still bytes left",
-                        index,
-                    ),
-                }
-            }
+                        match error {
+                            FieldDeserializationError::IndexNotExists { index } => write!(
+                                formatter,
+                                "tried to deserialize a field under index {} but it is not present in the payload",
+                                index
+                            ),
+                            FieldDeserializationError::FromBytesError { index, error } => write!(
+                                formatter,
+                                "tried to deserialize a field under index {} but it failed with error: {}",
+                                index,
+                                error
+                            ),
+                            FieldDeserializationError::LingeringBytesInField { index } => write!(
+                                formatter,
+                                "tried to deserialize a field under index {} but after deserialization there were still bytes left",
+                                index,
+                            ),
+                        }
+                    }
             InvalidTransaction::CannotCalculateFieldsHash => write!(
-                formatter,
-                "cannot calculate a hash digest for the transaction"
-            ),
+                        formatter,
+                        "cannot calculate a hash digest for the transaction"
+                    ),
             InvalidTransaction::EntryPointMustBeCall { entry_point } => {
-                write!(formatter, "entry point must be call: {entry_point}")
-            }
+                        write!(formatter, "entry point must be call: {entry_point}")
+                    }
             InvalidTransaction::NoWasmLaneMatchesTransaction() => write!(formatter, "Could not match any generic wasm lane to the specified transaction"),
             InvalidTransaction::UnexpectedTransactionFieldEntries => write!(formatter, "There were entries in the fields map of the payload that could not be matched"),
             InvalidTransaction::ExpectedNamedArguments => {
-                write!(formatter, "transaction requires named arguments")
-            }
+                        write!(formatter, "transaction requires named arguments")
+                    }
             InvalidTransaction::ExpectedBytesArguments => {
-                write!(formatter, "transaction requires bytes arguments")
-            }
+                        write!(formatter, "transaction requires bytes arguments")
+                    }
             InvalidTransaction::InvalidTransactionRuntime { expected } => {
-                write!(
-                    formatter,
-                    "invalid transaction runtime: expected {expected}"
-                )
-            }
+                        write!(
+                            formatter,
+                            "invalid transaction runtime: expected {expected}"
+                        )
+                    }
             InvalidTransaction::MissingSeed => {
-                write!(formatter, "missing seed for install or upgrade")
-            }
+                        write!(formatter, "missing seed for install or upgrade")
+                    }
             InvalidTransaction::PricingModeNotSupported => {
-                write!(formatter, "Pricing mode not supported")
-            }
+                        write!(formatter, "Pricing mode not supported")
+                    }
             InvalidTransaction::InvalidPaymentAmount => {
-                write!(formatter, "invalid payment amount")
-            }
+                        write!(formatter, "invalid payment amount")
+                    }
             InvalidTransaction::UnexpectedEntryPoint {
-                entry_point, lane_id
-            } => {
-                write!(formatter, "unexpected entry_point {} lane_id {}", entry_point, lane_id)
-            }
+                        entry_point, lane_id
+                    } => {
+                        write!(formatter, "unexpected entry_point {} lane_id {}", entry_point, lane_id)
+                    }
             InvalidTransaction::InsufficientBurnAmount { minimum, attempted } => {
-                write!(formatter, "insufficient burn amount: {minimum} {attempted}")
-            }
+                        write!(formatter, "insufficient burn amount: {minimum} {attempted}")
+                    }
+            InvalidTransaction::CouldNotSerializeTransaction => write!(formatter, "Could not serialize transaction."),
         }
     }
 }
@@ -478,16 +497,29 @@ impl StdError for InvalidTransaction {
             | InvalidTransaction::InvalidTransactionRuntime { .. }
             | InvalidTransaction::MissingSeed
             | InvalidTransaction::PricingModeNotSupported
-            | InvalidTransaction::InvalidPaymentAmount => None,
-            InvalidTransaction::InsufficientBurnAmount { .. } => None,
-            InvalidTransaction::UnexpectedEntryPoint { .. } => None,
+            | InvalidTransaction::InvalidPaymentAmount
+            | InvalidTransaction::InsufficientBurnAmount { .. }
+            | InvalidTransaction::UnexpectedEntryPoint { .. }
+            | InvalidTransaction::CouldNotSerializeTransaction => None,
         }
     }
 }
 
+impl InvalidTransaction {
+    pub fn unexpected_arg_type(arg_name: String, expected: Vec<CLType>, got: CLType) -> Self {
+        let expected = expected.iter().map(|el| format!("{}", el)).collect();
+        InvalidTransaction::UnexpectedArgType {
+            arg_name,
+            expected,
+            got: format!("{}", got),
+        }
+    }
+}
 /// Error returned when a transaction is too large.
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
+//Default is needed only in testing to meet EnumIter needs
+#[cfg_attr(any(feature = "testing", test), derive(Default))]
 pub struct ExcessiveSizeErrorV1 {
     /// The maximum permitted serialized transaction size, in bytes.
     pub max_transaction_size: u32,

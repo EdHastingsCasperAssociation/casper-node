@@ -356,6 +356,9 @@ pub enum ErrorCode {
     /// Unexpected entry point for Transaction::V1
     #[error("Unexpected entry point for Transaction::V1")]
     InvalidTransactionUnexpectedEntryPoint = 111,
+    /// Cannot serialize transaction
+    #[error("Transaction has malformed binary representation")]
+    TransactionHasMalformedBinaryRepresentation = 112,
 }
 
 impl TryFrom<u16> for ErrorCode {
@@ -541,6 +544,9 @@ impl From<InvalidTransactionV1> for ErrorCode {
             InvalidTransactionV1::UnexpectedEntryPoint { .. } => {
                 ErrorCode::InvalidTransactionUnexpectedEntryPoint
             }
+            InvalidTransactionV1::CouldNotSerializeTransaction { .. } => {
+                ErrorCode::TransactionHasMalformedBinaryRepresentation
+            }
             _other => ErrorCode::InvalidTransactionUnspecified,
         }
     }
@@ -550,9 +556,43 @@ impl From<InvalidTransactionV1> for ErrorCode {
 mod tests {
     use std::convert::TryFrom;
 
+    use crate::ErrorCode;
+    use casper_types::{InvalidDeploy, InvalidTransactionV1};
     use strum::IntoEnumIterator;
 
-    use crate::ErrorCode;
+    #[test]
+    fn verify_all_invalid_transaction_v1_errors_have_error_codes() {
+        for error in InvalidTransactionV1::iter() {
+            let code = ErrorCode::from(error.clone());
+            assert_ne!(
+                code,
+                ErrorCode::InvalidTransactionUnspecified,
+                "Seems like InvalidTransactionV1 {error} has no corresponding error code"
+            );
+            assert_ne!(
+                code,
+                ErrorCode::InvalidDeployUnspecified,
+                "Seems like InvalidTransactionV1 {error} has no corresponding error code"
+            )
+        }
+    }
+
+    #[test]
+    fn verify_all_invalid_deploy_errors_have_error_codes() {
+        for error in InvalidDeploy::iter() {
+            let code = ErrorCode::from(error.clone());
+            assert_ne!(
+                code,
+                ErrorCode::InvalidTransactionUnspecified,
+                "Seems like InvalidDeploy {error} has no corresponding error code"
+            );
+            assert_ne!(
+                code,
+                ErrorCode::InvalidDeployUnspecified,
+                "Seems like InvalidDeploy {error} has no corresponding error code"
+            )
+        }
+    }
 
     #[test]
     fn try_from_decoded_all_variants() {
