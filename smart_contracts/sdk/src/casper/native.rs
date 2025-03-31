@@ -1,21 +1,27 @@
-use bytes::Bytes;
-use casper_executor_wasm_common::flags::ReturnFlags;
-use core::{panic::UnwindSafe, slice};
-use once_cell::sync::Lazy;
-use rand::Rng;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
     convert::Infallible,
+    fmt,
     os::raw::c_void,
-    panic,
+    panic::{self, UnwindSafe},
     ptr::{self, NonNull},
+    slice,
     sync::{Arc, RwLock},
 };
 
-use crate::types::Address;
+use bytes::Bytes;
+use casper_executor_wasm_common::{
+    error::{HOST_ERROR_INTERNAL, HOST_ERROR_NOT_FOUND, HOST_ERROR_SUCCESS},
+    flags::ReturnFlags,
+};
+use once_cell::sync::Lazy;
+use rand::Rng;
 
 use super::Entity;
+use crate::types::{
+    Address, CALL_ERROR_CALLEE_REVERTED, CALL_ERROR_CALLEE_SUCCEEDED, CALL_ERROR_CALLEE_TRAPPED,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExportKind {
@@ -36,9 +42,9 @@ pub enum ExportKind {
 impl ExportKind {
     pub fn name(&self) -> &'static str {
         match self {
-            ExportKind::SmartContract { name, .. } => name,
-            ExportKind::TraitImpl { name, .. } => name,
-            ExportKind::Function { name } => name,
+            ExportKind::SmartContract { name, .. }
+            | ExportKind::TraitImpl { name, .. }
+            | ExportKind::Function { name } => name,
         }
     }
 }
@@ -68,8 +74,8 @@ pub static EXPORTS: Lazy<Vec<&'static Export>> = Lazy::new(|| {
     exports
 });
 
-impl crate::prelude::fmt::Debug for Export {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Export {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             kind,
             fptr: _,
@@ -203,15 +209,17 @@ impl Environment {
         info: *mut casper_sdk_sys::ReadInfo,
         alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8,
         alloc_ctx: *const core::ffi::c_void,
-    ) -> Result<i32, NativeTrap> {
+    ) -> Result<u32, NativeTrap> {
         let key_bytes = unsafe { slice::from_raw_parts(key_ptr, key_size) };
         let key_bytes = self.key_prefix(key_bytes);
 
-        let db = self.db.read().unwrap();
+        let Ok(db) = self.db.read() else {
+            return Ok(HOST_ERROR_INTERNAL);
+        };
 
         let value = match db.get(&key_space) {
             Some(values) => values.get(key_bytes.as_slice()).cloned(),
-            None => return Ok(1),
+            None => return Ok(HOST_ERROR_NOT_FOUND),
         };
         match value {
             Some(tagged_value) => {
@@ -232,9 +240,9 @@ impl Environment {
                     }
                 }
 
-                Ok(0)
+                Ok(HOST_ERROR_SUCCESS)
             }
-            None => Ok(1),
+            None => Ok(HOST_ERROR_NOT_FOUND),
         }
     }
 
@@ -245,7 +253,7 @@ impl Environment {
         key_size: usize,
         value_ptr: *const u8,
         value_size: usize,
-    ) -> Result<i32, NativeTrap> {
+    ) -> Result<u32, NativeTrap> {
         assert!(!key_ptr.is_null());
         assert!(!value_ptr.is_null());
         // let key_bytes = unsafe { slice::from_raw_parts(key_ptr, key_size) };
@@ -259,7 +267,7 @@ impl Environment {
             Bytes::from(key_bytes.to_vec()),
             Bytes::from(value_bytes.to_vec()),
         );
-        Ok(0)
+        Ok(HOST_ERROR_SUCCESS)
     }
 
     fn casper_print(&self, msg_ptr: *const u8, msg_size: usize) -> Result<(), NativeTrap> {
@@ -397,7 +405,7 @@ impl Environment {
             }
         }
 
-        Ok(0)
+        Ok(HOST_ERROR_SUCCESS)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -410,8 +418,7 @@ impl Environment {
         entry_point_size: usize,
         input_ptr: *const u8,
         input_size: usize,
-        alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8, /* For capturing output
-                                                                         * data */
+        alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8, // For capturing output data
         alloc_ctx: *const core::ffi::c_void,
     ) -> Result<u32, NativeTrap> {
         let address = unsafe { slice::from_raw_parts(address_ptr, address_size) };
@@ -456,12 +463,11 @@ impl Environment {
 
         let unfolded = match ret {
             Ok(Ok(())) => Ok(()),
-            Ok(Err(error)) => Err(error),
-            Err(error) => Err(error),
+            Ok(Err(error)) | Err(error) => Err(error),
         };
 
         match unfolded {
-            Ok(()) => Ok(0),
+            Ok(()) => Ok(CALL_ERROR_CALLEE_SUCCEEDED),
             Err(NativeTrap::Return(flags, bytes)) => {
                 let ptr = NonNull::new(alloc(bytes.len(), alloc_ctx as _));
                 if let Some(output_ptr) = ptr {
@@ -471,14 +477,14 @@ impl Environment {
                 }
 
                 if flags.contains(ReturnFlags::REVERT) {
-                    Ok(1) // CalleeReverted
+                    Ok(CALL_ERROR_CALLEE_REVERTED)
                 } else {
-                    Ok(0) // CalleeSucceeded
+                    Ok(CALL_ERROR_CALLEE_SUCCEEDED)
                 }
             }
             Err(NativeTrap::Panic(panic)) => {
-                eprintln!("Panic {:?}", panic);
-                Ok(2) // CalleeTrapped
+                eprintln!("Panic {panic:?}");
+                Ok(CALL_ERROR_CALLEE_TRAPPED)
             }
         }
     }
@@ -590,7 +596,7 @@ where
 }
 
 fn handle_ret<T: Default>(value: Result<T, NativeTrap>) -> T {
-    handle_ret_with(value, || Default::default())
+    handle_ret_with(value, || T::default())
 }
 
 /// Dispatches a function with a default environment.
@@ -633,7 +639,7 @@ mod symbols {
     // TODO: Figure out how to use for_each_host_function macro here and deal with never type in
     // casper_return
     #[no_mangle]
-    ///Read value from a storage available for caller's entity address.
+    /// Read value from a storage available for caller's entity address.
     pub extern "C" fn casper_read(
         key_space: u64,
         key_ptr: *const u8,
@@ -641,7 +647,7 @@ mod symbols {
         info: *mut ::casper_sdk_sys::ReadInfo,
         alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8,
         alloc_ctx: *const core::ffi::c_void,
-    ) -> i32 {
+    ) -> u32 {
         let _name = "casper_read";
         let _args = (&key_space, &key_ptr, &key_size, &info, &alloc, &alloc_ctx);
         let _call_result = with_current_environment(|stub| {
@@ -657,7 +663,7 @@ mod symbols {
         key_size: usize,
         value_ptr: *const u8,
         value_size: usize,
-    ) -> i32 {
+    ) -> u32 {
         let _name = "casper_write";
         let _args = (&key_space, &key_ptr, &key_size, &value_ptr, &value_size);
         let _call_result = with_current_environment(|stub| {
@@ -733,8 +739,7 @@ mod symbols {
         entry_point_size: usize,
         input_ptr: *const u8,
         input_size: usize,
-        alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8, /* For capturing output
-                                                                         * data */
+        alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8, // For capturing output data
         alloc_ctx: *const core::ffi::c_void,
     ) -> u32 {
         let _call_result = with_current_environment(|stub| {
@@ -801,7 +806,7 @@ mod symbols {
         let _name = "casper_env_transferred_value";
         let _args = ();
         let _call_result = with_current_environment(|stub| stub.casper_env_transferred_value(dest));
-        crate::casper::native::handle_ret(_call_result)
+        crate::casper::native::handle_ret(_call_result);
     }
     #[no_mangle]
     pub extern "C" fn casper_env_balance(

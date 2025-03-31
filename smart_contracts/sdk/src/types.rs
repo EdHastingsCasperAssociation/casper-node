@@ -6,6 +6,12 @@ use crate::abi::{CasperABI, Definition, EnumVariant};
 
 pub type Address = [u8; 32];
 
+pub(crate) const CALL_ERROR_CALLEE_SUCCEEDED: u32 = 0;
+pub(crate) const CALL_ERROR_CALLEE_REVERTED: u32 = 1;
+pub(crate) const CALL_ERROR_CALLEE_TRAPPED: u32 = 2;
+pub(crate) const CALL_ERROR_CALLEE_GAS_DEPLETED: u32 = 3;
+pub(crate) const CALL_ERROR_CALLEE_NOT_CALLABLE: u32 = 4;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 #[borsh(crate = "crate::serializers::borsh")]
 pub enum CallError {
@@ -31,10 +37,10 @@ impl TryFrom<u32> for CallError {
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
-            1 => Ok(CallError::CalleeReverted),
-            2 => Ok(CallError::CalleeTrapped),
-            3 => Ok(CallError::CalleeGasDepleted),
-            4 => Ok(CallError::NotCallable),
+            CALL_ERROR_CALLEE_REVERTED => Ok(Self::CalleeReverted),
+            CALL_ERROR_CALLEE_TRAPPED => Ok(Self::CalleeTrapped),
+            CALL_ERROR_CALLEE_GAS_DEPLETED => Ok(Self::CalleeGasDepleted),
+            CALL_ERROR_CALLEE_NOT_CALLABLE => Ok(Self::NotCallable),
             _ => Err(()),
         }
     }

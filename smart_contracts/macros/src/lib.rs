@@ -1323,7 +1323,7 @@ pub fn entry_point(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    println!("{}", gen);
+    println!("{gen}");
 
     // quote!(fn foo() {})
     // item
@@ -1393,7 +1393,7 @@ pub fn derive_casper_abi(input: TokenStream) -> TokenStream {
         let mut populate_definitions = Vec::new();
         let name = input.ident.clone();
         let mut items = Vec::new();
-        for field in input.fields.iter() {
+        for field in &input.fields {
             match &field.ty {
                 Type::Path(path) => {
                     for segment in &path.path.segments {

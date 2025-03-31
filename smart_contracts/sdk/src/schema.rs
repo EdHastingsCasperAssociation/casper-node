@@ -27,8 +27,7 @@ where
 {
     let raw: F::Bits = F::Bits::deserialize(deserializer)?;
     F::from_bits(raw).ok_or(serde::de::Error::custom(format!(
-        "Unexpected flags value 0x{:#08x}",
-        raw
+        "Unexpected flags value 0x{raw:#08x}"
     )))
 }
 
@@ -85,13 +84,11 @@ pub struct EntryPoint<'a, F: Fn()> {
 }
 
 #[cfg(not(target_family = "wasm"))]
-use core::cell::RefCell;
-#[cfg(not(target_family = "wasm"))]
-use std::collections::BTreeMap;
+use std::{cell::RefCell, collections::BTreeMap};
 
 #[cfg(not(target_family = "wasm"))]
 thread_local! {
-    pub static DISPATCHER: RefCell<BTreeMap<String, extern "C" fn()>> = Default::default();
+    pub static DISPATCHER: RefCell<BTreeMap<String, extern "C" fn()>> = RefCell::default();
 }
 
 // #[cfg(not(target_family = "wasm"))]

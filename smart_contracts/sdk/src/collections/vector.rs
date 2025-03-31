@@ -1,13 +1,11 @@
 use crate::{
     abi::{CasperABI, Declaration, Definition, Definitions, StructField},
     casper::{self, read_into_vec},
-};
-
-// use casper_macros::casper;
-use crate::{
     prelude::{cmp::Ordering, marker::PhantomData},
     serializers::borsh::{BorshDeserialize, BorshSerialize},
 };
+
+// use casper_macros::casper;
 use casper_executor_wasm_common::keyspace::Keyspace;
 use const_fnv1a_hash::fnv1a_hash_str_64;
 

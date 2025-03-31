@@ -10,14 +10,14 @@ macro_rules! for_each_host_function {
                 info: *mut $crate::ReadInfo,
                 alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8,
                 alloc_ctx: *const core::ffi::c_void,
-            ) -> i32;
+            ) -> u32;
             pub fn casper_write(
                 key_space: u64,
                 key_ptr: *const u8,
                 key_size: usize,
                 value_ptr: *const u8,
                 value_size: usize,
-            ) -> i32;
+            ) -> u32;
             pub fn casper_print(msg_ptr: *const u8, msg_size: usize,);
             pub fn casper_return(flags: u32, data_ptr: *const u8, data_len: usize,);
             pub fn casper_copy_input(
@@ -64,7 +64,7 @@ macro_rules! for_each_host_function {
             pub fn casper_env_block_time() -> u64;
 
             pub fn casper_transfer(entity_addr_ptr: *const u8, entity_addr_len: usize, amount: *const core::ffi::c_void,) -> u32;
-            pub fn casper_emit(topic_ptr: *const u8, topic_size: usize, payload_ptr: *const u8, payload_size: usize,) -> i32;
+            pub fn casper_emit(topic_ptr: *const u8, topic_size: usize, payload_ptr: *const u8, payload_size: usize,) -> u32;
         }
     };
 }

@@ -1,9 +1,5 @@
-use core::panic;
 use std::{borrow::Cow, cmp, num::NonZeroU32, sync::Arc};
 
-use crate::system::{self, MintArgs, MintTransferArgs};
-
-use crate::{abi::CreateResult, context::Context};
 use bytes::Bytes;
 use casper_executor_wasm_common::{
     chain_utils,
@@ -14,18 +10,20 @@ use casper_executor_wasm_common::{
     error::{
         HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT,
         HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED, HOST_ERROR_MESSAGE_TOPIC_FULL,
-        HOST_ERROR_NOT_FOUND, HOST_ERROR_PAYLOAD_TOO_LONG, HOST_ERROR_SUCCEED,
+        HOST_ERROR_NOT_FOUND, HOST_ERROR_PAYLOAD_TOO_LONG, HOST_ERROR_SUCCESS,
         HOST_ERROR_TOO_MANY_TOPICS, HOST_ERROR_TOPIC_TOO_LONG,
     },
     flags::ReturnFlags,
     keyspace::{Keyspace, KeyspaceTag},
 };
-use casper_executor_wasm_interface::u32_from_host_result;
+use casper_executor_wasm_interface::{
+    executor::{ExecuteError, ExecuteRequestBuilder, ExecuteResult, ExecutionKind, Executor},
+    u32_from_host_result, Caller, HostError, HostResult, TrapCode, VMError, VMResult,
+};
 use casper_storage::{
     global_state::GlobalStateReader,
     tracking_copy::{TrackingCopyEntityExt, TrackingCopyError, TrackingCopyExt},
 };
-
 use casper_types::{
     account::AccountHash,
     addressable_entity::{ActionThresholds, AssociatedKeys, MessageTopicError, NamedKeyAddr},
@@ -42,12 +40,11 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use tracing::{error, info, warn};
 
-use casper_executor_wasm_interface::{
-    executor::{ExecuteError, ExecuteRequestBuilder, ExecuteResult, ExecutionKind, Executor},
-    Caller, HostError, HostResult, TrapCode, VMError, VMResult,
+use crate::{
+    abi::{CreateResult, ReadInfo},
+    context::Context,
+    system::{self, MintArgs, MintTransferArgs},
 };
-
-use crate::abi::ReadInfo;
 
 #[derive(Debug, Copy, Clone, FromPrimitive, PartialEq)]
 enum EntityKindTag {
@@ -106,7 +103,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
     key_size: u32,
     value_ptr: u32,
     value_size: u32,
-) -> VMResult<i32> {
+) -> VMResult<u32> {
     let write_cost = caller.context().config.host_function_costs().write;
     charge_host_function_call(
         &mut caller,
@@ -118,7 +115,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
         Some(keyspace_tag) => keyspace_tag,
         None => {
             // Unknown keyspace received, return error
-            return Ok(1);
+            return Ok(HOST_ERROR_NOT_FOUND);
         }
     };
 
@@ -132,7 +129,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
                 Ok(key_name) => key_name,
                 Err(_) => {
                     // TODO: Invalid key name encoding
-                    return Ok(1);
+                    return Ok(HOST_ERROR_NOT_FOUND);
                 }
             };
 
@@ -148,7 +145,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
 
             if !caller.has_export(key_name) {
                 // Missing wasm export, unable to perform global state write
-                return Ok(1);
+                return Ok(HOST_ERROR_NOT_FOUND);
             }
 
             Keyspace::PaymentInfo(key_name)
@@ -159,7 +156,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
         Some(global_state_key) => global_state_key,
         None => {
             // Unknown keyspace received, return error
-            return Ok(1);
+            return Ok(HOST_ERROR_NOT_FOUND);
         }
     };
 
@@ -223,7 +220,7 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
     info_ptr: u32,
     cb_alloc: u32,
     alloc_ctx: u32,
-) -> Result<i32, VMError> {
+) -> Result<u32, VMError> {
     let read_cost = caller.context().config.host_function_costs().read;
     charge_host_function_call(
         &mut caller,
@@ -282,7 +279,7 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
         Some(global_state_key) => global_state_key,
         None => {
             // Unknown keyspace received, return error
-            return Ok(1);
+            return Ok(HOST_ERROR_NOT_FOUND);
         }
     };
     let global_state_read_result = caller.context_mut().tracking_copy.read(&global_state_key);
@@ -935,15 +932,15 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
                     Either::Left(account.main_purse())
                 }
                 Ok(Some(other_entity)) => {
-                    panic!("Unexpected entity type: {:?}", other_entity)
+                    panic!("Unexpected entity type: {other_entity:?}")
                 }
-                Ok(None) => return Ok(0),
+                Ok(None) => return Ok(HOST_ERROR_SUCCESS),
                 Err(error) => panic!("Error while reading from storage; aborting key={account_key:?} error={error:?}"),
             }
         }
         Some(EntityKindTag::Contract) => {
             if entity_addr_len != 32 {
-                return Ok(0);
+                return Ok(HOST_ERROR_SUCCESS);
             }
             let hash_bytes = caller.memory_read(entity_addr_ptr, entity_addr_len as usize)?;
             let hash_bytes: [u8; 32] = hash_bytes.try_into().unwrap(); // SAFETY: We checked for length.
@@ -1020,7 +1017,7 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
 
     caller.memory_write(output_ptr, &total_balance.to_le_bytes())?;
 
-    Ok(1)
+    Ok(HOST_ERROR_NOT_FOUND)
 }
 
 pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
@@ -1276,7 +1273,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
     {
         Ok(Some(StoredValue::AddressableEntity(addressable_entity))) => addressable_entity,
         Ok(Some(other_entity)) => {
-            panic!("Unexpected entity type: {:?}", other_entity)
+            panic!("Unexpected entity type: {other_entity:?}")
         }
         Ok(None) => return Ok(Err(HostError::NotCallable)),
         Err(error) => {
@@ -1403,7 +1400,7 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
     topic_name_size: u32,
     payload_ptr: u32,
     payload_size: u32,
-) -> VMResult<i32> {
+) -> VMResult<u32> {
     // Charge for parameter weights.
     let emit_host_function = caller.context().config.host_function_costs().emit;
 
@@ -1531,7 +1528,7 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
                 0
             }
         }
-        Ok(Some(other)) => panic!("Unexpected stored value: {:?}", other),
+        Ok(Some(other)) => panic!("Unexpected stored value: {other:?}"),
         Ok(None) => {
             // No messages in current block yet
             0
@@ -1588,5 +1585,5 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
         message,
     );
 
-    Ok(HOST_ERROR_SUCCEED)
+    Ok(HOST_ERROR_SUCCESS)
 }
