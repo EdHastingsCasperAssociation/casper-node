@@ -12,16 +12,17 @@ use std::{
 
 use bytes::Bytes;
 use casper_executor_wasm_common::{
-    error::{HOST_ERROR_INTERNAL, HOST_ERROR_NOT_FOUND, HOST_ERROR_SUCCESS},
+    error::{
+        CALLEE_REVERTED, CALLEE_SUCCEEDED, CALLEE_TRAPPED, HOST_ERROR_INTERNAL,
+        HOST_ERROR_NOT_FOUND, HOST_ERROR_SUCCESS,
+    },
     flags::ReturnFlags,
 };
 use once_cell::sync::Lazy;
 use rand::Rng;
 
 use super::Entity;
-use crate::types::{
-    Address, CALL_ERROR_CALLEE_REVERTED, CALL_ERROR_CALLEE_SUCCEEDED, CALL_ERROR_CALLEE_TRAPPED,
-};
+use crate::types::Address;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExportKind {
@@ -467,7 +468,7 @@ impl Environment {
         };
 
         match unfolded {
-            Ok(()) => Ok(CALL_ERROR_CALLEE_SUCCEEDED),
+            Ok(()) => Ok(CALLEE_SUCCEEDED),
             Err(NativeTrap::Return(flags, bytes)) => {
                 let ptr = NonNull::new(alloc(bytes.len(), alloc_ctx as _));
                 if let Some(output_ptr) = ptr {
@@ -477,14 +478,14 @@ impl Environment {
                 }
 
                 if flags.contains(ReturnFlags::REVERT) {
-                    Ok(CALL_ERROR_CALLEE_REVERTED)
+                    Ok(CALLEE_REVERTED)
                 } else {
-                    Ok(CALL_ERROR_CALLEE_SUCCEEDED)
+                    Ok(CALLEE_SUCCEEDED)
                 }
             }
             Err(NativeTrap::Panic(panic)) => {
                 eprintln!("Panic {panic:?}");
-                Ok(CALL_ERROR_CALLEE_TRAPPED)
+                Ok(CALLEE_TRAPPED)
             }
         }
     }

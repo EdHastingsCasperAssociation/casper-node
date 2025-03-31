@@ -2,6 +2,8 @@
 //!
 //! API inspired by `std::io::Error` and `std::io::ErrorKind` but somewhat more memory efficient.
 
+use thiserror::Error;
+
 #[derive(Debug, Default, PartialEq)]
 #[non_exhaustive]
 #[repr(u32)]
@@ -69,6 +71,76 @@ pub fn result_from_code(code: u32) -> Result<(), CommonResult> {
     }
 }
 
+/// Wasm trap code.
+#[derive(Debug, Error)]
+pub enum TrapCode {
+    /// Trap code for out of bounds memory access.
+    #[error("call stack exhausted")]
+    StackOverflow,
+    /// Trap code for out of bounds memory access.
+    #[error("out of bounds memory access")]
+    MemoryOutOfBounds,
+    /// Trap code for out of bounds table access.
+    #[error("undefined element: out of bounds table access")]
+    TableAccessOutOfBounds,
+    /// Trap code for indirect call to null.
+    #[error("uninitialized element")]
+    IndirectCallToNull,
+    /// Trap code for indirect call type mismatch.
+    #[error("indirect call type mismatch")]
+    BadSignature,
+    /// Trap code for integer overflow.
+    #[error("integer overflow")]
+    IntegerOverflow,
+    /// Trap code for division by zero.
+    #[error("integer divide by zero")]
+    IntegerDivisionByZero,
+    /// Trap code for invalid conversion to integer.
+    #[error("invalid conversion to integer")]
+    BadConversionToInteger,
+    /// Trap code for unreachable code reached triggered by unreachable instruction.
+    #[error("unreachable")]
+    UnreachableCodeReached,
+}
+
+pub const CALLEE_SUCCEEDED: u32 = 0;
+pub const CALLEE_REVERTED: u32 = 1;
+pub const CALLEE_TRAPPED: u32 = 2;
+pub const CALLEE_GAS_DEPLETED: u32 = 3;
+pub const CALLEE_NOT_CALLABLE: u32 = 4;
+
+/// Represents the result of a host function call.
+///
+/// 0 is used as a success.
+#[derive(Debug, Error)]
+pub enum CallError {
+    /// Callee contract reverted.
+    #[error("callee reverted")]
+    CalleeReverted,
+    /// Called contract trapped.
+    #[error("callee trapped: {0}")]
+    CalleeTrapped(TrapCode),
+    /// Called contract reached gas limit.
+    #[error("callee gas depleted")]
+    CalleeGasDepleted,
+    /// Called contract is not callable.
+    #[error("not callable")]
+    NotCallable,
+}
+
+impl CallError {
+    /// Converts the host error into a u32.
+    #[must_use]
+    pub fn into_u32(self) -> u32 {
+        match self {
+            Self::CalleeReverted => CALLEE_REVERTED,
+            Self::CalleeTrapped(_) => CALLEE_TRAPPED,
+            Self::CalleeGasDepleted => CALLEE_GAS_DEPLETED,
+            Self::NotCallable => CALLEE_NOT_CALLABLE,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,7 +165,7 @@ mod tests {
 
     #[test]
     fn test_from_u32_other() {
-        let error = CommonResult::from(4);
-        assert_eq!(error, CommonResult::Other(4));
+        let error = CommonResult::from(10);
+        assert_eq!(error, CommonResult::Other(10));
     }
 }

@@ -4,7 +4,7 @@
 //! hiding the complexity of the underlying implementation.
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use casper_executor_wasm_interface::{HostError, HostResult, TrapCode};
+use casper_executor_wasm_interface::{CallError, HostResult, TrapCode};
 use casper_storage::{
     global_state::GlobalStateReader,
     system::{
@@ -121,7 +121,7 @@ pub(crate) fn mint_mint<R: GlobalStateReader>(
     transaction_hash: TransactionHash,
     address_generator: Arc<RwLock<AddressGenerator>>,
     args: MintArgs,
-) -> Result<URef, HostError> {
+) -> Result<URef, CallError> {
     let mint_result = match dispatch_system_contract(
         tracking_copy,
         transaction_hash,
@@ -138,11 +138,11 @@ pub(crate) fn mint_mint<R: GlobalStateReader>(
 
     match mint_result {
         Ok(uref) => Ok(uref),
-        Err(casper_types::system::mint::Error::InsufficientFunds) => Err(HostError::CalleeReverted),
-        Err(casper_types::system::mint::Error::GasLimit) => Err(HostError::CalleeGasDepleted),
+        Err(casper_types::system::mint::Error::InsufficientFunds) => Err(CallError::CalleeReverted),
+        Err(casper_types::system::mint::Error::GasLimit) => Err(CallError::CalleeGasDepleted),
         Err(mint_error) => {
             error!(%mint_error, ?args, "mint transfer failed");
-            Err(HostError::CalleeTrapped(TrapCode::UnreachableCodeReached))
+            Err(CallError::CalleeTrapped(TrapCode::UnreachableCodeReached))
         }
     }
 }
@@ -181,7 +181,7 @@ pub(crate) fn mint_transfer<R: GlobalStateReader>(
             Ok(result) => result,
             Err(error) => {
                 error!(%error, "mint transfer failed");
-                return Err(HostError::CalleeTrapped(TrapCode::UnreachableCodeReached));
+                return Err(CallError::CalleeTrapped(TrapCode::UnreachableCodeReached));
             }
         };
 
@@ -189,11 +189,11 @@ pub(crate) fn mint_transfer<R: GlobalStateReader>(
 
     match transfer_result {
         Ok(()) => Ok(()),
-        Err(casper_types::system::mint::Error::InsufficientFunds) => Err(HostError::CalleeReverted),
-        Err(casper_types::system::mint::Error::GasLimit) => Err(HostError::CalleeGasDepleted),
+        Err(casper_types::system::mint::Error::InsufficientFunds) => Err(CallError::CalleeReverted),
+        Err(casper_types::system::mint::Error::GasLimit) => Err(CallError::CalleeGasDepleted),
         Err(mint_error) => {
             error!(%mint_error, ?args, "mint transfer failed");
-            Err(HostError::CalleeTrapped(TrapCode::UnreachableCodeReached))
+            Err(CallError::CalleeTrapped(TrapCode::UnreachableCodeReached))
         }
     }
 }

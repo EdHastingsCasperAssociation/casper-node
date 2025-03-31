@@ -1,17 +1,16 @@
-use crate::prelude::fmt::{self, Display, Formatter};
+use casper_executor_wasm_common::error::{
+    CALLEE_GAS_DEPLETED, CALLEE_NOT_CALLABLE, CALLEE_REVERTED, CALLEE_TRAPPED,
+};
 
-use crate::serializers::borsh::{BorshDeserialize, BorshSerialize};
-
-use crate::abi::{CasperABI, Definition, EnumVariant};
+use crate::{
+    abi::{CasperABI, Definition, EnumVariant},
+    prelude::fmt,
+    serializers::borsh::{BorshDeserialize, BorshSerialize},
+};
 
 pub type Address = [u8; 32];
 
-pub(crate) const CALL_ERROR_CALLEE_SUCCEEDED: u32 = 0;
-pub(crate) const CALL_ERROR_CALLEE_REVERTED: u32 = 1;
-pub(crate) const CALL_ERROR_CALLEE_TRAPPED: u32 = 2;
-pub(crate) const CALL_ERROR_CALLEE_GAS_DEPLETED: u32 = 3;
-pub(crate) const CALL_ERROR_CALLEE_NOT_CALLABLE: u32 = 4;
-
+// Keep in sync with [`casper_executor_wasm_common::error::CallError`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 #[borsh(crate = "crate::serializers::borsh")]
 pub enum CallError {
@@ -21,8 +20,8 @@ pub enum CallError {
     NotCallable,
 }
 
-impl Display for CallError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl fmt::Display for CallError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CallError::CalleeReverted => write!(f, "callee reverted"),
             CallError::CalleeTrapped => write!(f, "callee trapped"),
@@ -37,10 +36,10 @@ impl TryFrom<u32> for CallError {
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
-            CALL_ERROR_CALLEE_REVERTED => Ok(Self::CalleeReverted),
-            CALL_ERROR_CALLEE_TRAPPED => Ok(Self::CalleeTrapped),
-            CALL_ERROR_CALLEE_GAS_DEPLETED => Ok(Self::CalleeGasDepleted),
-            CALL_ERROR_CALLEE_NOT_CALLABLE => Ok(Self::NotCallable),
+            CALLEE_REVERTED => Ok(Self::CalleeReverted),
+            CALLEE_TRAPPED => Ok(Self::CalleeTrapped),
+            CALLEE_GAS_DEPLETED => Ok(Self::CalleeGasDepleted),
+            CALLEE_NOT_CALLABLE => Ok(Self::NotCallable),
             _ => Err(()),
         }
     }

@@ -18,7 +18,7 @@ use casper_executor_wasm_common::{
 };
 use casper_executor_wasm_interface::{
     executor::{ExecuteError, ExecuteRequestBuilder, ExecuteResult, ExecutionKind, Executor},
-    u32_from_host_result, Caller, HostError, HostResult, TrapCode, VMError, VMResult,
+    u32_from_host_result, CallError, Caller, HostResult, TrapCode, VMError, VMResult,
 };
 use casper_storage::{
     global_state::GlobalStateReader,
@@ -474,7 +474,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
 
     let seed = if seed_ptr != 0 {
         if seed_len != 32 {
-            return Ok(Err(HostError::NotCallable));
+            return Ok(Err(CallError::NotCallable));
         }
         let seed_bytes = caller.memory_read(seed_ptr, seed_len as usize)?;
         let seed_bytes: [u8; 32] = seed_bytes.try_into().unwrap(); // SAFETY: We checked for length.
@@ -494,7 +494,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
                     Ok(entry_point) => Some(entry_point),
                     Err(utf8_error) => {
                         error!(%utf8_error, "entry point name is not a valid utf-8 string; unable to call");
-                        return Ok(Err(HostError::NotCallable));
+                        return Ok(Err(CallError::NotCallable));
                     }
                 }
             }
@@ -594,7 +594,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
         Ok(uref) => uref,
         Err(mint_error) => {
             error!(?mint_error, "Failed to create a purse");
-            return Ok(Err(HostError::CalleeTrapped(
+            return Ok(Err(CallError::CalleeTrapped(
                 TrapCode::UnreachableCodeReached,
             )));
         }
@@ -753,7 +753,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
             Ok(entry_point) => entry_point,
             Err(utf8_error) => {
                 error!(%utf8_error, "entry point name is not a valid utf-8 string; unable to call");
-                return Ok(Err(HostError::NotCallable));
+                return Ok(Err(CallError::NotCallable));
             }
         }
     };
@@ -1035,7 +1035,7 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
 
     if entity_addr_len != 32 {
         // Invalid entity address; failing to proceed with the transfer
-        return Ok(u32_from_host_result(Err(HostError::NotCallable)));
+        return Ok(u32_from_host_result(Err(CallError::NotCallable)));
     }
 
     let amount: u128 = {
@@ -1060,7 +1060,7 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
             Ok((entity_addr, runtime_footprint)) => (entity_addr, runtime_footprint),
             Err(TrackingCopyError::KeyNotFound(key)) => {
                 warn!(?key, "Account not found");
-                return Ok(u32_from_host_result(Err(HostError::NotCallable)));
+                return Ok(u32_from_host_result(Err(CallError::NotCallable)));
             }
             Err(error) => {
                 error!(?error, "Error while reading from storage; aborting");
@@ -1079,7 +1079,7 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
                     indirect.into_t::<Key>().expect("should be key")
                 }
                 Ok(Some(other)) => panic!("should be cl value but got {other:?}"),
-                Ok(None) => return Ok(u32_from_host_result(Err(HostError::NotCallable))),
+                Ok(None) => return Ok(u32_from_host_result(Err(CallError::NotCallable))),
                 Err(error) => {
                     error!(
                         ?error,
@@ -1102,12 +1102,12 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
                                 ?smart_contract_key,
                                 "Unable to find latest addressible entity hash for contract"
                             );
-                            return Ok(u32_from_host_result(Err(HostError::NotCallable)));
+                            return Ok(u32_from_host_result(Err(CallError::NotCallable)));
                         }
                     }
                 }
                 Ok(Some(other)) => panic!("should be smart contract but got {other:?}"),
-                Ok(None) => return Ok(u32_from_host_result(Err(HostError::NotCallable))),
+                Ok(None) => return Ok(u32_from_host_result(Err(CallError::NotCallable))),
                 Err(error) => {
                     error!(
                         ?error,
@@ -1143,7 +1143,7 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
         },
         Err(TrackingCopyError::KeyNotFound(key)) => {
             warn!(?key, "Transfer recipient not found");
-            return Ok(u32_from_host_result(Err(HostError::NotCallable)));
+            return Ok(u32_from_host_result(Err(CallError::NotCallable)));
         }
         Err(error) => {
             error!(?error, "Error while reading from storage; aborting");
@@ -1208,7 +1208,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                 Ok(entry_point) => Some(entry_point),
                 Err(utf8_error) => {
                     error!(%utf8_error, "entry point name is not a valid utf-8 string; unable to call");
-                    return Ok(Err(HostError::NotCallable));
+                    return Ok(Err(CallError::NotCallable));
                 }
             }
         }
@@ -1229,7 +1229,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
     let (smart_contract_addr, callee_addressable_entity_key) = match caller.context().callee {
         Key::Account(_account_hash) => {
             error!("Account upgrade is not possible");
-            return Ok(Err(HostError::NotCallable));
+            return Ok(Err(CallError::NotCallable));
         }
         addressable_entity_key @ Key::SmartContract(smart_contract_addr) => {
             let smart_contract_key = addressable_entity_key;
@@ -1247,12 +1247,12 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                                 ?smart_contract_key,
                                 "Unable to find latest addressible entity hash for contract"
                             );
-                            return Ok(Err(HostError::NotCallable));
+                            return Ok(Err(CallError::NotCallable));
                         }
                     }
                 }
                 Ok(Some(other)) => panic!("should be smart contract but got {other:?}"),
-                Ok(None) => return Ok(Err(HostError::NotCallable)),
+                Ok(None) => return Ok(Err(CallError::NotCallable)),
                 Err(error) => {
                     error!(
                         ?error,
@@ -1275,7 +1275,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
         Ok(Some(other_entity)) => {
             panic!("Unexpected entity type: {other_entity:?}")
         }
-        Ok(None) => return Ok(Err(HostError::NotCallable)),
+        Ok(None) => return Ok(Err(CallError::NotCallable)),
         Err(error) => {
             panic!("Error while reading from storage; aborting key={callee_addressable_entity_key:?} error={error:?}")
         }
@@ -1374,7 +1374,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                     ?preparation_error,
                     "Wasm preparation error while performing upgrade"
                 );
-                return Ok(Err(HostError::NotCallable));
+                return Ok(Err(CallError::NotCallable));
             }
         }
     }

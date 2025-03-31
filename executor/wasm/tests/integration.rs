@@ -11,7 +11,7 @@ use casper_executor_wasm::{
 };
 use casper_executor_wasm_interface::{
     executor::{ExecuteRequest, ExecuteRequestBuilder, ExecuteWithProviderResult, ExecutionKind},
-    HostError,
+    CallError,
 };
 use casper_storage::{
     data_access_layer::{
@@ -817,7 +817,7 @@ fn assert_consumes_gas(host_function_name: &str) {
     let result = call_dummy_host_fn_by_name(host_function_name, 1);
     assert!(result.is_err_and(|e| match e {
         InstallContractError::Constructor {
-            host_error: HostError::CalleeGasDepleted,
+            host_error: CallError::CalleeGasDepleted,
         } => true,
         _ => false,
     }));
@@ -912,7 +912,7 @@ fn consume_gas_on_write() {
     let out_of_gas_write_exceeded_gas_limit = write_n_bytes_at_limit(50, 10);
     assert!(out_of_gas_write_exceeded_gas_limit.is_err_and(|e| match e {
         InstallContractError::Constructor {
-            host_error: HostError::CalleeGasDepleted,
+            host_error: CallError::CalleeGasDepleted,
         } => true,
         _ => false,
     }));

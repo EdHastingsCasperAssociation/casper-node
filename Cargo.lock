@@ -378,9 +378,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.8.0"
+version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f68f53c83ab957f72c32642f3868eec03eb974d1fb82e453128456482613d36"
+checksum = "5c8214115b7bf84099f1309324e63141d4c5d7cc26862f97a0a857dbefe165bd"
 
 [[package]]
 name = "bitvec"
@@ -801,7 +801,7 @@ dependencies = [
 name = "casper-executor-wasm-common"
 version = "0.1.0"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "blake2 0.10.6",
  "borsh",
  "casper-sdk-sys 0.1.0",
@@ -809,6 +809,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "serde",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -816,7 +817,7 @@ name = "casper-executor-wasm-common"
 version = "0.1.0"
 source = "git+https://github.com/casper-network/casper-node.git?branch=dev#4fab0c7c0a67d2e54d42c820ec4a36f1fe16108e"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "blake2 0.10.6",
  "borsh",
  "casper-sdk-sys 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
@@ -854,7 +855,7 @@ dependencies = [
  "casper-storage",
  "casper-types",
  "parking_lot",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -1006,7 +1007,7 @@ dependencies = [
 name = "casper-sdk"
 version = "0.1.0"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "borsh",
  "bytes",
  "casper-executor-wasm-common 0.1.0",
@@ -1029,7 +1030,7 @@ name = "casper-sdk"
 version = "0.1.0"
 source = "git+https://github.com/casper-network/casper-node.git?branch=dev#4fab0c7c0a67d2e54d42c820ec4a36f1fe16108e"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "borsh",
  "bytes",
  "casper-executor-wasm-common 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
@@ -4199,7 +4200,7 @@ version = "0.10.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "cfg-if 1.0.0",
  "foreign-types",
  "libc",
@@ -4618,7 +4619,7 @@ checksum = "14cae93065090804185d3b75f0bf93b8eeda30c7a9b4a33d3bdb3988d6229e50"
 dependencies = [
  "bit-set",
  "bit-vec",
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "lazy_static",
  "num-traits",
  "rand",
@@ -4678,7 +4679,7 @@ version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57206b407293d2bcd3af849ce869d52068623f19e1b5ff8e8778e3309439682b"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "memchr",
  "unicase",
 ]
@@ -4876,7 +4877,7 @@ version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03a862b389f93e68874fbf580b9de08dd02facb9a788ebadaf4a3fd33cf58834"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
 ]
 
 [[package]]
@@ -5246,7 +5247,7 @@ version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "errno",
  "libc",
  "linux-raw-sys",
@@ -5372,7 +5373,7 @@ version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "897b2245f0b511c87893af39b033e5ca9cce68824c4d7e7630b5a1d339658d02"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "core-foundation",
  "core-foundation-sys",
  "libc",
@@ -7218,7 +7219,7 @@ version = "0.121.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9dbe55c8f9d0dbd25d9447a5a889ff90c0cc3feaa7395310d3d826b2c703eaab"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "indexmap 2.7.1",
  "semver",
 ]
@@ -7229,7 +7230,7 @@ version = "0.219.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c771866898879073c53b565a6c7b49953795159836714ac56a5befb581227c5"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "indexmap 2.7.1",
 ]
 
@@ -7239,7 +7240,7 @@ version = "0.224.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65881a664fdd43646b647bb27bf186ab09c05bf56779d40aed4c6dce47d423f5"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
  "indexmap 2.7.1",
  "semver",
 ]
@@ -7561,7 +7562,7 @@ version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3268f3d866458b787f390cf61f4bbb563b922d091359f9608842999eaee3943c"
 dependencies = [
- "bitflags 2.8.0",
+ "bitflags 2.9.0",
 ]
 
 [[package]]

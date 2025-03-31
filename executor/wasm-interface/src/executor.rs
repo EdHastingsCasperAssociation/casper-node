@@ -14,7 +14,7 @@ use casper_types::{
 use parking_lot::RwLock;
 use thiserror::Error;
 
-use crate::{GasUsage, HostError, WasmPreparationError};
+use crate::{CallError, GasUsage, WasmPreparationError};
 
 /// Request to execute a Wasm contract.
 pub struct ExecuteRequest {
@@ -214,7 +214,7 @@ impl ExecuteRequestBuilder {
 #[derive(Debug)]
 pub struct ExecuteResult {
     /// Error while executing Wasm: traps, memory access errors, etc.
-    pub host_error: Option<HostError>,
+    pub host_error: Option<CallError>,
     /// Output produced by the Wasm contract.
     pub output: Option<Bytes>,
     /// Gas usage.
@@ -237,7 +237,7 @@ impl ExecuteResult {
         self.effects
     }
 
-    pub fn host_error(&self) -> Option<&HostError> {
+    pub fn host_error(&self) -> Option<&CallError> {
         self.host_error.as_ref()
     }
 
@@ -254,7 +254,7 @@ impl ExecuteResult {
 #[derive(Debug)]
 pub struct ExecuteWithProviderResult {
     /// Error while executing Wasm: traps, memory access errors, etc.
-    pub host_error: Option<HostError>,
+    pub host_error: Option<CallError>,
     /// Output produced by the Wasm contract.
     pub output: Option<Bytes>,
     /// Gas usage.
