@@ -5926,9 +5926,12 @@ fn should_mark_bids_with_less_than_minimum_bid_amount_as_inactive_via_upgrade() 
         .upgrade(&mut upgrade_request)
         .expect_upgrade_success();
 
-    let default_account_public_key = DEFAULT_ACCOUNT_PUBLIC_KEY.clone();
+    let public_key = {
+        let secret_key = SecretKey::ed25519_from_bytes([204; SecretKey::ED25519_LENGTH]).unwrap();
+        PublicKey::from(&secret_key)
+    };
     let bid = builder
-        .get_validator_bid(default_account_public_key)
+        .get_validator_bid(public_key)
         .expect("must have the validator bid record");
 
     assert!(bid.inactive())
