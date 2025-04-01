@@ -1789,6 +1789,7 @@ where
         ret
     }
 
+    /// Retrieve the bid for a validator by their public key.
     pub fn get_validator_bid(&mut self, validator_public_key: PublicKey) -> Option<ValidatorBid> {
         let state_root_hash = self.get_post_state_hash();
 
@@ -1803,8 +1804,6 @@ where
         let validator_keys = reader
             .keys_with_prefix(&[KeyTag::BidAddr as u8, BidAddrTag::Validator as u8])
             .unwrap_or_default();
-
-        println!("{:?}", validator_keys);
 
         for key in validator_keys.into_iter() {
             if let Ok(Some(StoredValue::BidKind(BidKind::Validator(bid)))) = reader.read(&key) {

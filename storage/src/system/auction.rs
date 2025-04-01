@@ -1059,6 +1059,7 @@ fn rewards_per_validator(
     seigniorage_recipients_snapshot: &SeigniorageRecipientsSnapshot,
 ) -> Result<Vec<RewardsPerValidator>, Error> {
     let mut results = Vec::with_capacity(rewards.len());
+    println!("in rewards {validator}");
 
     for (reward_amount, eras_back) in rewards
         .iter()
@@ -1096,6 +1097,7 @@ fn rewards_per_validator(
             if reward_amount.is_zero() {
                 continue;
             } else {
+                println!("foo");
                 return Err(Error::ValidatorNotFound);
             }
         };
