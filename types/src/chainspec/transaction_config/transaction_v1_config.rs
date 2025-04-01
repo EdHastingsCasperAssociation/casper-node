@@ -398,20 +398,17 @@ impl TransactionV1Config {
         maybe_adequate_lane_index.map(|index| buckets[index].id)
     }
 
-    pub fn get_max_serialized_length_for_wasm(&self) -> u64 {
-        self.get_wasm_lanes_ordered_by_transaction_size()
-            .iter()
-            .map(|lane_def| lane_def.max_transaction_length)
-            .max()
-            .unwrap_or(0u64)
-    }
-
-    pub fn get_max_payment_limit_for_wasm(&self) -> u64 {
-        self.get_wasm_lanes_ordered()
-            .iter()
-            .map(|lane_def| lane_def.max_transaction_gas_limit)
-            .max()
-            .unwrap_or(0u64)
+    pub fn get_lane_by_id(&self, lane_id: u8) -> Option<&TransactionLaneDefinition> {
+        if lane_id == MINT_LANE_ID {
+            return Some(&self.native_mint_lane);
+        }
+        if lane_id == AUCTION_LANE_ID {
+            return Some(&self.native_auction_lane);
+        }
+        if lane_id == INSTALL_UPGRADE_LANE_ID {
+            return Some(&self.install_upgrade_lane);
+        }
+        self.wasm_lanes.iter().find(|el| el.id == lane_id)
     }
 
     pub fn get_wasm_lane_id_by_payment_limited(
@@ -506,6 +503,17 @@ impl TransactionV1Config {
             self.wasm_lanes_ordered_by_transaction_gas_limit_transaction_size_args_length =
                 wasm_lanes_ordered_by_transaction_gas_limit;
         }
+    }
+
+    #[cfg(any(feature = "testing", test))]
+    pub fn get_max_wasm_lane_by_gas_limit(&self) -> Option<TransactionLaneDefinition> {
+        self.wasm_lanes
+            .iter()
+            .max_by(|a, b| {
+                a.max_transaction_gas_limit
+                    .cmp(&b.max_transaction_gas_limit)
+            })
+            .cloned()
     }
 }
 

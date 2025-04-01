@@ -192,7 +192,7 @@ pub use tagged::Tagged;
 pub use timestamp::serde_option_time_diff;
 pub use timestamp::{TimeDiff, Timestamp};
 #[cfg(any(feature = "std", test))]
-pub use transaction::GasLimited;
+pub use transaction::{calculate_lane_id_for_deploy, calculate_transaction_lane, GasLimited};
 pub use transaction::{
     AddressableEntityIdentifier, Approval, ApprovalsHash, Deploy, DeployDecodeFromJsonError,
     DeployError, DeployExcessiveSizeError, DeployHash, DeployHeader, DeployId,

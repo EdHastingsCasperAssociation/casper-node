@@ -1,12 +1,11 @@
-use super::lane_id::calculate_transaction_lane;
 use crate::types::transaction::arg_handling;
 use casper_types::{
-    bytesrepr::ToBytes, crypto, Approval, Chainspec, ContractRuntimeTag, Digest, DisplayIter, Gas,
-    HashAddr, InitiatorAddr, InvalidTransaction, InvalidTransactionV1, PricingHandling,
-    PricingMode, TimeDiff, Timestamp, TransactionArgs, TransactionConfig, TransactionEntryPoint,
-    TransactionRuntimeParams, TransactionScheduling, TransactionTarget, TransactionV1,
-    TransactionV1Config, TransactionV1ExcessiveSizeError, TransactionV1Hash, AUCTION_LANE_ID,
-    MINT_LANE_ID, U512,
+    bytesrepr::ToBytes, calculate_transaction_lane, crypto, Approval, Chainspec,
+    ContractRuntimeTag, Digest, DisplayIter, Gas, HashAddr, InitiatorAddr, InvalidTransaction,
+    InvalidTransactionV1, PricingHandling, PricingMode, TimeDiff, Timestamp, TransactionArgs,
+    TransactionConfig, TransactionEntryPoint, TransactionRuntimeParams, TransactionScheduling,
+    TransactionTarget, TransactionV1, TransactionV1Config, TransactionV1ExcessiveSizeError,
+    TransactionV1Hash, AUCTION_LANE_ID, MINT_LANE_ID, U512,
 };
 use core::fmt::{self, Debug, Display, Formatter};
 use datasize::DataSize;
@@ -890,9 +889,7 @@ mod tests {
         let res = MetaTransactionV1::from_transaction_v1(&transaction_v1, &config);
         assert!(matches!(
             res,
-            Err(InvalidTransaction::V1(
-                InvalidTransactionV1::NoWasmLaneMatchesTransaction()
-            ))
+            Err(InvalidTransaction::V1(InvalidTransactionV1::NoLaneMatch))
         ))
     }
 
@@ -937,9 +934,7 @@ mod tests {
         let res = MetaTransactionV1::from_transaction_v1(&transaction_v1, &config);
         assert!(matches!(
             res,
-            Err(InvalidTransaction::V1(
-                InvalidTransactionV1::NoWasmLaneMatchesTransaction()
-            ))
+            Err(InvalidTransaction::V1(InvalidTransactionV1::NoLaneMatch))
         ))
     }
 

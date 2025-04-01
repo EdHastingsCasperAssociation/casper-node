@@ -1,4 +1,3 @@
-mod lane_id;
 mod meta_deploy;
 mod meta_transaction_v1;
 mod transaction_header;
@@ -12,8 +11,6 @@ use casper_types::{
     TransactionEntryPoint, TransactionHash, TransactionTarget, INSTALL_UPGRADE_LANE_ID,
 };
 use core::fmt::{self, Debug, Display, Formatter};
-#[cfg(test)]
-use lane_id::calculate_transaction_lane;
 use meta_deploy::MetaDeploy;
 pub(crate) use meta_transaction_v1::MetaTransactionV1;
 use serde::Serialize;
@@ -429,6 +426,8 @@ pub(crate) fn calculate_transaction_lane_for_transaction(
     transaction: &Transaction,
     chainspec: &Chainspec,
 ) -> Result<u8, InvalidTransaction> {
+    use casper_types::calculate_transaction_lane;
+
     match transaction {
         Transaction::Deploy(_) => {
             let meta = MetaTransaction::from_transaction(
