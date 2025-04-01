@@ -756,9 +756,9 @@ async fn should_update_last_progress_after_block_execution() {
     fixture.run_until_consensus_in_era(ERA_ONE, ONE_MIN).await;
 
     // Prepare and submit a transaction.
-    let transaction = Transaction::from(
-        Deploy::random_valid_native_transfer_without_deps(&mut fixture.rng),
-    );
+    let transaction = Transaction::from(Deploy::random_valid_native_transfer_without_deps(
+        &mut fixture.rng,
+    ));
     let transaction_hash = transaction.hash();
 
     for runner in fixture.network.runners_mut() {
@@ -771,7 +771,8 @@ async fn should_update_last_progress_after_block_execution() {
 
         runner
             .process_injected_effects(|eff| {
-                eff.announce_new_transaction_accepted(Arc::new(transaction), Source::Client).ignore()
+                eff.announce_new_transaction_accepted(Arc::new(transaction), Source::Client)
+                    .ignore()
             })
             .await;
     }

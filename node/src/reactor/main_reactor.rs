@@ -1581,7 +1581,7 @@ impl MainReactor {
                     execution_results,
                     state: *meta_block.state(),
                 };
-                
+
                 if self.state == ReactorState::Validate {
                     self.last_progress = Timestamp::now();
                 }

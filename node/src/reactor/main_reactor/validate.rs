@@ -82,7 +82,7 @@ impl MainReactor {
         if self.should_shutdown_for_upgrade() {
             return ValidateInstruction::ShutdownForUpgrade;
         }
-        
+
         match self.create_required_eras(effect_builder, rng) {
             Ok(Some(effects)) => {
                 let last_progress = self.consensus.last_progress();
