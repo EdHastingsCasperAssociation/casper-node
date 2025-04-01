@@ -1293,7 +1293,6 @@ where
             }
         }
 
-        let _validator_keys_prefix = vec![KeyTag::BidAddr as u8, BidAddrTag::Validator as u8];
         let validator_bid_keys = tc
             .reader()
             .keys_with_prefix(&[KeyTag::BidAddr as u8, BidAddrTag::Validator as u8])

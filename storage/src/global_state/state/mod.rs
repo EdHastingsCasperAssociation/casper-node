@@ -443,20 +443,20 @@ pub trait CommitProvider: StateProvider {
         };
 
         if let Err(auction_error) = runtime.distribute(rewards.clone()) {
-            println!(
+            error!(
                 "distribute block rewards failed due to auction error {:?}",
                 auction_error
             );
             return BlockRewardsResult::Failure(BlockRewardsError::Auction(auction_error));
         } else {
-            println!("rewards distribution complete");
+            debug!("rewards distribution complete");
         }
 
         let effects = tc.borrow().effects();
 
         match self.commit_effects(state_hash, effects.clone()) {
             Ok(post_state_hash) => {
-                println!("reward distribution committed");
+                debug!("reward distribution committed");
                 BlockRewardsResult::Success {
                     post_state_hash,
                     effects,

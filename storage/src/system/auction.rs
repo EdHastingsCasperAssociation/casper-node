@@ -91,14 +91,6 @@ pub trait Auction:
             return Err(Error::BondTooSmall.into());
         }
 
-        /*
-        look up bid,
-        if not
-            amount < U512::from(minimum_bid_amount) correct
-        if they do
-            existing stake +sat(amount) < U512::from(minimum_bid_amount)
-         */
-
         if delegation_rate > DELEGATION_RATE_DENOMINATOR {
             return Err(Error::DelegationRateTooLarge.into());
         }
@@ -1059,7 +1051,6 @@ fn rewards_per_validator(
     seigniorage_recipients_snapshot: &SeigniorageRecipientsSnapshot,
 ) -> Result<Vec<RewardsPerValidator>, Error> {
     let mut results = Vec::with_capacity(rewards.len());
-    println!("in rewards {validator}");
 
     for (reward_amount, eras_back) in rewards
         .iter()
@@ -1097,7 +1088,6 @@ fn rewards_per_validator(
             if reward_amount.is_zero() {
                 continue;
             } else {
-                println!("foo");
                 return Err(Error::ValidatorNotFound);
             }
         };
