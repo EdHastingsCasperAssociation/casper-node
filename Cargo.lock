@@ -863,6 +863,7 @@ name = "casper-executor-wasmer-backend"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "casper-executor-wasm-common 0.1.0",
  "casper-executor-wasm-host",
  "casper-executor-wasm-interface",
  "casper-sdk-sys 0.1.0",

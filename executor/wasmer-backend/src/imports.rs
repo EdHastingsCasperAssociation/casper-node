@@ -1,4 +1,5 @@
-use casper_executor_wasm_interface::{executor::Executor, TrapCode, VMError, VMResult};
+use casper_executor_wasm_common::error::TrapCode;
+use casper_executor_wasm_interface::{executor::Executor, VMError, VMResult};
 use casper_storage::global_state::GlobalStateReader;
 use wasmer::{FunctionEnv, FunctionEnvMut, Imports, Store};
 

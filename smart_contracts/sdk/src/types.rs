@@ -3,7 +3,7 @@ use casper_executor_wasm_common::error::{
 };
 
 use crate::{
-    abi::{CasperABI, Definition, EnumVariant},
+    abi::{CasperABI, Declaration, Definition, EnumVariant},
     prelude::fmt,
     serializers::borsh::{BorshDeserialize, BorshSerialize},
 };
@@ -48,7 +48,7 @@ impl TryFrom<u32> for CallError {
 impl CasperABI for CallError {
     fn populate_definitions(_definitions: &mut crate::abi::Definitions) {}
 
-    fn declaration() -> crate::abi::Declaration {
+    fn declaration() -> Declaration {
         "CallError".into()
     }
 

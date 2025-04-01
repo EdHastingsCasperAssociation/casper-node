@@ -7,11 +7,11 @@ use std::{
 };
 
 use bytes::Bytes;
+use casper_executor_wasm_common::error::TrapCode;
 use casper_executor_wasm_host::{context::Context, host};
 use casper_executor_wasm_interface::{
     executor::Executor, u32_from_host_result, Caller, Config, ExportError, GasUsage,
-    InterfaceVersion, MeteringPoints, TrapCode, VMError, VMResult, WasmInstance,
-    WasmPreparationError,
+    InterfaceVersion, MeteringPoints, VMError, VMResult, WasmInstance, WasmPreparationError,
 };
 use casper_storage::global_state::GlobalStateReader;
 use once_cell::sync::Lazy;
@@ -41,7 +41,7 @@ fn from_wasmer_memory_access_error(error: wasmer::MemoryAccessError) -> VMError 
         _ => {
             // All errors are handled and converted to a trap code, but we have to add this as
             // wasmer's errors are #[non_exhaustive]
-            unreachable!("Unexpected error: {:?}", error)
+            unreachable!("Unexpected error: {error:?}")
         }
     };
     VMError::Trap(trap_code)

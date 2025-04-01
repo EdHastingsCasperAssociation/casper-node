@@ -607,8 +607,8 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
 
         assert_eq!(
             emit_raw(&large_topic_name, &[]),
-            Err(CommonResult::TopicTooLon
-        g));
+            Err(CommonResult::TopicTooLong)
+        );
         assert_eq!(
             emit_raw(&small_topic_name, &large_payload_data),
             Err(CommonResult::PayloadTooLong)
