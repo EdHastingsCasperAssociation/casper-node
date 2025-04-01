@@ -58,8 +58,8 @@ use casper_types::{
     runtime_args,
     system::{
         auction::{
-            BidKind, EraValidators, Unbond, UnbondKind, UnbondingPurse, ValidatorWeights,
-            WithdrawPurses, ARG_ERA_END_TIMESTAMP_MILLIS, ARG_EVICTED_VALIDATORS,
+            BidAddrTag, BidKind, EraValidators, Unbond, UnbondKind, UnbondingPurse, ValidatorBid,
+            ValidatorWeights, WithdrawPurses, ARG_ERA_END_TIMESTAMP_MILLIS, ARG_EVICTED_VALIDATORS,
             AUCTION_DELAY_KEY, ERA_ID_KEY, METHOD_RUN_AUCTION, UNBONDING_DELAY_KEY,
         },
         mint::{MINT_GAS_HOLD_HANDLING_KEY, MINT_GAS_HOLD_INTERVAL_KEY},
@@ -1787,6 +1787,34 @@ where
         }
 
         ret
+    }
+
+    pub fn get_validator_bid(&mut self, validator_public_key: PublicKey) -> Option<ValidatorBid> {
+        let state_root_hash = self.get_post_state_hash();
+
+        let tracking_copy = self
+            .data_access_layer
+            .tracking_copy(state_root_hash)
+            .unwrap()
+            .unwrap();
+
+        let reader = tracking_copy.reader();
+
+        let validator_keys = reader
+            .keys_with_prefix(&[KeyTag::BidAddr as u8, BidAddrTag::Validator as u8])
+            .unwrap_or_default();
+
+        println!("{:?}", validator_keys);
+
+        for key in validator_keys.into_iter() {
+            if let Ok(Some(StoredValue::BidKind(BidKind::Validator(bid)))) = reader.read(&key) {
+                if bid.validator_public_key() == &validator_public_key {
+                    return Some(*bid);
+                }
+            }
+        }
+
+        None
     }
 
     /// Gets [`BTreeMap<AccountHash, Vec<UnbondingPurse>>`].

@@ -10,12 +10,13 @@ use tempfile::TempDir;
 
 use casper_engine_test_support::{
     genesis_config_builder::GenesisConfigBuilder, utils, ChainspecConfig, ExecuteRequestBuilder,
-    LmdbWasmTestBuilder, StepRequestBuilder, DEFAULT_ACCOUNTS, DEFAULT_ACCOUNT_ADDR,
-    DEFAULT_ACCOUNT_INITIAL_BALANCE, DEFAULT_AUCTION_DELAY, DEFAULT_BLOCK_TIME,
-    DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_EXEC_CONFIG, DEFAULT_GENESIS_CONFIG_HASH,
-    DEFAULT_GENESIS_TIMESTAMP_MILLIS, DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS,
-    DEFAULT_MAXIMUM_DELEGATION_AMOUNT, DEFAULT_PROTOCOL_VERSION, DEFAULT_ROUND_SEIGNIORAGE_RATE,
-    DEFAULT_UNBONDING_DELAY, LOCAL_GENESIS_REQUEST, MINIMUM_ACCOUNT_CREATION_BALANCE, SYSTEM_ADDR,
+    LmdbWasmTestBuilder, StepRequestBuilder, UpgradeRequestBuilder, DEFAULT_ACCOUNTS,
+    DEFAULT_ACCOUNT_ADDR, DEFAULT_ACCOUNT_INITIAL_BALANCE, DEFAULT_ACCOUNT_PUBLIC_KEY,
+    DEFAULT_AUCTION_DELAY, DEFAULT_BLOCK_TIME, DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_EXEC_CONFIG,
+    DEFAULT_GENESIS_CONFIG_HASH, DEFAULT_GENESIS_TIMESTAMP_MILLIS,
+    DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS, DEFAULT_MAXIMUM_DELEGATION_AMOUNT,
+    DEFAULT_PROTOCOL_VERSION, DEFAULT_ROUND_SEIGNIORAGE_RATE, DEFAULT_UNBONDING_DELAY,
+    LOCAL_GENESIS_REQUEST, MINIMUM_ACCOUNT_CREATION_BALANCE, SYSTEM_ADDR,
     TIMESTAMP_MILLIS_INCREMENT,
 };
 use casper_execution_engine::{
@@ -24,6 +25,7 @@ use casper_execution_engine::{
 };
 use casper_storage::data_access_layer::{GenesisRequest, HandleFeeMode};
 
+use crate::lmdb_fixture;
 use casper_types::{
     self,
     account::AccountHash,
@@ -36,8 +38,8 @@ use casper_types::{
         ARG_MINIMUM_DELEGATION_AMOUNT, ARG_NEW_PUBLIC_KEY, ARG_NEW_VALIDATOR, ARG_PUBLIC_KEY,
         ARG_REWARDS_MAP, ARG_VALIDATOR, ERA_ID_KEY, INITIAL_ERA_ID, METHOD_DISTRIBUTE,
     },
-    EntityAddr, EraId, GenesisAccount, GenesisValidator, Key, Motes, ProtocolVersion, PublicKey,
-    SecretKey, TransactionHash, DEFAULT_MINIMUM_BID_AMOUNT, U256, U512,
+    EntityAddr, EraId, GenesisAccount, GenesisValidator, HoldBalanceHandling, Key, Motes,
+    ProtocolVersion, PublicKey, SecretKey, TransactionHash, DEFAULT_MINIMUM_BID_AMOUNT, U256, U512,
 };
 
 const ARG_TARGET: &str = "target";
@@ -5889,4 +5891,45 @@ fn credits_are_considered_when_determining_validators() {
         new_validator_weights.get(&ACCOUNT_1_PK),
         Some(&expected_amount)
     );
+}
+
+#[ignore]
+#[test]
+fn should_mark_bids_with_less_than_minimum_bid_amount_as_inactive_via_upgrade() {
+    const VALIDATOR_MIN_BID_FIXTURE: &str = "validator_minimum_bid";
+
+    const FIXTURE_MIN_BID_AMOUNT: u64 = 10_000 * 1_000_000_000;
+
+    let (mut builder, lmdb_fixture_state, _temp_dir) =
+        lmdb_fixture::builder_from_global_state_fixture(VALIDATOR_MIN_BID_FIXTURE);
+
+    let current_protocol_version = lmdb_fixture_state.genesis_protocol_version();
+
+    let new_protocol_version = ProtocolVersion::from_parts(
+        current_protocol_version.value().major,
+        current_protocol_version.value().minor + 1,
+        0,
+    );
+
+    let mut upgrade_request = {
+        UpgradeRequestBuilder::new()
+            .with_current_protocol_version(current_protocol_version)
+            .with_new_protocol_version(new_protocol_version)
+            .with_activation_point(EraId::new(1))
+            .with_new_gas_hold_handling(HoldBalanceHandling::Accrued)
+            .with_new_gas_hold_interval(1200u64)
+            .with_validator_minimum_bid_amount(FIXTURE_MIN_BID_AMOUNT + 1)
+            .build()
+    };
+
+    builder
+        .upgrade(&mut upgrade_request)
+        .expect_upgrade_success();
+
+    let default_account_public_key = DEFAULT_ACCOUNT_PUBLIC_KEY.clone();
+    let bid = builder
+        .get_validator_bid(default_account_public_key)
+        .expect("must have the validator bid record");
+
+    assert!(bid.inactive())
 }

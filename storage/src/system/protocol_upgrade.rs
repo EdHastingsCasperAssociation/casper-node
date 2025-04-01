@@ -1261,9 +1261,12 @@ where
                 let validator_bid_addr = BidAddr::from(validator_public_key.clone());
                 let validator_bid = {
                     let validator_bid = ValidatorBid::from(*existing_bid.clone());
+                    let inactive = validator_bid.staked_amount() < U512::from(validator_minimum);
                     validator_bid
+                        .with_inactive(inactive)
                         .with_min_max_delegation_amount(delegation_maximum, delegation_minimum)
                 };
+                println!("min {validator_minimum}, bid {:?}", validator_bid);
                 tc.write(
                     validator_bid_addr.into(),
                     StoredValue::BidKind(BidKind::Validator(Box::new(validator_bid))),
@@ -1296,11 +1299,12 @@ where
             mark inactive
         }
          */
-        let validator_keys_prefix = vec![KeyTag::BidAddr as u8, BidAddrTag::Validator as u8];
+        let _validator_keys_prefix = vec![KeyTag::BidAddr as u8, BidAddrTag::Validator as u8];
         let validator_bid_keys = tc
             .reader()
-            .keys_with_prefix(&validator_keys_prefix)
+            .keys_with_prefix(&[KeyTag::BidAddr as u8, BidAddrTag::Validator as u8])
             .map_err(|_| ProtocolUpgradeError::UnexpectedKeyVariant)?;
+        println!("upgrade {:?}", validator_bid_keys);
         for validator_bid_key in validator_bid_keys {
             if let Some(StoredValue::BidKind(BidKind::Validator(validator_bid))) = tc
                 .get(&validator_bid_key)
@@ -1311,6 +1315,7 @@ where
                     validator_bid.staked_amount() < U512::from(validator_minimum);
                 if !is_bid_inactive && has_less_than_validator_minimum {
                     let inactive_bid = validator_bid.with_inactive(true);
+                    println!("marking bid as inactive in upgrade");
                     tc.write(
                         validator_bid_key,
                         StoredValue::BidKind(BidKind::Validator(Box::new(inactive_bid))),
