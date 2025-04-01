@@ -1,4 +1,10 @@
-use std::{ffi::c_void, io::Write, path::PathBuf, ptr::NonNull};
+use std::{
+    env::consts::DLL_EXTENSION,
+    ffi::{c_void, OsStr},
+    io::Write,
+    path::PathBuf,
+    ptr::NonNull,
+};
 
 use anyhow::Context;
 use cargo_metadata::MetadataCommand;
@@ -113,7 +119,7 @@ pub fn build_schema_impl<W: Write>(
     let artifact_path = build_result
         .artifacts()
         .into_iter()
-        .find(|x| x.extension().unwrap_or_default() == "so")
+        .find(|x| x.extension() == Some(OsStr::new(DLL_EXTENSION)))
         .context("Failed loading the built contract")?;
 
     let lib = unsafe { libloading::Library::new(&artifact_path).unwrap() };
@@ -137,16 +143,12 @@ pub fn build_schema_impl<W: Write>(
     };
 
     let defs = {
-        // TODO: This segfaults
-
-        /*let mut defs = casper_sdk::abi::Definitions::default();
+        let mut defs = casper_sdk::abi::Definitions::default();
         let ptr = NonNull::from(&mut defs);
         unsafe {
             collect_abi(ptr.as_ptr());
         }
-        defs*/
-
-        Default::default()
+        defs
     };
 
     let messages = {
