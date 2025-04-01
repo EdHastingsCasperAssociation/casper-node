@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-blake2 = "0.10.6"
-borsh = { version = "1.2.0", features = ["derive"] }
-bytes = "1.4.0"
+blake2 = "0.10"
+borsh = { version = "1.5", features = ["derive"] }
+bytes = "1.10"
 casper-executor-wasm-common = { path = "../wasm-common" }
 casper-executor-wasm-host = { path = "../wasm-host" }
 casper-executor-wasm-interface = { path = "../wasm-interface" }
