@@ -154,6 +154,7 @@ impl Default for Environment {
 pub const DEFAULT_ADDRESS: Entity = Entity::Account([42; 32]);
 
 impl Environment {
+    #[must_use]
     pub fn new(db: Container, caller: Entity) -> Self {
         Self {
             db: Arc::new(RwLock::new(db)),
@@ -164,12 +165,14 @@ impl Environment {
         }
     }
 
+    #[must_use]
     pub fn with_caller(&self, caller: Entity) -> Self {
         let mut env = self.clone();
         env.caller = caller;
         env
     }
 
+    #[must_use]
     pub fn with_input_data(&self, input_data: Vec<u8>) -> Self {
         let mut env = self.clone();
         env.input_data = Some(Bytes::from(input_data));

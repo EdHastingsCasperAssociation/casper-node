@@ -1456,7 +1456,7 @@ pub fn derive_casper_abi(input: TokenStream) -> TokenStream {
 
         let mut current_discriminant = 0;
 
-        for variant in input.variants.iter() {
+        for variant in &input.variants {
             if let Some(discriminant) = &variant.discriminant {
                 match &discriminant.1 {
                     syn::Expr::Lit(lit) => match &lit.lit {

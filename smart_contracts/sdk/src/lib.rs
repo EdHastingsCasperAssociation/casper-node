@@ -160,6 +160,7 @@ pub struct ContractHandle<T: ContractRef> {
 }
 
 impl<T: ContractRef> ContractHandle<T> {
+    #[must_use]
     pub const fn from_address(contract_address: Address) -> Self {
         ContractHandle {
             contract_address,
@@ -196,15 +197,18 @@ impl<T: ContractRef> ContractHandle<T> {
         self.build_call().try_call(func)
     }
 
+    #[must_use]
     pub fn contract_address(&self) -> Address {
         self.contract_address
     }
 
+    #[must_use]
     pub fn entity(&self) -> Entity {
         Entity::Contract(self.contract_address)
     }
 
     /// Returns the balance of the contract.
+    #[must_use]
     pub fn balance(&self) -> u128 {
         casper::get_balance_of(&Entity::Contract(self.contract_address))
     }

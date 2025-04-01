@@ -8,7 +8,7 @@ use bitflags::Flags;
 use casper_executor_wasm_common::flags::EntryPointFlags;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::abi::{self, Declaration, Definitions};
+use crate::abi::{Declaration, Definitions};
 
 pub fn serialize_bits<T, S>(data: &T, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -34,15 +34,14 @@ where
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct SchemaArgument {
     pub name: String,
-    pub decl: abi::Declaration,
+    pub decl: Declaration,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
-
 pub struct SchemaEntryPoint {
     pub name: String,
     pub arguments: Vec<SchemaArgument>,
-    pub result: abi::Declaration,
+    pub result: Declaration,
     #[serde(
         serialize_with = "serialize_bits",
         deserialize_with = "deserialize_bits"

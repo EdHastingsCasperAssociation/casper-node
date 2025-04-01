@@ -41,7 +41,7 @@ extern "C" fn alloc_callback<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
     len: usize,
     ctx: *mut c_void,
 ) -> *mut u8 {
-    let opt_closure = ctx as *mut Option<F>;
+    let opt_closure = ctx.cast::<Option<F>>();
     let allocated_ptr = unsafe { (*opt_closure).take().unwrap()(len) };
     match allocated_ptr {
         Some(ptr) => ptr.as_ptr(),
@@ -457,18 +457,19 @@ impl CasperABI for Entity {
 }
 
 /// Get the balance of an account or contract.
+#[must_use]
 pub fn get_balance_of(entity_kind: &Entity) -> u128 {
     let (kind, addr) = match entity_kind {
         Entity::Account(addr) => (0, addr),
         Entity::Contract(addr) => (1, addr),
     };
-    let mut output = MaybeUninit::uninit();
+    let mut output: MaybeUninit<u128> = MaybeUninit::uninit();
     let ret = unsafe {
         casper_sdk_sys::casper_env_balance(
             kind,
             addr.as_ptr(),
             addr.len(),
-            output.as_mut_ptr() as *mut c_void,
+            output.as_mut_ptr().cast(),
         )
     };
     if ret == 1 {
@@ -479,10 +480,13 @@ pub fn get_balance_of(entity_kind: &Entity) -> u128 {
 }
 
 /// Get the transferred token value passed to the contract.
+#[must_use]
 pub fn transferred_value() -> u128 {
     let mut value = MaybeUninit::<u128>::uninit();
-    unsafe { casper_sdk_sys::casper_env_transferred_value(value.as_mut_ptr() as *mut _) };
-    unsafe { value.assume_init() }
+    unsafe {
+        casper_sdk_sys::casper_env_transferred_value(value.as_mut_ptr().cast());
+        value.assume_init()
+    }
 }
 
 /// Transfer tokens from the current contract to another account or contract.
