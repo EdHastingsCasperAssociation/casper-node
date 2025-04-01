@@ -1,13 +1,13 @@
 [package]
 name = "casper-node"
 version = "2.0.0" # when updating, also update 'html_root_url' in lib.rs
-authors = ["Marc Brinkmann <marc@casperlabs.io>", "Fraser Hutchison <fraser@casperlabs.io>"]
+authors = ["Ed Hastings <ed@casper.network>", "Karan Dhareshwar <karan@csper.network>"]
 edition = "2021"
 description = "The Casper blockchain node"
 documentation = "https://docs.rs/casper-node"
 readme = "README.md"
-homepage = "https://casperlabs.io"
-repository = "https://github.com/casper-network/casper-node/tree/master/node"
+homepage = "https://casper.network"
+repository = "https://github.com/casper-network/casper-node/tree/dev/node"
 license = "Apache-2.0"
 default-run = "casper-node"
 exclude = ["proptest-regressions"]

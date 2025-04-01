@@ -291,6 +291,7 @@ fn generate_impl_for_contract(
     let mut manifest_entry_point_enum_match_name = Vec::new();
     let mut manifest_entry_point_input_data = Vec::new();
     let mut extra_code = Vec::new();
+
     for entry_point in &mut entry_points.items {
         let mut populate_definitions = Vec::new();
 
@@ -323,7 +324,6 @@ fn generate_impl_for_contract(
                 func.attrs.clear();
 
                 let func_name = func.sig.ident.clone();
-
                 if func_name.to_string().starts_with("__casper_") {
                     return TokenStream::from(
                         syn::Error::new(
@@ -1214,6 +1214,29 @@ fn process_casper_contract_state_for_struct(contract_struct: ItemStruct) -> Toke
 
     let maybe_derive_abi = get_maybe_derive_abi();
 
+    // Optionally, generate a schema export if the appropriate flag
+    // is set.
+    let maybe_casper_schema = {
+        #[cfg(feature = "__embed_schema")]
+        quote! {
+            #[no_mangle]
+            pub extern "C" fn __casper_schema() {
+                use casper_sdk::casper::ret;
+                use casper_sdk::casper_executor_wasm_common::flags::ReturnFlags;
+
+                const SCHEMA: &str = match option_env!("__CARGO_CASPER_INJECT_SCHEMA_MARKER") {
+                    Some(schema) => schema,
+                    None => "{}",
+                };
+
+                let bytes = SCHEMA.as_bytes();
+                ret(ReturnFlags::empty(), Some(bytes));
+            }
+        }
+        #[cfg(not(feature = "__embed_schema"))]
+        quote! {}
+    };
+
     quote! {
         #[derive(casper_sdk::serializers::borsh::BorshSerialize, casper_sdk::serializers::borsh::BorshDeserialize)]
         #[borsh(crate = "casper_sdk::serializers::borsh")]
@@ -1227,6 +1250,8 @@ fn process_casper_contract_state_for_struct(contract_struct: ItemStruct) -> Toke
                 #ref_name
             }
         }
+
+        #maybe_casper_schema
     }
     .into()
 }

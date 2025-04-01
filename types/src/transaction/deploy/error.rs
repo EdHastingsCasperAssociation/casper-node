@@ -5,6 +5,8 @@ use core::{
 };
 #[cfg(feature = "std")]
 use std::error::Error as StdError;
+#[cfg(any(feature = "testing", test))]
+use strum::EnumIter;
 
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
@@ -17,6 +19,10 @@ use crate::{crypto, TimeDiff, Timestamp, U512};
 #[cfg_attr(feature = "std", derive(Serialize))]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[non_exhaustive]
+// This derive should not be removed due to a completeness
+// test that we have in binary-port. It checks if all variants
+// of this error have corresponding binary port error codes
+#[cfg_attr(any(feature = "testing", test), derive(EnumIter))]
 pub enum InvalidDeploy {
     /// Invalid chain name.
     InvalidChainName {
@@ -344,6 +350,8 @@ impl StdError for InvalidDeploy {
 /// Error returned when a Deploy is too large.
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
+//Default is needed only in testing to meet EnumIter needs
+#[cfg_attr(any(feature = "testing", test), derive(Default))]
 pub struct ExcessiveSizeError {
     /// The maximum permitted serialized deploy size, in bytes.
     pub max_transaction_size: u32,
