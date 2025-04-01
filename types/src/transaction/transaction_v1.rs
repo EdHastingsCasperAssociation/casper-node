@@ -39,7 +39,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "std", test))]
 use thiserror::Error;
-use tracing::debug;
+use tracing::{error, trace};
 pub use transaction_v1_payload::TransactionV1Payload;
 #[cfg(any(feature = "std", test))]
 use transaction_v1_payload::TransactionV1PayloadJson;
@@ -168,16 +168,6 @@ impl TransactionV1 {
             #[cfg(any(feature = "once_cell", test))]
             is_verified: OnceCell::new(),
         }
-    }
-
-    // ctor from payload
-    pub fn from_payload(payload: TransactionV1Payload) -> Self {
-        let hash = Digest::hash(
-            payload
-                .to_bytes()
-                .unwrap_or_else(|error| panic!("should serialize body: {}", error)),
-        );
-        TransactionV1::new(hash.into(), payload, BTreeSet::new())
     }
 
     #[cfg(any(feature = "std", test, feature = "testing"))]
@@ -421,13 +411,15 @@ impl TransactionV1 {
 
     /// Checks if the declared hash of the transaction matches calculated hash.
     pub fn has_valid_hash(&self) -> Result<(), InvalidTransactionV1> {
-        let computed_hash = Digest::hash(
-            self.payload
-                .to_bytes()
-                .unwrap_or_else(|error| panic!("should serialize body: {}", error)),
-        );
+        let computed_hash = Digest::hash(self.payload.to_bytes().map_err(|error| {
+            error!(
+                ?error,
+                "Could not serialize transaction for purpose of calculating hash."
+            );
+            InvalidTransactionV1::CouldNotSerializeTransaction
+        })?);
         if TransactionV1Hash::new(computed_hash) != self.hash {
-            debug!(?self, ?computed_hash, "invalid transaction hash");
+            trace!(?self, ?computed_hash, "invalid transaction hash");
             return Err(InvalidTransactionV1::InvalidTransactionHash);
         }
         Ok(())
@@ -447,7 +439,7 @@ impl TransactionV1 {
 
     fn do_verify(&self) -> Result<(), InvalidTransactionV1> {
         if self.approvals.is_empty() {
-            debug!(?self, "transaction has no approvals");
+            trace!(?self, "transaction has no approvals");
             return Err(InvalidTransactionV1::EmptyApprovals);
         }
 
@@ -455,9 +447,11 @@ impl TransactionV1 {
 
         for (index, approval) in self.approvals.iter().enumerate() {
             if let Err(error) = crypto::verify(self.hash, approval.signature(), approval.signer()) {
-                debug!(
+                trace!(
                     ?self,
-                    "failed to verify transaction approval {}: {}", index, error
+                    "failed to verify transaction approval {}: {}",
+                    index,
+                    error
                 );
                 return Err(InvalidTransactionV1::InvalidApproval { index, error });
             }

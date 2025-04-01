@@ -110,7 +110,7 @@ impl TransactionAcceptor {
         source: Source,
         maybe_responder: Option<Responder<Result<(), Error>>>,
     ) -> Effects<Event> {
-        debug!(%source, %input_transaction, "checking transaction before accepting");
+        trace!(%source, %input_transaction, "checking transaction before accepting");
         let verification_start_timestamp = Timestamp::now();
         let transaction_config = &self.chainspec.as_ref().transaction_config;
         let maybe_meta_transaction = MetaTransaction::from_transaction(
@@ -808,7 +808,6 @@ impl TransactionAcceptor {
         event_metadata: EventMetadata,
         error: Error,
     ) -> Effects<Event> {
-        debug!(%error, transaction = %event_metadata.transaction, "rejected transaction");
         let EventMetadata {
             meta_transaction: _,
             transaction,
@@ -835,7 +834,7 @@ impl TransactionAcceptor {
         verification_start_timestamp: Timestamp,
         error: Error,
     ) -> Effects<Event> {
-        debug!(%error, transaction = %transaction, "rejected transaction");
+        trace!(%error, transaction = %transaction, "rejected transaction");
         self.metrics.observe_rejected(verification_start_timestamp);
         let mut effects = Effects::new();
         if let Some(responder) = maybe_responder {

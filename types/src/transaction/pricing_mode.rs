@@ -191,6 +191,20 @@ impl PricingMode {
     }
 }
 
+// This impl is provided due to a completeness test that we
+// have in binary-port. It checks if all variants of this
+// error have corresponding binary port error codes
+#[cfg(any(feature = "testing", test))]
+impl Default for PricingMode {
+    fn default() -> Self {
+        Self::PaymentLimited {
+            payment_amount: 1,
+            gas_price_tolerance: 1,
+            standard_payment: true,
+        }
+    }
+}
+
 ///Errors that can occur when calling PricingMode functions
 #[derive(Debug)]
 pub enum PricingModeError {
