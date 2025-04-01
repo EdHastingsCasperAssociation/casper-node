@@ -9,9 +9,9 @@ use casper_executor_wasm::{
     },
     ExecutorConfigBuilder, ExecutorKind, ExecutorV2,
 };
-use casper_executor_wasm_interface::{
-    executor::{ExecuteRequest, ExecuteRequestBuilder, ExecuteWithProviderResult, ExecutionKind},
-    CallError,
+use casper_executor_wasm_common::error::CallError;
+use casper_executor_wasm_interface::executor::{
+    ExecuteRequest, ExecuteRequestBuilder, ExecuteWithProviderResult, ExecutionKind,
 };
 use casper_storage::{
     data_access_layer::{
@@ -316,7 +316,7 @@ fn cep18() {
                                                            // summary blocktime is refreshed
     }
 
-    let mut messages = result_2.messages.iter().collect_vec();
+    let mut messages = result_2.messages().iter().collect_vec();
     messages.sort_by_key(|message| {
         (
             message.topic_name(),

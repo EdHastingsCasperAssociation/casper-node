@@ -4,7 +4,8 @@
 //! hiding the complexity of the underlying implementation.
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use casper_executor_wasm_interface::{CallError, HostResult, TrapCode};
+use casper_executor_wasm_common::error::{CallError, TrapCode};
+use casper_executor_wasm_interface::HostResult;
 use casper_storage::{
     global_state::GlobalStateReader,
     system::{

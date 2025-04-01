@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use casper_executor_wasm_interface::{executor::ExecuteError, CallError, GasUsage};
+use casper_executor_wasm_common::error::CallError;
+use casper_executor_wasm_interface::{executor::ExecuteError, GasUsage};
 use casper_storage::{global_state::error::Error as GlobalStateError, AddressGenerator};
 use casper_types::{
     account::AccountHash, execution::Effects, BlockHash, BlockTime, Digest, TransactionHash,

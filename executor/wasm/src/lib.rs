@@ -11,14 +11,18 @@ use casper_execution_engine::{
     engine_state::{BlockInfo, Error as EngineError, ExecutableItem, ExecutionEngineV1},
     execution::ExecError,
 };
-use casper_executor_wasm_common::{chain_utils, flags::ReturnFlags};
+use casper_executor_wasm_common::{
+    chain_utils,
+    error::{CallError, TrapCode},
+    flags::ReturnFlags,
+};
 use casper_executor_wasm_host::context::Context;
 use casper_executor_wasm_interface::{
     executor::{
         ExecuteError, ExecuteRequest, ExecuteRequestBuilder, ExecuteResult,
         ExecuteWithProviderError, ExecuteWithProviderResult, ExecutionKind, Executor,
     },
-    ConfigBuilder, GasUsage, CallError, TrapCode, VMError, WasmInstance,
+    ConfigBuilder, GasUsage, VMError, WasmInstance,
 };
 use casper_executor_wasmer_backend::WasmerEngine;
 use casper_storage::{
@@ -772,14 +776,14 @@ impl ExecutorV2 {
                 cache: _,
                 messages,
             }) => match state_provider.commit_effects(state_root_hash, effects.clone()) {
-                Ok(post_state_hash) => Ok(ExecuteWithProviderResult {
+                Ok(post_state_hash) => Ok(ExecuteWithProviderResult::new(
                     host_error,
                     output,
                     gas_usage,
-                    post_state_hash,
                     effects,
+                    post_state_hash,
                     messages,
-                }),
+                )),
                 Err(error) => Err(error.into()),
             },
             Err(error) => Err(ExecuteWithProviderError::Execute(error)),
