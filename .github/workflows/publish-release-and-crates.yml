@@ -1,0 +1,51 @@
+---
+name: publish-release-and-crates
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  push_release_and_crates:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-20.04
+            code_name: focal
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b #v3.0.2
+
+      # jq python and python toml required for build_update_package.sh
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq python3 python3-toml
+          python3 --version
+
+      - name: Install cargo deb
+        run: cargo install cargo-deb
+
+      - name: Build update package
+        run: ./ci/build_update_package.sh
+
+      # Add config.tar.gz, bin.tar.gz to release
+      - name: Upload files to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/upgrade_build/*.tar.gz
+          tag: ${{ github.ref }}
+          overwrite: true
+          file_glob: true
+
+      - name: Publish to crates.io
+        env:
+          CARGO_TOKEN: ${{ secrets.crates_io_token }}
+        run: ./ci/publish_to_crates.io

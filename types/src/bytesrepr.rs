@@ -124,10 +124,13 @@ pub fn allocate_buffer_for_size(expected_size: usize) -> Result<Vec<u8>, Error> 
     derive(JsonSchema),
     schemars(rename = "BytesreprError")
 )]
+//Default is needed only in testing to meet EnumIter needs
+#[cfg_attr(any(feature = "testing", test), derive(Default))]
 #[repr(u8)]
 #[non_exhaustive]
 pub enum Error {
     /// Early end of stream while deserializing.
+    #[cfg_attr(any(feature = "testing", test), default)]
     EarlyEndOfStream = 0,
     /// Formatting error while deserializing.
     Formatting,
