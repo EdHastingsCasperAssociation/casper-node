@@ -125,6 +125,7 @@ impl UpgradeRequestBuilder {
         self
     }
 
+    /// Set the validator minimum bid amount.
     pub fn with_validator_minimum_bid_amount(mut self, validator_minimum_bid_amount: u64) -> Self {
         self.validator_minimum_bid_amount = validator_minimum_bid_amount;
         self
