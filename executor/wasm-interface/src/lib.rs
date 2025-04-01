@@ -27,9 +27,10 @@ impl From<u32> for InterfaceVersion {
 pub type HostResult = Result<(), CallError>;
 
 /// Converts a host result into a u32.
+#[must_use]
 pub fn u32_from_host_result(result: HostResult) -> u32 {
     match result {
-        Ok(_) => CALLEE_SUCCEEDED,
+        Ok(()) => CALLEE_SUCCEEDED,
         Err(host_error) => host_error.into_u32(),
     }
 }
@@ -112,10 +113,12 @@ pub struct Config {
 }
 
 impl Config {
+    #[must_use]
     pub fn gas_limit(&self) -> u64 {
         self.gas_limit
     }
 
+    #[must_use]
     pub fn memory_limit(&self) -> u32 {
         self.memory_limit
     }
@@ -131,23 +134,27 @@ pub struct ConfigBuilder {
 
 impl ConfigBuilder {
     /// Create a new configuration builder.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Gas limit in units.
+    #[must_use]
     pub fn with_gas_limit(mut self, gas_limit: u64) -> Self {
         self.gas_limit = Some(gas_limit);
         self
     }
 
     /// Memory limit denominated in pages.
+    #[must_use]
     pub fn with_memory_limit(mut self, memory_limit: u32) -> Self {
         self.memory_limit = Some(memory_limit);
         self
     }
 
     /// Build the configuration.
+    #[must_use]
     pub fn build(self) -> Config {
         let gas_limit = self.gas_limit.expect("Required field missing: gas_limit");
         let memory_limit = self
@@ -229,6 +236,7 @@ pub struct GasUsage {
 }
 
 impl GasUsage {
+    #[must_use]
     pub fn new(gas_limit: u64, remaining_points: u64) -> Self {
         GasUsage {
             gas_limit,
@@ -236,15 +244,18 @@ impl GasUsage {
         }
     }
 
+    #[must_use]
     pub fn gas_spent(&self) -> u64 {
         debug_assert!(self.remaining_points <= self.gas_limit);
         self.gas_limit - self.remaining_points
     }
 
+    #[must_use]
     pub fn gas_limit(&self) -> u64 {
         self.gas_limit
     }
 
+    #[must_use]
     pub fn remaining_points(&self) -> u64 {
         self.remaining_points
     }

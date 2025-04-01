@@ -256,15 +256,15 @@ pub struct ExecuteWithProviderResult {
     /// Error while executing Wasm: traps, memory access errors, etc.
     pub host_error: Option<CallError>,
     /// Output produced by the Wasm contract.
-    pub output: Option<Bytes>,
+    output: Option<Bytes>,
     /// Gas usage.
-    pub gas_usage: GasUsage,
+    gas_usage: GasUsage,
     /// Effects produced by the execution.
-    pub effects: Effects,
+    effects: Effects,
     /// Post state hash.
-    pub post_state_hash: Digest,
+    post_state_hash: Digest,
     /// Messages produced by the execution.
-    pub messages: Messages,
+    messages: Messages,
 }
 
 impl ExecuteWithProviderResult {

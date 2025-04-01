@@ -9,7 +9,8 @@
 //! within the context of the current execution of the new Wasm host logic.
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use casper_executor_wasm_interface::{CallError, HostResult, TrapCode};
+use casper_executor_wasm_common::error::{CallError, TrapCode};
+use casper_executor_wasm_interface::HostResult;
 use casper_storage::{
     global_state::GlobalStateReader,
     system::{

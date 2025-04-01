@@ -8,7 +8,7 @@ use casper_executor_wasm_common::{
         ENTRY_POINT_PAYMENT_SELF_ONWARD,
     },
     error::{
-        HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT,
+        CallError, TrapCode, HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT,
         HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED, HOST_ERROR_MESSAGE_TOPIC_FULL,
         HOST_ERROR_NOT_FOUND, HOST_ERROR_PAYLOAD_TOO_LONG, HOST_ERROR_SUCCESS,
         HOST_ERROR_TOO_MANY_TOPICS, HOST_ERROR_TOPIC_TOO_LONG,
@@ -18,7 +18,7 @@ use casper_executor_wasm_common::{
 };
 use casper_executor_wasm_interface::{
     executor::{ExecuteError, ExecuteRequestBuilder, ExecuteResult, ExecutionKind, Executor},
-    u32_from_host_result, CallError, Caller, HostResult, TrapCode, VMError, VMResult,
+    u32_from_host_result, Caller, HostResult, VMError, VMResult,
 };
 use casper_storage::{
     global_state::GlobalStateReader,
@@ -519,12 +519,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
     let bytecode_addr = ByteCodeAddr::V2CasperWasm(bytecode_hash);
 
     // 1. Store package hash
-    let mut smart_contract_package = Package::new(
-        Default::default(),
-        Default::default(),
-        Groups::default(),
-        PackageStatus::Unlocked,
-    );
+    let mut smart_contract_package = Package::default();
 
     let protocol_version = ProtocolVersion::V2_0_0;
 
@@ -534,7 +529,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
     let callee_addr = match &caller.context().callee {
         Key::Account(initiator_addr) => initiator_addr.value(),
         Key::SmartContract(smart_contract_addr) => *smart_contract_addr,
-        other => panic!("Unexpected callee: {:?}", other),
+        other => panic!("Unexpected callee: {other:?}"),
     };
 
     let smart_contract_addr: HashAddr = chain_utils::compute_predictable_address(
@@ -868,7 +863,7 @@ pub fn casper_env_caller<S: GlobalStateReader, E: Executor>(
     let (entity_kind, data) = match &caller.context().caller {
         Key::Account(account_hash) => (0u32, account_hash.value()),
         Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
-        other => panic!("Unexpected caller: {:?}", other),
+        other => panic!("Unexpected caller: {other:?}"),
     };
     let mut data = &data[..];
     if dest_ptr == 0 {
@@ -997,7 +992,7 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
                     addressable_entity.main_purse()
                 }
                 Ok(Some(other_entity)) => {
-                    panic!("Unexpected entity type: {:?}", other_entity)
+                    panic!("Unexpected entity type: {other_entity:?}")
                 }
                 Ok(None) => panic!("Key not found while checking balance"), //return Ok(0),
                 Err(error) => {
@@ -1474,7 +1469,7 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
     let prev_topic_summary = match caller.context_mut().tracking_copy.read(&topic_key) {
         Ok(Some(StoredValue::MessageTopic(message_topic_summary))) => message_topic_summary,
         Ok(Some(stored_value)) => {
-            panic!("Unexpected stored value: {:?}", stored_value);
+            panic!("Unexpected stored value: {stored_value:?}");
         }
         Ok(None) => {
             let message_topic_summary =
