@@ -433,10 +433,11 @@ impl From<InvalidDeploy> for ErrorCode {
             InvalidDeploy::GasLimitNotSupported => ErrorCode::InvalidDeployGasLimitNotSupported,
             InvalidDeploy::InvalidRuntime => ErrorCode::InvalidDeployInvalidRuntime,
             InvalidDeploy::NoLaneMatch => ErrorCode::InvalidTransactionNoLaneMatches,
-            InvalidDeploy::ExceededWasmLaneGasLimit { .. } => {
+            InvalidDeploy::ExceededLaneGasLimit { .. } => {
                 ErrorCode::InvalidDeployExceededWasmLaneGasLimit
             }
             InvalidDeploy::InvalidPaymentAmount => ErrorCode::InvalidDeployInvalidPaymentAmount,
+            InvalidDeploy::PricingModeNotSupported => ErrorCode::PricingModeNotSupported,
             _ => ErrorCode::InvalidDeployUnspecified,
         }
     }

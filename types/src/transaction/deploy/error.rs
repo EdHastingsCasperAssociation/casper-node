@@ -148,10 +148,10 @@ pub enum InvalidDeploy {
     /// Could not match deploy with transaction lane
     NoLaneMatch,
 
-    /// The payment amount associated with the deploy exceeds the block gas limit.
-    ExceededWasmLaneGasLimit {
-        /// Configured block gas limit.
-        wasm_lane_gas_limit: u64,
+    /// The payment amount associated with the deploy exceeds the lane gas limit.
+    ExceededLaneGasLimit {
+        /// Configured lane gas limit.
+        lane_gas_limit: u64,
         /// The payment amount received.
         got: Box<U512>,
     },
@@ -290,8 +290,8 @@ impl Display for InvalidDeploy {
                         write!(formatter, "invalid runtime",)
                     }
             InvalidDeploy::NoLaneMatch => write!(formatter, "chainspec didnt have any wasm lanes defined which is required for wasm based deploys",),
-            InvalidDeploy::ExceededWasmLaneGasLimit {
-                        wasm_lane_gas_limit,
+            InvalidDeploy::ExceededLaneGasLimit {
+                        lane_gas_limit: wasm_lane_gas_limit,
                         got,
                     } => {
                         write!(
@@ -340,7 +340,7 @@ impl StdError for InvalidDeploy {
             | InvalidDeploy::GasPriceToleranceTooLow { .. }
             | InvalidDeploy::InvalidRuntime
             | InvalidDeploy::NoLaneMatch
-            | InvalidDeploy::ExceededWasmLaneGasLimit { .. }
+            | InvalidDeploy::ExceededLaneGasLimit { .. }
             | InvalidDeploy::InvalidPaymentAmount
             | InvalidDeploy::PricingModeNotSupported => None,
         }

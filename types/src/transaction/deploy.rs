@@ -485,16 +485,17 @@ impl Deploy {
                 got: Box::new(gas_limit.value()),
             });
         }
-        let wasm_lane_limit = lane_definition.max_transaction_gas_limit;
-        let wasm_lane_limit_as_gas = Gas::new(wasm_lane_limit);
-        if gas_limit > wasm_lane_limit_as_gas {
+        let lane_limit = lane_definition.max_transaction_gas_limit;
+        let lane_limit_as_gas = Gas::new(lane_limit);
+        if gas_limit > lane_limit_as_gas {
             debug!(
+                calculated_lane = lane_definition.id,
                 payment_amount = %gas_limit,
                 %block_gas_limit,
-                    "transaction gas limit exceeds wasm lane limit"
+                    "transaction gas limit exceeds lane limit"
             );
-            return Err(InvalidDeploy::ExceededWasmLaneGasLimit {
-                wasm_lane_gas_limit: wasm_lane_limit,
+            return Err(InvalidDeploy::ExceededLaneGasLimit {
+                lane_gas_limit: lane_limit,
                 got: Box::new(gas_limit.value()),
             });
         }
@@ -2705,5 +2706,64 @@ mod tests {
             limit * gas_price,
             "in fixed pricing, the cost should == limit * gas_price"
         );
+    }
+
+    #[test]
+    fn should_use_lane_specific_size_constraints() {
+        let mut rng = TestRng::new();
+        // Deploy is a transfer; should select MINT_LANE_ID
+        // and apply size limitations appropriate to that
+        const GAS_PRICE_TOLERANCE: u8 = u8::MAX;
+        let chain_name = "net-1";
+        let mut chainspec = Chainspec::default();
+        chainspec
+            .with_chain_name(chain_name.to_string())
+            .with_pricing_handling(PricingHandling::PaymentLimited);
+
+        let config = chainspec.transaction_config.clone();
+
+        let transfer_args = runtime_args! {
+            "amount" => U512::from(DEFAULT_MIN_TRANSFER_MOTES),
+            "source" => PublicKey::random(&mut rng).to_account_hash(),
+            "target" => PublicKey::random(&mut rng).to_account_hash(),
+            "some_other" => vec![1; 1_000_000], //pumping a big runtime arg to make sure that we don't fit in the mint lane
+        };
+        let payment_amount = 10_000_000_000u64;
+        let payment_args = runtime_args! {
+            "amount" => U512::from(payment_amount),
+        };
+        let session = ExecutableDeployItem::Transfer {
+            args: transfer_args,
+        };
+        let payment = ExecutableDeployItem::ModuleBytes {
+            module_bytes: Bytes::new(),
+            args: payment_args,
+        };
+
+        let mut deploy = create_deploy(
+            &mut rng,
+            config.max_ttl,
+            0,
+            chain_name,
+            GAS_PRICE_TOLERANCE as u64,
+        );
+        deploy.payment = payment;
+        deploy.session = session;
+        assert_eq!(
+            calculate_lane_id_for_deploy(
+                &deploy,
+                chainspec.core_config.pricing_handling.clone(),
+                &config.transaction_v1_config,
+            ),
+            Ok(MINT_LANE_ID)
+        );
+        let current_timestamp = deploy.header().timestamp();
+        let ret = deploy.is_config_compliant(&chainspec, TimeDiff::default(), current_timestamp);
+        assert!(ret.is_err());
+        let err = ret.err().unwrap();
+        assert!(matches!(
+            err,
+            InvalidDeploy::ExcessiveSize(DeployExcessiveSizeError { .. })
+        ))
     }
 }
