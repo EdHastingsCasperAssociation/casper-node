@@ -1,5 +1,4 @@
 use std::time::Duration;
-use casper_types::Timestamp;
 use tracing::{debug, info, warn};
 
 use crate::{
