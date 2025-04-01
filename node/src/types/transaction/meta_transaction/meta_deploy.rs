@@ -1,43 +1,32 @@
-use casper_types::{
-    Deploy, ExecutableDeployItem, InvalidDeploy, InvalidTransaction, TransactionLaneDefinition,
-    TransactionV1Config, MINT_LANE_ID,
-};
 use datasize::DataSize;
 use serde::Serialize;
 
+#[cfg(test)]
+use casper_types::TransactionLaneDefinition;
+use casper_types::{
+    calculate_lane_id_for_deploy, Deploy, ExecutableDeployItem, InvalidTransaction,
+    PricingHandling, TransactionV1Config,
+};
 #[derive(Clone, Debug, Serialize, DataSize)]
 pub(crate) struct MetaDeploy {
     deploy: Deploy,
-    //When a deploy is a WASM we categorize it as "largest wasm possible".
     //We need to keep that id here since we can fetch it only from chainspec.
-    largest_wasm_id: u8,
+    lane_id: u8,
 }
 
 impl MetaDeploy {
     pub(crate) fn from_deploy(
         deploy: Deploy,
+        pricing_handling: PricingHandling,
         config: &TransactionV1Config,
     ) -> Result<Self, InvalidTransaction> {
-        let maybe_biggest_lane_limit = calculate_lane_id_of_biggest_wasm(config.wasm_lanes());
-        if let Some(largest_wasm_id) = maybe_biggest_lane_limit {
-            Ok(MetaDeploy {
-                deploy,
-                largest_wasm_id,
-            })
-        } else {
-            // Seems like chainspec didn't have any wasm lanes configured
-            Err(InvalidTransaction::Deploy(
-                InvalidDeploy::ChainspecHasNoWasmLanesDefined,
-            ))
-        }
+        let lane_id = calculate_lane_id_for_deploy(&deploy, pricing_handling, config)
+            .map_err(InvalidTransaction::Deploy)?;
+        Ok(MetaDeploy { deploy, lane_id })
     }
 
     pub(crate) fn lane_id(&self) -> u8 {
-        if self.deploy.is_transfer() {
-            MINT_LANE_ID
-        } else {
-            self.largest_wasm_id
-        }
+        self.lane_id
     }
 
     pub(crate) fn session(&self) -> &ExecutableDeployItem {
@@ -49,6 +38,7 @@ impl MetaDeploy {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn calculate_lane_id_of_biggest_wasm(
     wasm_lanes: &[TransactionLaneDefinition],
 ) -> Option<u8> {

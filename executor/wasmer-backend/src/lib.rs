@@ -1,5 +1,5 @@
 pub(crate) mod imports;
-mod metering_middleware;
+pub(crate) mod middleware;
 
 use std::{
     collections::BinaryHeap,
@@ -14,6 +14,10 @@ use casper_executor_wasm_interface::{
     WasmPreparationError,
 };
 use casper_storage::global_state::GlobalStateReader;
+use middleware::{
+    gas_metering,
+    gatekeeper::{Gatekeeper, GatekeeperConfig},
+};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use wasmer::{
@@ -23,8 +27,6 @@ use wasmer::{
 };
 use wasmer_compiler_singlepass::Singlepass;
 use wasmer_middlewares::metering;
-
-use metering_middleware::make_wasmer_metering_middleware;
 
 fn from_wasmer_memory_access_error(error: wasmer::MemoryAccessError) -> VMError {
     let trap_code = match error {
@@ -289,11 +291,12 @@ where
         context: Context<S, E>,
         config: Config,
     ) -> Result<Self, WasmPreparationError> {
-        // let mut store = Engine
         let engine = {
             let mut singlepass_compiler = Singlepass::new();
-            let metering = make_wasmer_metering_middleware(config.gas_limit());
-            singlepass_compiler.push_middleware(metering);
+            let gatekeeper_config = GatekeeperConfig::default();
+            singlepass_compiler.push_middleware(Arc::new(Gatekeeper::new(gatekeeper_config)));
+            singlepass_compiler
+                .push_middleware(gas_metering::gas_metering_middleware(config.gas_limit()));
             singlepass_compiler
         };
 

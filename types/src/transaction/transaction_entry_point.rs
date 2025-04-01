@@ -31,8 +31,11 @@ use serde::{Deserialize, Serialize};
     schemars(description = "Entry point of a Transaction.")
 )]
 #[serde(deny_unknown_fields)]
+//Default is needed only in testing to meet EnumIter needs
+#[cfg_attr(any(feature = "testing", test), derive(Default))]
 pub enum TransactionEntryPoint {
     /// The default entry point name.
+    #[cfg_attr(any(feature = "testing", test), default)]
     Call,
 
     /// A non-native, arbitrary entry point.

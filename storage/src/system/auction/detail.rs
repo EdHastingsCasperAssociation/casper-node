@@ -2,6 +2,9 @@ use std::{collections::BTreeMap, convert::TryInto, ops::Mul};
 
 use num_rational::Ratio;
 
+use super::{
+    Auction, EraValidators, MintProvider, RuntimeProvider, StorageProvider, ValidatorWeights,
+};
 use casper_types::{
     bytesrepr::{FromBytes, ToBytes},
     system::auction::{
@@ -9,17 +12,13 @@ use casper_types::{
         Reservation, Reservations, SeigniorageAllocation, SeigniorageRecipientV2,
         SeigniorageRecipientsSnapshotV1, SeigniorageRecipientsSnapshotV2, SeigniorageRecipientsV2,
         Unbond, UnbondEra, UnbondKind, ValidatorBid, ValidatorBids, ValidatorCredit,
-        ValidatorCredits, AUCTION_DELAY_KEY, DELEGATION_RATE_DENOMINATOR,
+        ValidatorCredits, WeightsBreakout, AUCTION_DELAY_KEY, DELEGATION_RATE_DENOMINATOR,
         ERA_END_TIMESTAMP_MILLIS_KEY, ERA_ID_KEY, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY,
         UNBONDING_DELAY_KEY, VALIDATOR_SLOTS_KEY,
     },
     ApiError, CLTyped, EraId, Key, KeyTag, PublicKey, URef, U512,
 };
 use tracing::{debug, error, warn};
-
-use super::{
-    Auction, EraValidators, MintProvider, RuntimeProvider, StorageProvider, ValidatorWeights,
-};
 
 /// Maximum length of bridge records chain.
 /// Used when looking for the most recent bid record to avoid unbounded computations.
@@ -117,26 +116,24 @@ impl ValidatorBidsDetail {
 
     /// Get validator weights.
     #[allow(clippy::too_many_arguments)]
-    pub fn validator_weights(
+    pub fn validator_weights_breakout(
         &mut self,
         era_ending: EraId,
         era_end_timestamp_millis: u64,
         vesting_schedule_period_millis: u64,
-        locked: bool,
+        minimum_bid_amount: u64,
         include_credits: bool,
-        cap: Ratio<U512>,
-    ) -> Result<ValidatorWeights, Error> {
-        let mut ret = BTreeMap::new();
-
-        for (validator_public_key, bid) in self.validator_bids.iter().filter(|(_, v)| {
-            locked
-                == v.is_locked_with_vesting_schedule(
-                    era_end_timestamp_millis,
-                    vesting_schedule_period_millis,
-                )
-                && !v.inactive()
-        }) {
+        credits_cap: Ratio<U512>,
+    ) -> Result<WeightsBreakout, Error> {
+        let mut ret = WeightsBreakout::new();
+        let min_bid = minimum_bid_amount.into();
+        for (validator_public_key, bid) in self
+            .validator_bids
+            .iter()
+            .filter(|(_, v)| !v.inactive() && !v.staked_amount() >= U512::one())
+        {
             let mut staked_amount = bid.staked_amount();
+            let meets_minimum = staked_amount >= min_bid;
             if let Some(delegators) = self.delegator_bids.get(validator_public_key) {
                 staked_amount = staked_amount
                     .checked_add(delegators.iter().map(|d| d.staked_amount()).sum())
@@ -148,10 +145,16 @@ impl ValidatorBidsDetail {
                 era_ending,
                 staked_amount,
                 include_credits,
-                cap,
+                credits_cap,
             );
             let total = staked_amount.saturating_add(credit_amount);
-            ret.insert(validator_public_key.clone(), total);
+
+            let locked = bid.is_locked_with_vesting_schedule(
+                era_end_timestamp_millis,
+                vesting_schedule_period_millis,
+            );
+
+            ret.register(validator_public_key.clone(), total, locked, meets_minimum);
         }
 
         Ok(ret)
@@ -188,6 +191,36 @@ impl ValidatorBidsDetail {
 
     pub(crate) fn validator_bids_mut(&mut self) -> &mut ValidatorBids {
         &mut self.validator_bids
+    }
+
+    /// Select winners for auction.
+    #[allow(clippy::too_many_arguments)]
+    pub fn pick_winners(
+        &mut self,
+        era_id: EraId,
+        validator_slots: usize,
+        minimum_bid_amount: u64,
+        include_credits: bool,
+        credit_cap: Ratio<U512>,
+        era_end_timestamp_millis: u64,
+        vesting_schedule_period_millis: u64,
+    ) -> Result<ValidatorWeights, ApiError> {
+        // as a safety mechanism, if we would fall below 75% of the expected
+        // validator count by enforcing minimum bid, allow bids with less
+        // that min bid up to fill to 75% of the expected count
+        let threshold = Ratio::new(3, 4)
+            .mul(Ratio::new(validator_slots, 1))
+            .to_integer();
+        let breakout = self.validator_weights_breakout(
+            era_id,
+            era_end_timestamp_millis,
+            vesting_schedule_period_millis,
+            minimum_bid_amount,
+            include_credits,
+            credit_cap,
+        )?;
+        let ret = breakout.take(validator_slots, threshold);
+        Ok(ret)
     }
 
     /// Consume self into in underlying collections.
