@@ -87,9 +87,17 @@ pub trait Auction:
             return Err(Error::AuctionBidsDisabled.into());
         }
 
-        if amount < U512::from(minimum_bid_amount) {
+        if amount == U512::zero() {
             return Err(Error::BondTooSmall.into());
         }
+
+        /*
+        look up bid,
+        if not
+            amount < U512::from(minimum_bid_amount) correct
+        if they do
+            existing stake +sat(amount) < U512::from(minimum_bid_amount)
+         */
 
         if delegation_rate > DELEGATION_RATE_DENOMINATOR {
             return Err(Error::DelegationRateTooLarge.into());
@@ -109,11 +117,14 @@ pub trait Auction:
         let (target, validator_bid) = if let Some(BidKind::Validator(mut validator_bid)) =
             self.read_bid(&validator_bid_key)?
         {
+            let updated_stake = validator_bid.increase_stake(amount)?;
+            if updated_stake < U512::from(minimum_bid_amount) {
+                return Err(Error::BondTooSmall.into());
+            }
             // update an existing validator bid
             if validator_bid.inactive() {
                 validator_bid.activate();
             }
-            validator_bid.increase_stake(amount)?;
             validator_bid.with_delegation_rate(delegation_rate);
             validator_bid.set_delegation_amount_boundaries(
                 minimum_delegation_amount,
@@ -141,6 +152,9 @@ pub trait Auction:
 
             (*validator_bid.bonding_purse(), validator_bid)
         } else {
+            if amount < U512::from(minimum_bid_amount) {
+                return Err(Error::BondTooSmall.into());
+            }
             // create new validator bid
             let bonding_purse = self.create_purse()?;
             let validator_bid = ValidatorBid::unlocked(
