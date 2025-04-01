@@ -1297,7 +1297,6 @@ where
             .reader()
             .keys_with_prefix(&[KeyTag::BidAddr as u8, BidAddrTag::Validator as u8])
             .map_err(|_| ProtocolUpgradeError::UnexpectedKeyVariant)?;
-
         for validator_bid_key in validator_bid_keys {
             if let Some(StoredValue::BidKind(BidKind::Validator(validator_bid))) = tc
                 .get(&validator_bid_key)
@@ -1308,7 +1307,7 @@ where
                     validator_bid.staked_amount() < U512::from(validator_minimum);
                 if !is_bid_inactive && has_less_than_validator_minimum {
                     let inactive_bid = validator_bid.with_inactive(true);
-                    println!("marking bid inactive {validator_bid_key}");
+                    info!("marking bid inactive {validator_bid_key}");
                     tc.write(
                         validator_bid_key,
                         StoredValue::BidKind(BidKind::Validator(Box::new(inactive_bid))),
