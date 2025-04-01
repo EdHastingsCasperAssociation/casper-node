@@ -745,3 +745,66 @@ async fn should_store_finalized_approvals() {
         }
     }
 }
+
+#[tokio::test]
+async fn should_update_last_progress_after_block_execution() {
+    // Set up a network with two nodes.
+    let initial_stakes = InitialStakes::FromVec(vec![u128::MAX, 1]);
+    let mut fixture = TestFixture::new(initial_stakes, None).await;
+
+    // Let all nodes reach consensus in era 0.
+    fixture.run_until_consensus_in_era(ERA_ONE, ONE_MIN).await;
+
+    // Prepare and submit a transaction.
+    let transaction = Transaction::from(
+        Deploy::random_valid_native_transfer_without_deps(&mut fixture.rng),
+    );
+    let transaction_hash = transaction.hash();
+
+    for runner in fixture.network.runners_mut() {
+        let transaction = transaction.clone();
+        runner
+            .process_injected_effects(|eff| {
+                eff.put_transaction_to_storage(transaction.clone()).ignore()
+            })
+            .await;
+
+        runner
+            .process_injected_effects(|eff| {
+                eff.announce_new_transaction_accepted(Arc::new(transaction), Source::Client).ignore()
+            })
+            .await;
+    }
+
+    // For each node, capture its last_progress before execution.
+    let stored_last_progresses: Vec<_> = fixture
+        .network
+        .nodes()
+        .values()
+        .map(|node| {
+            let reactor = node.main_reactor();
+            assert_eq!(reactor.state, ReactorState::Validate);
+            reactor.last_progress
+        })
+        .collect();
+
+    // Run until the transaction gets executed.
+    let has_stored_exec_results = |nodes: &Nodes| {
+        nodes.values().all(|runner| {
+            let read = runner
+                .main_reactor()
+                .storage()
+                .read_execution_result(&transaction_hash);
+            read.is_some()
+        })
+    };
+    fixture.run_until(has_stored_exec_results, ONE_MIN).await;
+
+    // For each node, verify its last_progress has been updated.
+    for (stored_last_progress, node) in stored_last_progresses
+        .into_iter()
+        .zip(fixture.network.nodes().values())
+    {
+        assert!(node.main_reactor().last_progress > stored_last_progress);
+    }
+}

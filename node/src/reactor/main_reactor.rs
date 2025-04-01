@@ -1642,6 +1642,11 @@ impl MainReactor {
                     block.height(),
                     block.hash(),
                 );
+
+                if self.state == ReactorState::Validate {
+                    self.last_progress = Timestamp::now();
+                }
+
                 effects.extend(reactor::wrap_effects(
                     MainEvent::BlockSynchronizer,
                     self.block_synchronizer.handle_event(
