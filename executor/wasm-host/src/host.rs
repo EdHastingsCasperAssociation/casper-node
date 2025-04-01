@@ -1073,7 +1073,7 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
         (entity_addr, runtime_footprint)
     };
 
-    let callee_addressable_entity_key = match dbg!(caller.context().callee) {
+    let callee_addressable_entity_key = match caller.context().callee {
         callee_account_key @ Key::Account(_account_hash) => {
             match caller.context_mut().tracking_copy.read(&callee_account_key) {
                 Ok(Some(StoredValue::CLValue(indirect))) => {
@@ -1124,12 +1124,12 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
         other => panic!("should be account or smart contract but got {other:?}"),
     };
 
-    let callee_stored_value = dbg!(caller
+    let callee_stored_value = caller
         .context_mut()
         .tracking_copy
-        .read(&callee_addressable_entity_key))
-    .expect("should read account")
-    .expect("should have account");
+        .read(&callee_addressable_entity_key)
+        .expect("should read account")
+        .expect("should have account");
     let callee_addressable_entity = callee_stored_value
         .into_addressable_entity()
         .expect("should be addressable entity");
