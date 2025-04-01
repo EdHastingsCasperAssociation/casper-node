@@ -2752,7 +2752,7 @@ mod tests {
         assert_eq!(
             calculate_lane_id_for_deploy(
                 &deploy,
-                chainspec.core_config.pricing_handling.clone(),
+                chainspec.core_config.pricing_handling,
                 &config.transaction_v1_config,
             ),
             Ok(MINT_LANE_ID)
