@@ -827,6 +827,7 @@ impl EraSupervisor {
         rng: &mut NodeRng,
         block_header: BlockHeader,
     ) -> Effects<Event> {
+        self.last_progress = Timestamp::now();
         self.next_executed_height = self
             .next_executed_height
             .max(block_header.height().saturating_add(1));

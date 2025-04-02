@@ -1581,6 +1581,7 @@ impl MainReactor {
                     execution_results,
                     state: *meta_block.state(),
                 };
+
                 effects.extend(reactor::wrap_effects(
                     MainEvent::BlockAccumulator,
                     self.block_accumulator.handle_event(
@@ -1642,6 +1643,7 @@ impl MainReactor {
                     block.height(),
                     block.hash(),
                 );
+
                 effects.extend(reactor::wrap_effects(
                     MainEvent::BlockSynchronizer,
                     self.block_synchronizer.handle_event(
