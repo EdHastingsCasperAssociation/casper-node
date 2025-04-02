@@ -422,7 +422,8 @@ impl Environment {
         entry_point_size: usize,
         input_ptr: *const u8,
         input_size: usize,
-        alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8, // For capturing output data
+        alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8, /* For capturing output
+                                                                         * data */
         alloc_ctx: *const core::ffi::c_void,
     ) -> Result<u32, NativeTrap> {
         let address = unsafe { slice::from_raw_parts(address_ptr, address_size) };
@@ -743,7 +744,8 @@ mod symbols {
         entry_point_size: usize,
         input_ptr: *const u8,
         input_size: usize,
-        alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8, // For capturing output data
+        alloc: extern "C" fn(usize, *mut core::ffi::c_void) -> *mut u8, /* For capturing output
+                                                                         * data */
         alloc_ctx: *const core::ffi::c_void,
     ) -> u32 {
         let _call_result = with_current_environment(|stub| {
