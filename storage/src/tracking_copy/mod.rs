@@ -513,7 +513,10 @@ where
     }
 
     /// Gets the set of keys in the state by a byte prefix.
-    fn get_by_byte_prefix(&self, byte_prefix: &[u8]) -> Result<BTreeSet<Key>, TrackingCopyError> {
+    pub(crate) fn get_by_byte_prefix(
+        &self,
+        byte_prefix: &[u8],
+    ) -> Result<BTreeSet<Key>, TrackingCopyError> {
         let keys = match self.reader.keys_with_prefix(byte_prefix) {
             Ok(ret) => ret,
             Err(err) => return Err(TrackingCopyError::Storage(err)),

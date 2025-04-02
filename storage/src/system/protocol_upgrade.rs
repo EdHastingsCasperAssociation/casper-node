@@ -39,7 +39,7 @@ use casper_types::{
 };
 
 use crate::{
-    global_state::state::{StateProvider, StateReader},
+    global_state::state::StateProvider,
     tracking_copy::{TrackingCopy, TrackingCopyEntityExt, TrackingCopyExt},
     AddressGenerator,
 };
@@ -1294,8 +1294,7 @@ where
         }
 
         let validator_bid_keys = tc
-            .reader()
-            .keys_with_prefix(&[KeyTag::BidAddr as u8, BidAddrTag::Validator as u8])
+            .get_by_byte_prefix(&[KeyTag::BidAddr as u8, BidAddrTag::Validator as u8])
             .map_err(|_| ProtocolUpgradeError::UnexpectedKeyVariant)?;
         for validator_bid_key in validator_bid_keys {
             if let Some(StoredValue::BidKind(BidKind::Validator(validator_bid))) = tc
