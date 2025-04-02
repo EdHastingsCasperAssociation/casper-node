@@ -172,9 +172,9 @@ where
 
             FunctionIndex::GetCallerIndex => {
                 // args(0) = pointer where a size of serialized bytes will be stored
-                let (output_size,) = Args::parse(args)?;
-                self.charge_host_function_call(&host_function_costs.get_caller, [output_size])?;
-                let ret = self.get_caller(output_size)?;
+                let (output_size_ptr,) = Args::parse(args)?;
+                self.charge_host_function_call(&host_function_costs.get_caller, [output_size_ptr])?;
+                let ret = self.get_caller(output_size_ptr)?;
                 Ok(Some(RuntimeValue::I32(api_error::i32_from(ret))))
             }
 

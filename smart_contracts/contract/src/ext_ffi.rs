@@ -231,8 +231,8 @@ extern "C" {
     ///
     /// # Arguments
     ///
-    /// * `output_size` - pointer to a value where the size of the account hash will be set.
-    pub fn casper_get_caller(output_size: *mut usize) -> i32;
+    /// * `output_size_ptr` - pointer to a value where the size of the account hash will be set.
+    pub fn casper_get_caller(output_size_ptr: *mut usize) -> i32;
     /// This function gets the timestamp which will be in the block this deploy is
     /// included in. The return value is always a 64-bit unsigned integer,
     /// representing the number of milliseconds since the Unix epoch. It is up to
