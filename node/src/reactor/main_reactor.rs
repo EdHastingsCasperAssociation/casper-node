@@ -1582,10 +1582,6 @@ impl MainReactor {
                     state: *meta_block.state(),
                 };
 
-                if self.state == ReactorState::Validate {
-                    self.last_progress = Timestamp::now();
-                }
-
                 effects.extend(reactor::wrap_effects(
                     MainEvent::BlockAccumulator,
                     self.block_accumulator.handle_event(

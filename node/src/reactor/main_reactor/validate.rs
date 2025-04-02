@@ -34,6 +34,11 @@ impl MainReactor {
         effect_builder: EffectBuilder<MainEvent>,
         rng: &mut NodeRng,
     ) -> ValidateInstruction {
+        let last_progress = self.consensus.last_progress();
+        if last_progress > self.last_progress {
+            self.last_progress = last_progress;
+        }
+        
         let queue_depth = self.contract_runtime.queue_depth();
         if queue_depth > 0 {
             warn!("Validate: should_validate queue_depth {}", queue_depth);
@@ -85,10 +90,6 @@ impl MainReactor {
 
         match self.create_required_eras(effect_builder, rng) {
             Ok(Some(effects)) => {
-                let last_progress = self.consensus.last_progress();
-                if last_progress > self.last_progress {
-                    self.last_progress = last_progress;
-                }
                 if effects.is_empty() {
                     ValidateInstruction::CheckLater(
                         "consensus state is up to date".to_string(),
