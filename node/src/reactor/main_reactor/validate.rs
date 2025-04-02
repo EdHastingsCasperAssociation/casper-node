@@ -38,7 +38,7 @@ impl MainReactor {
         if last_progress > self.last_progress {
             self.last_progress = last_progress;
         }
-        
+
         let queue_depth = self.contract_runtime.queue_depth();
         if queue_depth > 0 {
             warn!("Validate: should_validate queue_depth {}", queue_depth);
