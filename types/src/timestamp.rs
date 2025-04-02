@@ -35,6 +35,8 @@ const TIMESTAMP: Timestamp = Timestamp(1_605_573_564_072);
     derive(JsonSchema),
     schemars(description = "Timestamp formatted as per RFC 3339")
 )]
+//Default is needed only in testing to meet EnumIter needs
+#[cfg_attr(any(feature = "testing", test), derive(Default))]
 pub struct Timestamp(#[cfg_attr(feature = "json-schema", schemars(with = "String"))] u64);
 
 impl Timestamp {

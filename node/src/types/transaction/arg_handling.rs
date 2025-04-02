@@ -138,11 +138,11 @@ fn parse_cl_value<T: CLTyped + FromBytes>(
                 arg_name: arg_name.to_string(),
                 error,
             },
-            CLValueError::Type(_) => InvalidTransactionV1::UnexpectedArgType {
-                arg_name: arg_name.to_string(),
-                expected: vec![T::cl_type()],
-                got: cl_value.cl_type().clone(),
-            },
+            CLValueError::Type(_) => InvalidTransactionV1::unexpected_arg_type(
+                arg_name.to_string(),
+                vec![T::cl_type()],
+                cl_value.cl_type().clone(),
+            ),
         };
         debug!("{error}");
         error
@@ -223,11 +223,11 @@ pub fn has_valid_transfer_args(
                 CLType::URef,
                 target_cl_value.cl_type()
             );
-            return Err(InvalidTransactionV1::UnexpectedArgType {
-                arg_name: TRANSFER_ARG_TARGET.to_string(),
-                expected: vec![CLType::PublicKey, CLType::ByteArray(32), CLType::URef],
-                got: target_cl_value.cl_type().clone(),
-            });
+            return Err(InvalidTransactionV1::unexpected_arg_type(
+                TRANSFER_ARG_TARGET.to_string(),
+                vec![CLType::PublicKey, CLType::ByteArray(32), CLType::URef],
+                target_cl_value.cl_type().clone(),
+            ));
         }
     }
 
@@ -622,11 +622,11 @@ mod tests {
             TRANSFER_ARG_AMOUNT.name => U512::from(min_motes),
             TRANSFER_ARG_TARGET => "wrong"
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: TRANSFER_ARG_TARGET.to_string(),
-            expected: vec![CLType::PublicKey, CLType::ByteArray(32), CLType::URef],
-            got: CLType::String,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            TRANSFER_ARG_TARGET.to_string(),
+            vec![CLType::PublicKey, CLType::ByteArray(32), CLType::URef],
+            CLType::String,
+        );
         assert_eq!(
             has_valid_transfer_args(&TransactionArgs::Named(args), min_motes),
             Err(expected_error)
@@ -638,11 +638,11 @@ mod tests {
             TRANSFER_ARG_SOURCE.name => 1_u8,
             TRANSFER_ARG_TARGET => PublicKey::random(rng)
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: TRANSFER_ARG_SOURCE.name.to_string(),
-            expected: vec![URef::cl_type()],
-            got: CLType::U8,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            TRANSFER_ARG_SOURCE.name.to_string(),
+            vec![URef::cl_type()],
+            CLType::U8,
+        );
         assert_eq!(
             has_valid_transfer_args(&TransactionArgs::Named(args), min_motes),
             Err(expected_error)
@@ -729,11 +729,11 @@ mod tests {
             ADD_BID_ARG_DELEGATION_RATE.name => rng.gen::<u8>(),
             ADD_BID_ARG_AMOUNT.name => rng.gen::<u64>()
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: ADD_BID_ARG_AMOUNT.name.to_string(),
-            expected: vec![CLType::U512],
-            got: CLType::U64,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            ADD_BID_ARG_AMOUNT.name.to_string(),
+            vec![CLType::U512],
+            CLType::U64,
+        );
         assert_eq!(
             has_valid_add_bid_args(&TransactionArgs::Named(args)),
             Err(expected_error)
@@ -791,11 +791,11 @@ mod tests {
             WITHDRAW_BID_ARG_PUBLIC_KEY.name => PublicKey::random(rng),
             WITHDRAW_BID_ARG_AMOUNT.name => rng.gen::<u64>()
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: WITHDRAW_BID_ARG_AMOUNT.name.to_string(),
-            expected: vec![CLType::U512],
-            got: CLType::U64,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            WITHDRAW_BID_ARG_AMOUNT.name.to_string(),
+            vec![CLType::U512],
+            CLType::U64,
+        );
         assert_eq!(
             has_valid_withdraw_bid_args(&TransactionArgs::Named(args)),
             Err(expected_error)
@@ -874,11 +874,11 @@ mod tests {
             DELEGATE_ARG_VALIDATOR.name => PublicKey::random(rng),
             DELEGATE_ARG_AMOUNT.name => rng.gen::<u64>()
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: DELEGATE_ARG_AMOUNT.name.to_string(),
-            expected: vec![CLType::U512],
-            got: CLType::U64,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            DELEGATE_ARG_AMOUNT.name.to_string(),
+            vec![CLType::U512],
+            CLType::U64,
+        );
         assert_eq!(
             has_valid_delegate_args(&TransactionArgs::Named(args)),
             Err(expected_error)
@@ -957,11 +957,11 @@ mod tests {
             UNDELEGATE_ARG_VALIDATOR.name => PublicKey::random(rng),
             UNDELEGATE_ARG_AMOUNT.name => rng.gen::<u64>()
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: UNDELEGATE_ARG_AMOUNT.name.to_string(),
-            expected: vec![CLType::U512],
-            got: CLType::U64,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            UNDELEGATE_ARG_AMOUNT.name.to_string(),
+            vec![CLType::U512],
+            CLType::U64,
+        );
         assert_eq!(
             has_valid_undelegate_args(&TransactionArgs::Named(args)),
             Err(expected_error)
@@ -1059,11 +1059,11 @@ mod tests {
             REDELEGATE_ARG_AMOUNT.name => rng.gen::<u64>(),
             REDELEGATE_ARG_NEW_VALIDATOR.name => PublicKey::random(rng),
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: REDELEGATE_ARG_AMOUNT.name.to_string(),
-            expected: vec![CLType::U512],
-            got: CLType::U64,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            REDELEGATE_ARG_AMOUNT.name.to_string(),
+            vec![CLType::U512],
+            CLType::U64,
+        );
         assert_eq!(
             has_valid_redelegate_args(&TransactionArgs::Named(args)),
             Err(expected_error)
@@ -1122,11 +1122,11 @@ mod tests {
             CHANGE_BID_PUBLIC_KEY_ARG_PUBLIC_KEY.name => rng.gen::<u8>(),
             CHANGE_BID_PUBLIC_KEY_ARG_NEW_PUBLIC_KEY.name => PublicKey::random(rng),
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: CHANGE_BID_PUBLIC_KEY_ARG_PUBLIC_KEY.name.to_string(),
-            expected: vec![CLType::PublicKey],
-            got: CLType::U8,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            CHANGE_BID_PUBLIC_KEY_ARG_PUBLIC_KEY.name.to_string(),
+            vec![CLType::PublicKey],
+            CLType::U8,
+        );
         assert_eq!(
             has_valid_change_bid_public_key_args(&TransactionArgs::Named(args)),
             Err(expected_error)
@@ -1137,11 +1137,11 @@ mod tests {
             CHANGE_BID_PUBLIC_KEY_ARG_PUBLIC_KEY.name => PublicKey::random(rng),
             CHANGE_BID_PUBLIC_KEY_ARG_NEW_PUBLIC_KEY.name => rng.gen::<u8>(),
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: CHANGE_BID_PUBLIC_KEY_ARG_NEW_PUBLIC_KEY.name.to_string(),
-            expected: vec![CLType::PublicKey],
-            got: CLType::U8,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            CHANGE_BID_PUBLIC_KEY_ARG_NEW_PUBLIC_KEY.name.to_string(),
+            vec![CLType::PublicKey],
+            CLType::U8,
+        );
         assert_eq!(
             has_valid_change_bid_public_key_args(&TransactionArgs::Named(args)),
             Err(expected_error)
@@ -1184,11 +1184,11 @@ mod tests {
         let args = runtime_args! {
             ADD_RESERVATIONS_ARG_RESERVATIONS.name => PublicKey::random(rng),
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: ADD_RESERVATIONS_ARG_RESERVATIONS.name.to_string(),
-            expected: vec![CLType::List(Box::new(CLType::Any))],
-            got: CLType::PublicKey,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            ADD_RESERVATIONS_ARG_RESERVATIONS.name.to_string(),
+            vec![CLType::List(Box::new(CLType::Any))],
+            CLType::PublicKey,
+        );
         assert_eq!(
             has_valid_add_reservations_args(&TransactionArgs::Named(args)),
             Err(expected_error)
@@ -1249,11 +1249,11 @@ mod tests {
             CANCEL_RESERVATIONS_ARG_VALIDATOR.name => rng.random_vec::<Range<usize>, PublicKey>(0..100),
             CANCEL_RESERVATIONS_ARG_DELEGATORS.name => rng.random_vec::<Range<usize>, DelegatorKind>(0..100),
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: CANCEL_RESERVATIONS_ARG_VALIDATOR.name.to_string(),
-            expected: vec![CLType::PublicKey],
-            got: CLType::List(Box::new(CLType::PublicKey)),
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            CANCEL_RESERVATIONS_ARG_VALIDATOR.name.to_string(),
+            vec![CLType::PublicKey],
+            CLType::List(Box::new(CLType::PublicKey)),
+        );
         assert_eq!(
             has_valid_cancel_reservations_args(&TransactionArgs::Named(args)),
             Err(expected_error)
@@ -1264,11 +1264,11 @@ mod tests {
             CANCEL_RESERVATIONS_ARG_VALIDATOR.name => PublicKey::random(rng),
             CANCEL_RESERVATIONS_ARG_DELEGATORS.name => rng.gen::<u8>(),
         };
-        let expected_error = InvalidTransactionV1::UnexpectedArgType {
-            arg_name: CANCEL_RESERVATIONS_ARG_DELEGATORS.name.to_string(),
-            expected: vec![CLType::List(Box::new(CLType::Any))],
-            got: CLType::U8,
-        };
+        let expected_error = InvalidTransactionV1::unexpected_arg_type(
+            CANCEL_RESERVATIONS_ARG_DELEGATORS.name.to_string(),
+            vec![CLType::List(Box::new(CLType::Any))],
+            CLType::U8,
+        );
         assert_eq!(
             has_valid_cancel_reservations_args(&TransactionArgs::Named(args)),
             Err(expected_error)

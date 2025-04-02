@@ -2732,7 +2732,7 @@ async fn should_reject_wasm_transaction_with_limited_too_big_payment() {
     assert!(matches!(
         result,
         Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
-            InvalidTransactionV1::NoWasmLaneMatchesTransaction()
+            InvalidTransactionV1::NoLaneMatch
         )))
     ));
 }
@@ -2742,8 +2742,8 @@ async fn should_reject_deploy_with_payment_amount_larger_than_max_wasm_lane_limi
     let result = run_transaction_acceptor(TestScenario::WasmDeployWithTooBigPayment).await;
     assert!(matches!(
         result,
-        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
-            InvalidTransactionV1::NoWasmLaneMatchesTransaction()
-        )))
+        Err(super::Error::InvalidTransaction(
+            InvalidTransaction::Deploy(InvalidDeploy::NoLaneMatch)
+        ))
     ));
 }
