@@ -379,7 +379,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -650,7 +650,7 @@ dependencies = [
  "cargo_metadata 0.19.2",
  "casper-sdk 0.1.0",
  "casper-sdk-sys 0.1.0",
- "clap 4.5.34",
+ "clap 4.5.35",
  "clap-cargo",
  "include_dir",
  "libloading",
@@ -801,7 +801,7 @@ dependencies = [
  "casper-wasm",
  "casper-wasm-utils",
  "casper-wasmi",
- "clap 4.5.34",
+ "clap 4.5.35",
  "criterion",
  "datasize",
  "either",
@@ -880,7 +880,7 @@ dependencies = [
 [[package]]
 name = "casper-executor-wasm-common"
 version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git?branch=dev#ade6b97a0aaa14014bd8913e9a081b39e0fc569c"
+source = "git+https://github.com/casper-network/casper-node.git?branch=dev#5ecb8a33a47e8c156ade3328e4dbb03f9d8c2e7f"
 dependencies = [
  "bitflags 2.9.0",
  "blake2 0.10.6",
@@ -961,7 +961,7 @@ dependencies = [
 [[package]]
 name = "casper-macros"
 version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git?branch=dev#ade6b97a0aaa14014bd8913e9a081b39e0fc569c"
+source = "git+https://github.com/casper-network/casper-node.git?branch=dev#5ecb8a33a47e8c156ade3328e4dbb03f9d8c2e7f"
 dependencies = [
  "blake2-rfc",
  "casper-executor-wasm-common 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
@@ -1081,7 +1081,7 @@ dependencies = [
  "casper-macros 0.1.0",
  "casper-sdk-sys 0.1.0",
  "cfg-if 1.0.0",
- "clap 4.5.34",
+ "clap 4.5.35",
  "const-fnv1a-hash",
  "impl-trait-for-tuples",
  "linkme",
@@ -1095,7 +1095,7 @@ dependencies = [
 [[package]]
 name = "casper-sdk"
 version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git?branch=dev#ade6b97a0aaa14014bd8913e9a081b39e0fc569c"
+source = "git+https://github.com/casper-network/casper-node.git?branch=dev#5ecb8a33a47e8c156ade3328e4dbb03f9d8c2e7f"
 dependencies = [
  "bitflags 2.9.0",
  "borsh",
@@ -1135,7 +1135,7 @@ version = "0.1.0"
 [[package]]
 name = "casper-sdk-sys"
 version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git?branch=dev#ade6b97a0aaa14014bd8913e9a081b39e0fc569c"
+source = "git+https://github.com/casper-network/casper-node.git?branch=dev#5ecb8a33a47e8c156ade3328e4dbb03f9d8c2e7f"
 
 [[package]]
 name = "casper-storage"
@@ -1224,7 +1224,7 @@ dependencies = [
 name = "casper-updater"
 version = "0.3.0"
 dependencies = [
- "clap 4.5.34",
+ "clap 4.5.35",
  "once_cell",
  "regex",
  "semver",
@@ -1429,9 +1429,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.34"
+version = "4.5.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e958897981290da2a852763fe9cdb89cd36977a5d729023127095fa94d95e2ff"
+checksum = "d8aa86934b44c19c50f87cc2790e19f54f7a67aedb64101c2e1a2e5ecfb73944"
 dependencies = [
  "clap_builder",
  "clap_derive 4.5.32",
@@ -1445,14 +1445,14 @@ checksum = "23b2ea69cefa96b848b73ad516ad1d59a195cdf9263087d977f648a818c8b43e"
 dependencies = [
  "anstyle",
  "cargo_metadata 0.18.1",
- "clap 4.5.34",
+ "clap 4.5.35",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.5.34"
+version = "4.5.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83b0f35019843db2160b5bb19ae09b4e6411ac33fc6a712003c33e03090e2489"
+checksum = "2414dbb2dd0695280da6ea9261e327479e9d37b0630f6b53ba2a11c60c679fd9"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1753,7 +1753,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
- "clap 4.5.34",
+ "clap 4.5.35",
  "criterion-plot",
  "is-terminal",
  "itertools 0.10.5",
@@ -2728,9 +2728,9 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11faaf5a5236997af9848be0bef4db95824b1d534ebc64d0f0c6cf3e67bd38dc"
+checksum = "7ced92e76e966ca2fd84c8f7aa01a4aea65b0eb6648d72f7c8f3e2764a67fece"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -3735,6 +3735,15 @@ dependencies = [
 
 [[package]]
 name = "itertools"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -3750,10 +3759,11 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
 name = "jobserver"
-version = "0.1.32"
+version = "0.1.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48d1dbcbbeb6a7fec7e059840aa538bd62aaccf972c7346c4d9d2059312853d0"
+checksum = "38f262f097c174adebe41eb73d66ae9c06b2844fb0da69969647bbddd9b0538a"
 dependencies = [
+ "getrandom 0.3.2",
  "libc",
 ]
 
@@ -5612,9 +5622,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "1.0.4"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a04a32fb43fcdef85b977ce7f77a150805e4b2ea1f2656898d4a547dde78df6"
+checksum = "d97817398dd4bb2e6da002002db259209759911da105da92bec29ccb12cf58bf"
 dependencies = [
  "bitflags 2.9.0",
  "errno",
@@ -7509,12 +7519,12 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.227.1"
+version = "0.228.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80bb72f02e7fbf07183443b27b0f3d4144abf8c114189f2e088ed95b696a7822"
+checksum = "05d30290541f2d4242a162bbda76b8f2d8b1ac59eab3568ed6f2327d52c9b2c4"
 dependencies = [
  "leb128fmt",
- "wasmparser 0.227.1",
+ "wasmparser 0.228.0",
 ]
 
 [[package]]
@@ -7714,9 +7724,9 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.227.1"
+version = "0.228.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f51cad774fb3c9461ab9bccc9c62dfb7388397b5deda31bf40e8108ccd678b2"
+checksum = "4abf1132c1fdf747d56bbc1bb52152400c70f336870f968b85e89ea422198ae3"
 dependencies = [
  "bitflags 2.9.0",
  "indexmap 2.8.0",
@@ -7736,22 +7746,22 @@ dependencies = [
 
 [[package]]
 name = "wast"
-version = "227.0.1"
+version = "228.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85c14e5042b16c9d267da3b9b0f4529870455178415286312c25c34dfc1b2816"
+checksum = "9e5aae124478cb51439f6587f074a3a5e835afd22751c59a87b2e2a882727c97"
 dependencies = [
  "bumpalo",
  "leb128fmt",
  "memchr",
  "unicode-width 0.2.0",
- "wasm-encoder 0.227.1",
+ "wasm-encoder 0.228.0",
 ]
 
 [[package]]
 name = "wat"
-version = "1.227.1"
+version = "1.228.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3d394d5bef7006ff63338d481ca10f1af76601e65ebdf5ed33d29302994e9cc"
+checksum = "7ec29c89a8d055df988de7236483bf569988ac3d6905899f6af5ef920f9385ad"
 dependencies = [
  "wast",
 ]
