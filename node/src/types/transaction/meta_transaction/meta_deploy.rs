@@ -1,13 +1,11 @@
 use datasize::DataSize;
 use serde::Serialize;
 
-use crate::types::transaction::meta_transaction::lane_id::get_lane_for_non_install_wasm;
 #[cfg(test)]
 use casper_types::TransactionLaneDefinition;
 use casper_types::{
-    bytesrepr::ToBytes, system::auction::ARG_AMOUNT, Deploy, ExecutableDeployItem, GasLimited,
-    InvalidDeploy, InvalidTransaction, Phase, PricingHandling, PricingMode, TransactionV1Config,
-    MINT_LANE_ID, U512,
+    calculate_lane_id_for_deploy, Deploy, ExecutableDeployItem, InvalidTransaction,
+    PricingHandling, TransactionV1Config,
 };
 #[derive(Clone, Debug, Serialize, DataSize)]
 pub(crate) struct MetaDeploy {
@@ -22,50 +20,8 @@ impl MetaDeploy {
         pricing_handling: PricingHandling,
         config: &TransactionV1Config,
     ) -> Result<Self, InvalidTransaction> {
-        if deploy.is_transfer() {
-            return Ok(MetaDeploy {
-                deploy,
-                lane_id: MINT_LANE_ID,
-            });
-        }
-
-        let size_estimation = deploy.serialized_length() as u64;
-        let runtime_args_size = (deploy.payment().args().serialized_length()
-            + deploy.session().args().serialized_length()) as u64;
-
-        let gas_price_tolerance = deploy.gas_price_tolerance()?;
-        let pricing_mode = match pricing_handling {
-            PricingHandling::PaymentLimited => {
-                let is_standard_payment = deploy.payment().is_standard_payment(Phase::Payment);
-                let value = deploy
-                    .payment()
-                    .args()
-                    .get(ARG_AMOUNT)
-                    .ok_or(InvalidDeploy::MissingPaymentAmount)?;
-                let payment_amount = value
-                    .clone()
-                    .into_t::<U512>()
-                    .map_err(|_| InvalidDeploy::FailedToParsePaymentAmount)?
-                    .as_u64();
-                PricingMode::PaymentLimited {
-                    payment_amount,
-                    gas_price_tolerance,
-                    standard_payment: is_standard_payment,
-                }
-            }
-            PricingHandling::Fixed => PricingMode::Fixed {
-                gas_price_tolerance,
-                // TODO: Recheck value before switching to fixed.
-                additional_computation_factor: 0,
-            },
-        };
-
-        let lane_id = get_lane_for_non_install_wasm(
-            config,
-            &pricing_mode,
-            size_estimation,
-            runtime_args_size,
-        )?;
+        let lane_id = calculate_lane_id_for_deploy(&deploy, pricing_handling, config)
+            .map_err(InvalidTransaction::Deploy)?;
         Ok(MetaDeploy { deploy, lane_id })
     }
 

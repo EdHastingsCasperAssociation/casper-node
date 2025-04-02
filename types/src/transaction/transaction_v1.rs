@@ -8,16 +8,16 @@ pub mod transaction_v1_payload;
 
 #[cfg(any(feature = "std", feature = "testing", test))]
 use super::InitiatorAddrAndSecretKey;
-#[cfg(any(all(feature = "std", feature = "testing"), test))]
-use super::{TransactionEntryPoint, TransactionTarget};
 use crate::{
     bytesrepr::{self, Error, FromBytes, ToBytes},
     crypto,
 };
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
+use crate::{testing::TestRng, TransactionConfig, LARGE_WASM_LANE_ID};
+#[cfg(any(feature = "std", test))]
 use crate::{
-    testing::TestRng, TransactionConfig, AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID,
-    LARGE_WASM_LANE_ID, MINT_LANE_ID,
+    TransactionEntryPoint, TransactionTarget, TransactionV1Config, AUCTION_LANE_ID,
+    INSTALL_UPGRADE_LANE_ID, MINT_LANE_ID,
 };
 #[cfg(any(feature = "std", test, feature = "testing"))]
 use alloc::collections::BTreeMap;
@@ -620,5 +620,135 @@ impl Ord for TransactionV1 {
 impl PartialOrd for TransactionV1 {
     fn partial_cmp(&self, other: &TransactionV1) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+#[cfg(any(feature = "std", test))]
+/// Calculates the laned based on properties of the transaction
+pub fn calculate_transaction_lane(
+    entry_point: &TransactionEntryPoint,
+    target: &TransactionTarget,
+    pricing_mode: &PricingMode,
+    config: &TransactionV1Config,
+    size_estimation: u64,
+    runtime_args_size: u64,
+) -> Result<u8, InvalidTransactionV1> {
+    use crate::TransactionRuntimeParams;
+
+    use super::get_lane_for_non_install_wasm;
+
+    match target {
+        TransactionTarget::Native => match entry_point {
+            TransactionEntryPoint::Transfer | TransactionEntryPoint::Burn => Ok(MINT_LANE_ID),
+            TransactionEntryPoint::AddBid
+            | TransactionEntryPoint::WithdrawBid
+            | TransactionEntryPoint::Delegate
+            | TransactionEntryPoint::Undelegate
+            | TransactionEntryPoint::Redelegate
+            | TransactionEntryPoint::ActivateBid
+            | TransactionEntryPoint::ChangeBidPublicKey
+            | TransactionEntryPoint::AddReservations
+            | TransactionEntryPoint::CancelReservations => Ok(AUCTION_LANE_ID),
+            TransactionEntryPoint::Call => Err(InvalidTransactionV1::EntryPointCannotBeCall),
+            TransactionEntryPoint::Custom(_) => {
+                Err(InvalidTransactionV1::EntryPointCannotBeCustom {
+                    entry_point: entry_point.clone(),
+                })
+            }
+        },
+        TransactionTarget::Stored { .. } => match entry_point {
+            TransactionEntryPoint::Custom(_) => get_lane_for_non_install_wasm(
+                config,
+                pricing_mode,
+                size_estimation,
+                runtime_args_size,
+            )
+            .map_err(Into::into),
+            TransactionEntryPoint::Call
+            | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
+            | TransactionEntryPoint::AddBid
+            | TransactionEntryPoint::WithdrawBid
+            | TransactionEntryPoint::Delegate
+            | TransactionEntryPoint::Undelegate
+            | TransactionEntryPoint::Redelegate
+            | TransactionEntryPoint::ActivateBid
+            | TransactionEntryPoint::ChangeBidPublicKey
+            | TransactionEntryPoint::AddReservations
+            | TransactionEntryPoint::CancelReservations => {
+                Err(InvalidTransactionV1::EntryPointMustBeCustom {
+                    entry_point: entry_point.clone(),
+                })
+            }
+        },
+        TransactionTarget::Session {
+            is_install_upgrade,
+            runtime: TransactionRuntimeParams::VmCasperV1,
+            ..
+        } => match entry_point {
+            TransactionEntryPoint::Call => {
+                if *is_install_upgrade {
+                    Ok(INSTALL_UPGRADE_LANE_ID)
+                } else {
+                    get_lane_for_non_install_wasm(
+                        config,
+                        pricing_mode,
+                        size_estimation,
+                        runtime_args_size,
+                    )
+                    .map_err(Into::into)
+                }
+            }
+            TransactionEntryPoint::Custom(_)
+            | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
+            | TransactionEntryPoint::AddBid
+            | TransactionEntryPoint::WithdrawBid
+            | TransactionEntryPoint::Delegate
+            | TransactionEntryPoint::Undelegate
+            | TransactionEntryPoint::Redelegate
+            | TransactionEntryPoint::ActivateBid
+            | TransactionEntryPoint::ChangeBidPublicKey
+            | TransactionEntryPoint::AddReservations
+            | TransactionEntryPoint::CancelReservations => {
+                Err(InvalidTransactionV1::EntryPointMustBeCall {
+                    entry_point: entry_point.clone(),
+                })
+            }
+        },
+        TransactionTarget::Session {
+            is_install_upgrade,
+            runtime: TransactionRuntimeParams::VmCasperV2 { .. },
+            ..
+        } => match entry_point {
+            TransactionEntryPoint::Call | TransactionEntryPoint::Custom(_) => {
+                if *is_install_upgrade {
+                    Ok(INSTALL_UPGRADE_LANE_ID)
+                } else {
+                    get_lane_for_non_install_wasm(
+                        config,
+                        pricing_mode,
+                        size_estimation,
+                        runtime_args_size,
+                    )
+                    .map_err(Into::into)
+                }
+            }
+            TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
+            | TransactionEntryPoint::AddBid
+            | TransactionEntryPoint::WithdrawBid
+            | TransactionEntryPoint::Delegate
+            | TransactionEntryPoint::Undelegate
+            | TransactionEntryPoint::Redelegate
+            | TransactionEntryPoint::ActivateBid
+            | TransactionEntryPoint::ChangeBidPublicKey
+            | TransactionEntryPoint::AddReservations
+            | TransactionEntryPoint::CancelReservations => {
+                Err(InvalidTransactionV1::EntryPointMustBeCall {
+                    entry_point: entry_point.clone(),
+                })
+            }
+        },
     }
 }
