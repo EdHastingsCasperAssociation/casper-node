@@ -412,7 +412,7 @@ where
     ///
     /// Note: Currently, there is no `join` or `merge` function to bring changes from a fork back to
     /// the main `TrackingCopy`. Therefore, forking should be done repeatedly, which is
-    /// sub-optimal and will be improved in the future.
+    /// suboptimal and will be improved in the future.
     pub fn fork(&self) -> TrackingCopy<&TrackingCopy<R>> {
         TrackingCopy::new(self, self.max_query_depth, self.enable_addressable_entity)
     }
@@ -514,18 +514,7 @@ where
 
     /// Gets the set of keys in the state by a byte prefix.
     fn get_by_byte_prefix(&self, byte_prefix: &[u8]) -> Result<BTreeSet<Key>, TrackingCopyError> {
-        let keys = match self.reader.keys_with_prefix(byte_prefix) {
-            Ok(ret) => ret,
-            Err(err) => return Err(TrackingCopyError::Storage(err)),
-        };
-
-        let ret = keys
-            .into_iter()
-            // don't include keys marked for pruning
-            .filter(|key| !self.cache.is_pruned(key))
-            // there may be newly inserted keys which have not been committed yet
-            .chain(self.cache.get_muts_cached_by_byte_prefix(byte_prefix))
-            .collect();
+        let ret = self.keys_with_prefix(byte_prefix)?.into_iter().collect();
         Ok(ret)
     }
 
@@ -551,8 +540,7 @@ where
         Ok(None)
     }
 
-    /// Writes `value` under `key`. Note that the write is only cached, and the global state itself
-    /// remains unmodified.
+    /// Writes `value` under `key`. Note that the written value is only cached.
     pub fn write(&mut self, key: Key, value: StoredValue) {
         let normalized_key = key.normalize();
         self.cache.insert_write(normalized_key, value.clone());
@@ -897,8 +885,17 @@ impl<R: StateReader<Key, StoredValue>> StateReader<Key, StoredValue> for &Tracki
         self.reader.read_with_proof(key)
     }
 
-    fn keys_with_prefix(&self, prefix: &[u8]) -> Result<Vec<Key>, Self::Error> {
-        self.reader.keys_with_prefix(prefix)
+    fn keys_with_prefix(&self, byte_prefix: &[u8]) -> Result<Vec<Key>, Self::Error> {
+        let keys = self.reader.keys_with_prefix(byte_prefix)?;
+
+        let ret = keys
+            .into_iter()
+            // don't include keys marked for pruning
+            .filter(|key| !self.cache.is_pruned(key))
+            // there may be newly inserted keys which have not been committed yet
+            .chain(self.cache.get_muts_cached_by_byte_prefix(byte_prefix))
+            .collect();
+        Ok(ret)
     }
 }
 
@@ -1112,10 +1109,7 @@ pub fn new_temporary_tracking_copy(
         .expect("Checkout should not throw errors.")
         .expect("Root hash should exist.");
 
-    let query_depth = match max_query_depth {
-        None => DEFAULT_MAX_QUERY_DEPTH,
-        Some(depth) => depth,
-    };
+    let query_depth = max_query_depth.unwrap_or(DEFAULT_MAX_QUERY_DEPTH);
 
     (
         TrackingCopy::new(reader, query_depth, enable_addressable_entity),
