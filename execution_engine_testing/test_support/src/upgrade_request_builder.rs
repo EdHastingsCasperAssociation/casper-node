@@ -23,6 +23,7 @@ pub struct UpgradeRequestBuilder {
     global_state_update: BTreeMap<Key, StoredValue>,
     chainspec_registry: ChainspecRegistry,
     fee_handling: FeeHandling,
+    validator_minimum_bid_amount: u64,
     maximum_delegation_amount: u64,
     minimum_delegation_amount: u64,
     enable_addressable_entity: bool,
@@ -124,6 +125,12 @@ impl UpgradeRequestBuilder {
         self
     }
 
+    /// Set the validator minimum bid amount.
+    pub fn with_validator_minimum_bid_amount(mut self, validator_minimum_bid_amount: u64) -> Self {
+        self.validator_minimum_bid_amount = validator_minimum_bid_amount;
+        self
+    }
+
     /// Sets the maximum delegation for the validators bid during migration.
     pub fn with_maximum_delegation_amount(mut self, maximum_delegation_amount: u64) -> Self {
         self.maximum_delegation_amount = maximum_delegation_amount;
@@ -159,6 +166,7 @@ impl UpgradeRequestBuilder {
             self.global_state_update,
             self.chainspec_registry,
             self.fee_handling,
+            self.validator_minimum_bid_amount,
             self.maximum_delegation_amount,
             self.minimum_delegation_amount,
             self.enable_addressable_entity,
@@ -183,6 +191,7 @@ impl Default for UpgradeRequestBuilder {
             global_state_update: Default::default(),
             chainspec_registry: ChainspecRegistry::new_with_optional_global_state(&[], None),
             fee_handling: FeeHandling::default(),
+            validator_minimum_bid_amount: 2_500_000_000_000u64,
             maximum_delegation_amount: u64::MAX,
             minimum_delegation_amount: 0,
             enable_addressable_entity: false,

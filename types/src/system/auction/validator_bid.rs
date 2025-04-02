@@ -54,6 +54,11 @@ impl ValidatorBid {
         self.minimum_delegation_amount = minimum_delegation_amount;
         self
     }
+
+    pub fn with_inactive(mut self, inactive: bool) -> Self {
+        self.inactive = inactive;
+        self
+    }
 }
 
 impl ValidatorBid {

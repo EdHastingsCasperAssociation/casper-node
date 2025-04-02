@@ -190,6 +190,7 @@ impl Chainspec {
             }
         };
         let fee_handling = self.core_config.fee_handling;
+        let validator_minimum_bid_amount = self.core_config.minimum_bid_amount;
         let maximum_delegation_amount = self.core_config.maximum_delegation_amount;
         let minimum_delegation_amount = self.core_config.minimum_delegation_amount;
         let enable_addressable_entity = self.core_config.enable_addressable_entity;
@@ -209,6 +210,7 @@ impl Chainspec {
             global_state_update,
             chainspec_registry,
             fee_handling,
+            validator_minimum_bid_amount,
             maximum_delegation_amount,
             minimum_delegation_amount,
             enable_addressable_entity,

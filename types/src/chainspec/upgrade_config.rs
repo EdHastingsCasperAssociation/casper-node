@@ -24,6 +24,7 @@ pub struct ProtocolUpgradeConfig {
     global_state_update: BTreeMap<Key, StoredValue>,
     chainspec_registry: ChainspecRegistry,
     fee_handling: FeeHandling,
+    validator_minimum_bid_amount: u64,
     maximum_delegation_amount: u64,
     minimum_delegation_amount: u64,
     enable_addressable_entity: bool,
@@ -47,6 +48,7 @@ impl ProtocolUpgradeConfig {
         global_state_update: BTreeMap<Key, StoredValue>,
         chainspec_registry: ChainspecRegistry,
         fee_handling: FeeHandling,
+        validator_minimum_bid_amount: u64,
         maximum_delegation_amount: u64,
         minimum_delegation_amount: u64,
         enable_addressable_entity: bool,
@@ -66,6 +68,7 @@ impl ProtocolUpgradeConfig {
             global_state_update,
             chainspec_registry,
             fee_handling,
+            validator_minimum_bid_amount,
             maximum_delegation_amount,
             minimum_delegation_amount,
             enable_addressable_entity,
@@ -145,6 +148,11 @@ impl ProtocolUpgradeConfig {
     /// Fee handling setting.
     pub fn fee_handling(&self) -> FeeHandling {
         self.fee_handling
+    }
+
+    /// Validator minimum bid amount
+    pub fn validator_minimum_bid_amount(&self) -> u64 {
+        self.validator_minimum_bid_amount
     }
 
     /// Maximum delegation amount for validator.

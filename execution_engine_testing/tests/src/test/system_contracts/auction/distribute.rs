@@ -2957,6 +2957,7 @@ fn should_distribute_delegation_rate_full_after_upgrading() {
             .with_current_protocol_version(old_protocol_version)
             .with_new_protocol_version(new_protocol_version)
             .with_activation_point(DEFAULT_ACTIVATION_POINT)
+            .with_validator_minimum_bid_amount(1u64)
             .with_new_round_seigniorage_rate(new_round_seigniorage_rate)
             .build()
     };

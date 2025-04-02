@@ -231,8 +231,8 @@ extern "C" {
     ///
     /// # Arguments
     ///
-    /// * `output_size` - pointer to a value where the size of the account hash will be set.
-    pub fn casper_get_caller(output_size: *mut usize) -> i32;
+    /// * `output_size_ptr` - pointer to a value where the size of the account hash will be set.
+    pub fn casper_get_caller(output_size_ptr: *mut usize) -> i32;
     /// This function gets the timestamp which will be in the block this deploy is
     /// included in. The return value is always a 64-bit unsigned integer,
     /// representing the number of milliseconds since the Unix epoch. It is up to
@@ -535,7 +535,7 @@ extern "C" {
     /// * `message_topics_size` - size of serialized BTreeMap<String, MessageTopicOperation>
     /// * `output_ptr` - pointer to a memory where host assigned contract hash is set to
     /// * `output_size` - expected width of output (currently 32)
-    pub fn casper_add_package_version(
+    pub fn casper_add_package_version_with_message_topics(
         package_hash_ptr: *const u8,
         package_hash_size: usize,
         version_ptr: *const u32,
