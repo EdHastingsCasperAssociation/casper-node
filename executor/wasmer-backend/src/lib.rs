@@ -8,9 +8,9 @@ use std::{
 
 use bytes::Bytes;
 use casper_executor_wasm_common::error::TrapCode;
-use casper_executor_wasm_host::{context::Context, host};
+use casper_executor_wasm_host::context::Context;
 use casper_executor_wasm_interface::{
-    executor::Executor, u32_from_host_result, Caller, Config, ExportError, GasUsage,
+    executor::Executor, Caller, Config, ExportError, GasUsage,
     InterfaceVersion, MeteringPoints, VMError, VMResult, WasmInstance, WasmPreparationError,
 };
 use casper_storage::global_state::GlobalStateReader;
@@ -21,9 +21,8 @@ use middleware::{
 use once_cell::sync::Lazy;
 use regex::Regex;
 use wasmer::{
-    AsStoreMut, AsStoreRef, CompilerConfig, Engine, Function, FunctionEnv, FunctionEnvMut, Imports,
+    AsStoreMut, AsStoreRef, CompilerConfig, Engine, Function, FunctionEnv, FunctionEnvMut,
     Instance, Memory, MemoryView, Module, RuntimeError, Store, StoreMut, Table, TypedFunction,
-    WasmPtr,
 };
 use wasmer_compiler_singlepass::Singlepass;
 use wasmer_middlewares::metering;
@@ -316,345 +315,21 @@ where
             &mut store,
             wasmer_types::MemoryType {
                 minimum: wasmer_types::Pages(17),
-                maximum: None, //Some(wasmer_types::Pages(17 * 4)),
+                maximum: None,
                 shared: false,
             },
         )
         .map_err(|error| WasmPreparationError::Memory(error.to_string()))?;
 
         let imports = {
-            let mut imports = Imports::new();
+            let mut imports = imports::generate_casper_imports(&mut store, &function_env);
+
             imports.define("env", "memory", memory.clone());
 
             imports.define(
                 "env",
                 "interface_version_1",
                 Function::new_typed(&mut store, || {}),
-            );
-
-            imports.define(
-                "env",
-                "casper_write",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     key_space: u64,
-                     key_ptr: u32,
-                     key_size: u32,
-                     value_ptr: u32,
-                     value_size: u32| {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_write(
-                            wasmer_caller,
-                            key_space,
-                            key_ptr,
-                            key_size,
-                            value_ptr,
-                            value_size,
-                        )
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_read",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     key_space: u64,
-                     key_ptr: u32,
-                     key_size: u32,
-                     info_ptr: u32,
-                     cb_alloc: u32,
-                     cb_ctx: u32| {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_read(
-                            wasmer_caller,
-                            key_space,
-                            key_ptr,
-                            key_size,
-                            info_ptr,
-                            cb_alloc,
-                            cb_ctx,
-                        )
-                    },
-                ),
-            );
-            imports.define(
-                "env",
-                "casper_print",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>, message_ptr: u32, message_size: u32| {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_print(wasmer_caller, message_ptr, message_size)
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_return",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>, flags, data_ptr, data_len| {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_return(wasmer_caller, flags, data_ptr, data_len)
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_copy_input",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     cb_alloc: u32,
-                     cb_ctx: u32|
-                     -> VMResult<u32> {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_copy_input(wasmer_caller, cb_alloc, cb_ctx)
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_return",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     flags: u32,
-                     data_ptr: u32,
-                     data_len: u32| {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_return(wasmer_caller, flags, data_ptr, data_len)
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_create",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     code_ptr: u32,
-                     code_size: u32,
-                     value: WasmPtr<u128>,
-                     entry_point_ptr: u32,
-                     entry_point_len: u32,
-                     input_ptr: u32,
-                     input_len: u32,
-                     seed_ptr: u32,
-                     seed_len: u32,
-                     result_ptr: u32| {
-                        let wasmer_caller = WasmerCaller { env };
-
-                        match host::casper_create(
-                            wasmer_caller,
-                            code_ptr,
-                            code_size,
-                            value.offset(),
-                            entry_point_ptr,
-                            entry_point_len,
-                            input_ptr,
-                            input_len,
-                            seed_ptr,
-                            seed_len,
-                            result_ptr,
-                        ) {
-                            Ok(host_result) => Ok(u32_from_host_result(host_result)),
-                            Err(error) => Err(error),
-                        }
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_call",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     address_ptr: u32,
-                     address_len: u32,
-                     value: WasmPtr<u128>,
-                     entry_point_ptr: u32,
-                     entry_point_len: u32,
-                     input_ptr: u32,
-                     input_len: u32,
-                     cb_alloc: u32,
-                     cb_ctx: u32| {
-                        let wasmer_caller = WasmerCaller { env };
-                        match host::casper_call(
-                            wasmer_caller,
-                            address_ptr,
-                            address_len,
-                            value.offset(),
-                            entry_point_ptr,
-                            entry_point_len,
-                            input_ptr,
-                            input_len,
-                            cb_alloc,
-                            cb_ctx,
-                        ) {
-                            Ok(host_result) => Ok(u32_from_host_result(host_result)),
-                            Err(error) => Err(error),
-                        }
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_env_caller",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>, dest_ptr, dest_len, entity_kind_ptr| {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_env_caller(wasmer_caller, dest_ptr, dest_len, entity_kind_ptr)
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_env_transferred_value",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     output: WasmPtr<u128>|
-                     -> Result<(), VMError> {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_env_transferred_value(wasmer_caller, output.offset())?;
-                        Ok(())
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_env_balance",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     entity_kind,
-                     entity_addr,
-                     entity_addr_len,
-                     output_ptr: WasmPtr<u128>| {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_env_balance(
-                            wasmer_caller,
-                            entity_kind,
-                            entity_addr,
-                            entity_addr_len,
-                            output_ptr.offset(), // TODO: Abstracted WasmPtr
-                        )
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_transfer",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     address_ptr,
-                     address_len,
-                     amount: WasmPtr<u128>| {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_transfer(
-                            wasmer_caller,
-                            address_ptr,
-                            address_len,
-                            amount.offset(),
-                        )
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_upgrade",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     code_ptr,
-                     code_size,
-                     manifest_ptr,
-                     selector,
-                     input_ptr,
-                     input_len|
-                     -> Result<u32, VMError> {
-                        let wasmer_caller = WasmerCaller { env };
-                        // match
-                        match host::casper_upgrade(
-                            wasmer_caller,
-                            code_ptr,
-                            code_size,
-                            manifest_ptr,
-                            selector,
-                            input_ptr,
-                            input_len,
-                        ) {
-                            Ok(host_result) => Ok(u32_from_host_result(host_result)),
-                            Err(error) => Err(error),
-                        }
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_env_block_time",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>| {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_env_block_time(wasmer_caller)
-                    },
-                ),
-            );
-
-            imports.define(
-                "env",
-                "casper_emit",
-                Function::new_typed_with_env(
-                    &mut store,
-                    &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     topic_ptr,
-                     topic_size,
-                     payload_ptr,
-                     payload_size| {
-                        let wasmer_caller = WasmerCaller { env };
-                        host::casper_emit(
-                            wasmer_caller,
-                            topic_ptr,
-                            topic_size,
-                            payload_ptr,
-                            payload_size,
-                        )
-                    },
-                ),
             );
 
             imports

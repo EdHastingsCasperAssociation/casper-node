@@ -18,6 +18,11 @@ macro_rules! for_each_host_function {
                 value_ptr: *const u8,
                 value_size: usize,
             ) -> u32;
+            pub fn casper_remove(
+                key_space: u64,
+                key_ptr: *const u8,
+                key_size: usize,
+            ) -> u32;
             pub fn casper_print(msg_ptr: *const u8, msg_size: usize,);
             pub fn casper_return(flags: u32, data_ptr: *const u8, data_len: usize,);
             pub fn casper_copy_input(

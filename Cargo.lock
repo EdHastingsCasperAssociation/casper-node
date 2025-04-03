@@ -937,6 +937,7 @@ dependencies = [
  "casper-types",
  "once_cell",
  "regex",
+ "tracing",
  "wasmer",
  "wasmer-compiler-singlepass",
  "wasmer-middlewares",

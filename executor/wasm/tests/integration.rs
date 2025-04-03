@@ -851,6 +851,7 @@ fn host_functions_consume_gas() {
     assert_consumes_gas("write");
 }
 
+#[allow(dead_code)]
 fn write_n_bytes_at_limit(
     bytes_len: u64,
     gas_limit: u64,
