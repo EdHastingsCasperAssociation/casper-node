@@ -3,7 +3,10 @@ pub mod executor;
 use bytes::Bytes;
 use thiserror::Error;
 
-use casper_executor_wasm_common::flags::ReturnFlags;
+use casper_executor_wasm_common::{
+    error::{CallError, TrapCode, CALLEE_SUCCEEDED},
+    flags::ReturnFlags,
+};
 
 /// Interface version for the Wasm host functions.
 ///
@@ -21,49 +24,13 @@ impl From<u32> for InterfaceVersion {
     }
 }
 
-const CALLEE_SUCCEED: u32 = 0;
-const CALLEE_REVERTED: u32 = 1;
-const CALLEE_TRAPPED: u32 = 2;
-const CALLEE_GAS_DEPLETED: u32 = 3;
-const CALLEE_NOT_CALLABLE: u32 = 4;
-
-/// Represents the result of a host function call.
-///
-/// 0 is used as a success.
-#[derive(Debug, Error)]
-pub enum HostError {
-    /// Callee contract reverted.
-    #[error("callee reverted")]
-    CalleeReverted,
-    /// Called contract trapped.
-    #[error("callee trapped: {0}")]
-    CalleeTrapped(TrapCode),
-    /// Called contract reached gas limit.
-    #[error("callee gas depleted")]
-    CalleeGasDepleted,
-    /// Called contract is not callable.
-    #[error("not callable")]
-    NotCallable,
-}
-
-pub type HostResult = Result<(), HostError>;
-
-impl HostError {
-    /// Converts the host error into a u32.
-    fn into_u32(self) -> u32 {
-        match self {
-            HostError::CalleeReverted => CALLEE_REVERTED,
-            HostError::CalleeTrapped(_) => CALLEE_TRAPPED,
-            HostError::CalleeGasDepleted => CALLEE_GAS_DEPLETED,
-            HostError::NotCallable => CALLEE_NOT_CALLABLE,
-        }
-    }
-}
+pub type HostResult = Result<(), CallError>;
 
 /// Converts a host result into a u32.
+#[must_use]
 pub fn u32_from_host_result(result: HostResult) -> u32 {
     match result {
-        Ok(_) => CALLEE_SUCCEED,
+        Ok(()) => CALLEE_SUCCEEDED,
         Err(host_error) => host_error.into_u32(),
     }
 }
@@ -101,38 +68,6 @@ pub enum MemoryError {
     /// String is not valid UTF-8.
     #[error("string is not valid utf-8")]
     NonUtf8String,
-}
-
-/// Wasm trap code.
-#[derive(Debug, Error)]
-pub enum TrapCode {
-    /// Trap code for out of bounds memory access.
-    #[error("call stack exhausted")]
-    StackOverflow,
-    /// Trap code for out of bounds memory access.
-    #[error("out of bounds memory access")]
-    MemoryOutOfBounds,
-    /// Trap code for out of bounds table access.
-    #[error("undefined element: out of bounds table access")]
-    TableAccessOutOfBounds,
-    /// Trap code for indirect call to null.
-    #[error("uninitialized element")]
-    IndirectCallToNull,
-    /// Trap code for indirect call type mismatch.
-    #[error("indirect call type mismatch")]
-    BadSignature,
-    /// Trap code for integer overflow.
-    #[error("integer overflow")]
-    IntegerOverflow,
-    /// Trap code for division by zero.
-    #[error("integer divide by zero")]
-    IntegerDivisionByZero,
-    /// Trap code for invalid conversion to integer.
-    #[error("invalid conversion to integer")]
-    BadConversionToInteger,
-    /// Trap code for unreachable code reached triggered by unreachable instruction.
-    #[error("unreachable")]
-    UnreachableCodeReached,
 }
 
 /// The outcome of a call.
@@ -178,10 +113,12 @@ pub struct Config {
 }
 
 impl Config {
+    #[must_use]
     pub fn gas_limit(&self) -> u64 {
         self.gas_limit
     }
 
+    #[must_use]
     pub fn memory_limit(&self) -> u32 {
         self.memory_limit
     }
@@ -197,23 +134,27 @@ pub struct ConfigBuilder {
 
 impl ConfigBuilder {
     /// Create a new configuration builder.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Gas limit in units.
+    #[must_use]
     pub fn with_gas_limit(mut self, gas_limit: u64) -> Self {
         self.gas_limit = Some(gas_limit);
         self
     }
 
     /// Memory limit denominated in pages.
+    #[must_use]
     pub fn with_memory_limit(mut self, memory_limit: u32) -> Self {
         self.memory_limit = Some(memory_limit);
         self
     }
 
     /// Build the configuration.
+    #[must_use]
     pub fn build(self) -> Config {
         let gas_limit = self.gas_limit.expect("Required field missing: gas_limit");
         let memory_limit = self
@@ -295,6 +236,7 @@ pub struct GasUsage {
 }
 
 impl GasUsage {
+    #[must_use]
     pub fn new(gas_limit: u64, remaining_points: u64) -> Self {
         GasUsage {
             gas_limit,
@@ -302,15 +244,18 @@ impl GasUsage {
         }
     }
 
+    #[must_use]
     pub fn gas_spent(&self) -> u64 {
         debug_assert!(self.remaining_points <= self.gas_limit);
         self.gas_limit - self.remaining_points
     }
 
+    #[must_use]
     pub fn gas_limit(&self) -> u64 {
         self.gas_limit
     }
 
+    #[must_use]
     pub fn remaining_points(&self) -> u64 {
         self.remaining_points
     }

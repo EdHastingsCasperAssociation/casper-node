@@ -14,7 +14,7 @@ use casper_types::{
 use parking_lot::RwLock;
 use thiserror::Error;
 
-use crate::{GasUsage, HostError, WasmPreparationError};
+use crate::{CallError, GasUsage, WasmPreparationError};
 
 /// Request to execute a Wasm contract.
 pub struct ExecuteRequest {
@@ -73,36 +73,42 @@ pub struct ExecuteRequestBuilder {
 
 impl ExecuteRequestBuilder {
     /// Set the initiator's address.
+    #[must_use]
     pub fn with_initiator(mut self, initiator: AccountHash) -> Self {
         self.initiator = Some(initiator);
         self
     }
 
     /// Set the caller's key.
+    #[must_use]
     pub fn with_caller_key(mut self, caller_key: Key) -> Self {
         self.caller_key = Some(caller_key);
         self
     }
 
     /// Set the gas limit.
+    #[must_use]
     pub fn with_gas_limit(mut self, gas_limit: u64) -> Self {
         self.gas_limit = Some(gas_limit);
         self
     }
 
     /// Set the target for execution.
+    #[must_use]
     pub fn with_target(mut self, target: ExecutionKind) -> Self {
         self.target = Some(target);
         self
     }
 
     /// Pass input data.
+    #[must_use]
     pub fn with_input(mut self, input: Bytes) -> Self {
         self.input = Some(input);
         self
     }
 
     /// Pass input data that can be serialized.
+    #[must_use]
     pub fn with_serialized_input<T: BorshSerialize>(self, input: T) -> Self {
         let input = borsh::to_vec(&input)
             .map(Bytes::from)
@@ -111,12 +117,14 @@ impl ExecuteRequestBuilder {
     }
 
     /// Pass value to be sent to the contract.
+    #[must_use]
     pub fn with_transferred_value(mut self, value: u128) -> Self {
         self.value = Some(value);
         self
     }
 
     /// Set the transaction hash.
+    #[must_use]
     pub fn with_transaction_hash(mut self, transaction_hash: TransactionHash) -> Self {
         self.transaction_hash = Some(transaction_hash);
         self
@@ -126,6 +134,7 @@ impl ExecuteRequestBuilder {
     ///
     /// This can be either seeded and created as part of the builder or shared across chain of
     /// execution requests.
+    #[must_use]
     pub fn with_address_generator(mut self, address_generator: AddressGenerator) -> Self {
         self.address_generator = Some(Arc::new(RwLock::new(address_generator)));
         self
@@ -135,6 +144,7 @@ impl ExecuteRequestBuilder {
     ///
     /// This is useful when the address generator is shared across a chain of multiple execution
     /// requests.
+    #[must_use]
     pub fn with_shared_address_generator(
         mut self,
         address_generator: Arc<RwLock<AddressGenerator>>,
@@ -144,30 +154,35 @@ impl ExecuteRequestBuilder {
     }
 
     /// Set the chain name.
+    #[must_use]
     pub fn with_chain_name<T: Into<Arc<str>>>(mut self, chain_name: T) -> Self {
         self.chain_name = Some(chain_name.into());
         self
     }
 
     /// Set the block time.
+    #[must_use]
     pub fn with_block_time(mut self, block_time: BlockTime) -> Self {
         self.block_time = Some(block_time);
         self
     }
 
     /// Set the state hash.
+    #[must_use]
     pub fn with_state_hash(mut self, state_hash: Digest) -> Self {
         self.state_hash = Some(state_hash);
         self
     }
 
     /// Set the parent block hash.
+    #[must_use]
     pub fn with_parent_block_hash(mut self, parent_block_hash: BlockHash) -> Self {
         self.parent_block_hash = Some(parent_block_hash);
         self
     }
 
     /// Set the block height.
+    #[must_use]
     pub fn with_block_height(mut self, block_height: u64) -> Self {
         self.block_height = Some(block_height);
         self
@@ -214,7 +229,7 @@ impl ExecuteRequestBuilder {
 #[derive(Debug)]
 pub struct ExecuteResult {
     /// Error while executing Wasm: traps, memory access errors, etc.
-    pub host_error: Option<HostError>,
+    pub host_error: Option<CallError>,
     /// Output produced by the Wasm contract.
     pub output: Option<Bytes>,
     /// Gas usage.
@@ -237,7 +252,7 @@ impl ExecuteResult {
         self.effects
     }
 
-    pub fn host_error(&self) -> Option<&HostError> {
+    pub fn host_error(&self) -> Option<&CallError> {
         self.host_error.as_ref()
     }
 
@@ -254,20 +269,39 @@ impl ExecuteResult {
 #[derive(Debug)]
 pub struct ExecuteWithProviderResult {
     /// Error while executing Wasm: traps, memory access errors, etc.
-    pub host_error: Option<HostError>,
+    pub host_error: Option<CallError>,
     /// Output produced by the Wasm contract.
-    pub output: Option<Bytes>,
+    output: Option<Bytes>,
     /// Gas usage.
-    pub gas_usage: GasUsage,
+    gas_usage: GasUsage,
     /// Effects produced by the execution.
-    pub effects: Effects,
+    effects: Effects,
     /// Post state hash.
-    pub post_state_hash: Digest,
+    post_state_hash: Digest,
     /// Messages produced by the execution.
-    pub messages: Messages,
+    messages: Messages,
 }
 
 impl ExecuteWithProviderResult {
+    #[must_use]
+    pub fn new(
+        host_error: Option<CallError>,
+        output: Option<Bytes>,
+        gas_usage: GasUsage,
+        effects: Effects,
+        post_state_hash: Digest,
+        messages: Messages,
+    ) -> Self {
+        Self {
+            host_error,
+            output,
+            gas_usage,
+            effects,
+            post_state_hash,
+            messages,
+        }
+    }
+
     pub fn output(&self) -> Option<&Bytes> {
         self.output.as_ref()
     }
@@ -280,6 +314,7 @@ impl ExecuteWithProviderResult {
         &self.effects
     }
 
+    #[must_use]
     pub fn post_state_hash(&self) -> Digest {
         self.post_state_hash
     }

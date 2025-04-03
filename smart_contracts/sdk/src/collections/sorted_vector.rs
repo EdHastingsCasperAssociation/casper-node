@@ -80,7 +80,7 @@ where
     where
         F: FnMut(&T) -> bool,
     {
-        self.vector.retain(f)
+        self.vector.retain(f);
     }
 }
 

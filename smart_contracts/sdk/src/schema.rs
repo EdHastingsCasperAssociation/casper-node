@@ -8,7 +8,7 @@ use bitflags::Flags;
 use casper_executor_wasm_common::flags::EntryPointFlags;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::abi::{self, Declaration, Definitions};
+use crate::abi::{Declaration, Definitions};
 
 pub fn serialize_bits<T, S>(data: &T, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -27,23 +27,21 @@ where
 {
     let raw: F::Bits = F::Bits::deserialize(deserializer)?;
     F::from_bits(raw).ok_or(serde::de::Error::custom(format!(
-        "Unexpected flags value 0x{:#08x}",
-        raw
+        "Unexpected flags value 0x{raw:#08x}"
     )))
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct SchemaArgument {
     pub name: String,
-    pub decl: abi::Declaration,
+    pub decl: Declaration,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
-
 pub struct SchemaEntryPoint {
     pub name: String,
     pub arguments: Vec<SchemaArgument>,
-    pub result: abi::Declaration,
+    pub result: Declaration,
     #[serde(
         serialize_with = "serialize_bits",
         deserialize_with = "deserialize_bits"
@@ -85,13 +83,11 @@ pub struct EntryPoint<'a, F: Fn()> {
 }
 
 #[cfg(not(target_family = "wasm"))]
-use core::cell::RefCell;
-#[cfg(not(target_family = "wasm"))]
-use std::collections::BTreeMap;
+use std::{cell::RefCell, collections::BTreeMap};
 
 #[cfg(not(target_family = "wasm"))]
 thread_local! {
-    pub static DISPATCHER: RefCell<BTreeMap<String, extern "C" fn()>> = Default::default();
+    pub static DISPATCHER: RefCell<BTreeMap<String, extern "C" fn()>> = RefCell::default();
 }
 
 // #[cfg(not(target_family = "wasm"))]

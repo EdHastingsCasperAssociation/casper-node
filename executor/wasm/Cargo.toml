@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-blake2 = "0.10.6"
-borsh = {version = "1.2.0", features = ["derive"] }
-bytes = "1.4.0"
+blake2 = "0.10"
+borsh = { version = "1.5", features = ["derive"] }
+bytes = "1.10"
 casper-executor-wasm-common = { path = "../wasm-common" }
-casper-executor-wasm-host  = { path = "../wasm-host" }
+casper-executor-wasm-host = { path = "../wasm-host" }
 casper-executor-wasm-interface = { path = "../wasm-interface" }
 casper-executor-wasmer-backend = { path = "../wasmer-backend" }
 casper-storage = { path = "../../storage" }
@@ -16,9 +16,11 @@ casper-types = { path = "../../types", features = ["std"] }
 digest = "0.10.7"
 either = "1.10"
 parking_lot = "0.12.1"
-thiserror = "1.0.44"
+thiserror = "2.0"
 tracing = "0.1.40"
-casper-execution-engine = { path = "../../execution_engine", features = ["test-support"] }
+casper-execution-engine = { path = "../../execution_engine", features = [
+    "test-support",
+] }
 
 [dev-dependencies]
 tempfile = "3.10.1"

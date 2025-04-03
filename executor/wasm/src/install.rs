@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use casper_executor_wasm_interface::{executor::ExecuteError, GasUsage, HostError};
+use casper_executor_wasm_common::error::CallError;
+use casper_executor_wasm_interface::{executor::ExecuteError, GasUsage};
 use casper_storage::{global_state::error::Error as GlobalStateError, AddressGenerator};
 use casper_types::{
     account::AccountHash, execution::Effects, BlockHash, BlockTime, Digest, TransactionHash,
@@ -207,7 +208,7 @@ impl InstallContractResult {
 #[derive(Debug, Error)]
 pub enum InstallContractError {
     #[error("system contract error: {0}")]
-    SystemContract(HostError),
+    SystemContract(CallError),
 
     #[error("execute: {0}")]
     Execute(ExecuteError),
@@ -216,5 +217,5 @@ pub enum InstallContractError {
     GlobalState(#[from] GlobalStateError),
 
     #[error("constructor error: {host_error}")]
-    Constructor { host_error: HostError },
+    Constructor { host_error: CallError },
 }

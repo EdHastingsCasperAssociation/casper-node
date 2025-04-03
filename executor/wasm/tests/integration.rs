@@ -9,9 +9,9 @@ use casper_executor_wasm::{
     },
     ExecutorConfigBuilder, ExecutorKind, ExecutorV2,
 };
-use casper_executor_wasm_interface::{
-    executor::{ExecuteRequest, ExecuteRequestBuilder, ExecuteWithProviderResult, ExecutionKind},
-    HostError,
+use casper_executor_wasm_common::error::CallError;
+use casper_executor_wasm_interface::executor::{
+    ExecuteRequest, ExecuteRequestBuilder, ExecuteWithProviderResult, ExecutionKind,
 };
 use casper_storage::{
     data_access_layer::{
@@ -327,7 +327,7 @@ fn cep18() {
                                                            // summary blocktime is refreshed
     }
 
-    let mut messages = result_2.messages.iter().collect_vec();
+    let mut messages = result_2.messages().iter().collect_vec();
     messages.sort_by_key(|message| {
         (
             message.topic_name(),
@@ -828,7 +828,7 @@ fn assert_consumes_gas(host_function_name: &str) {
     let result = call_dummy_host_fn_by_name(host_function_name, 1);
     assert!(result.is_err_and(|e| match e {
         InstallContractError::Constructor {
-            host_error: HostError::CalleeGasDepleted,
+            host_error: CallError::CalleeGasDepleted,
         } => true,
         _ => false,
     }));

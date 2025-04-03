@@ -160,6 +160,7 @@ pub struct ContractHandle<T: ContractRef> {
 }
 
 impl<T: ContractRef> ContractHandle<T> {
+    #[must_use]
     pub const fn from_address(contract_address: Address) -> Self {
         ContractHandle {
             contract_address,
@@ -196,15 +197,18 @@ impl<T: ContractRef> ContractHandle<T> {
         self.build_call().try_call(func)
     }
 
+    #[must_use]
     pub fn contract_address(&self) -> Address {
         self.contract_address
     }
 
+    #[must_use]
     pub fn entity(&self) -> Entity {
         Entity::Contract(self.contract_address)
     }
 
     /// Returns the balance of the contract.
+    #[must_use]
     pub fn balance(&self) -> u128 {
         casper::get_balance_of(&Entity::Contract(self.contract_address))
     }
@@ -217,6 +221,7 @@ pub struct CallBuilder<T: ContractRef> {
 }
 
 impl<T: ContractRef> CallBuilder<T> {
+    #[must_use]
     pub fn new(address: Address) -> Self {
         CallBuilder {
             address,
@@ -225,12 +230,14 @@ impl<T: ContractRef> CallBuilder<T> {
         }
     }
 
+    #[must_use]
     pub fn with_transferred_value(mut self, transferred_value: u128) -> Self {
         self.transferred_value = Some(transferred_value);
         self
     }
 
     /// Casts the call builder to a different contract reference.
+    #[must_use]
     pub fn cast<U: ContractRef>(self) -> CallBuilder<U> {
         CallBuilder {
             address: self.address,
@@ -284,6 +291,7 @@ impl<T: ContractRef> Default for ContractBuilder<'_, T> {
 }
 
 impl<'a, T: ContractRef> ContractBuilder<'a, T> {
+    #[must_use]
     pub fn new() -> Self {
         ContractBuilder {
             transferred_value: None,
@@ -293,16 +301,19 @@ impl<'a, T: ContractRef> ContractBuilder<'a, T> {
         }
     }
 
+    #[must_use]
     pub fn with_transferred_value(mut self, transferred_value: u128) -> Self {
         self.transferred_value = Some(transferred_value);
         self
     }
 
+    #[must_use]
     pub fn with_code(mut self, code: &'a [u8]) -> Self {
         self.code = Some(code);
         self
     }
 
+    #[must_use]
     pub fn with_seed(mut self, seed: &'a [u8; 32]) -> Self {
         self.seed = Some(seed);
         self
