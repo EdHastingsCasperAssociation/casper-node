@@ -849,7 +849,7 @@ pub fn execute_finalized_block(
                     protocol_version,
                     transaction_hash,
                     HandleFeeMode::pay(
-                        Box::new(initiator_addr),
+                        Box::new(initiator_addr.clone()),
                         balance_identifier,
                         BalanceIdentifier::Public(*(proposer.clone())),
                         amount,
@@ -867,7 +867,7 @@ pub fn execute_finalized_block(
                     protocol_version,
                     transaction_hash,
                     HandleFeeMode::pay(
-                        Box::new(initiator_addr),
+                        Box::new(initiator_addr.clone()),
                         balance_identifier,
                         BalanceIdentifier::Accumulate,
                         amount,
@@ -1370,7 +1370,7 @@ where
                 *state_root_hash,
                 protocol_version,
                 transaction_hash,
-                initiator_addr,
+                initiator_addr.clone(),
                 authorization_keys,
                 runtime_args,
             ));

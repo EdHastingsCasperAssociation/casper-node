@@ -21,7 +21,7 @@ const SCHEDULING_MAP_KEY: u16 = 3;
 const EXPECTED_NUMBER_OF_FIELDS: usize = 4;
 
 #[derive(Clone, Debug, Serialize, DataSize)]
-pub struct MetaTransactionV1 {
+pub(crate) struct MetaTransactionV1 {
     hash: TransactionV1Hash,
     chain_name: String,
     timestamp: Timestamp,
@@ -43,7 +43,7 @@ pub struct MetaTransactionV1 {
 }
 
 impl MetaTransactionV1 {
-    pub fn from_transaction_v1(
+    pub(crate) fn from_transaction_v1(
         v1: &TransactionV1,
         transaction_v1_config: &TransactionV1Config,
     ) -> Result<MetaTransactionV1, InvalidTransaction> {
@@ -155,7 +155,7 @@ impl MetaTransactionV1 {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         hash: TransactionV1Hash,
         chain_name: String,
         timestamp: Timestamp,
@@ -193,17 +193,17 @@ impl MetaTransactionV1 {
     }
 
     /// Returns the runtime args of the transaction.
-    pub fn args(&self) -> &TransactionArgs {
+    pub(crate) fn args(&self) -> &TransactionArgs {
         &self.args
     }
 
     /// Returns the `DeployHash` identifying this `Deploy`.
-    pub fn hash(&self) -> &TransactionV1Hash {
+    pub(crate) fn hash(&self) -> &TransactionV1Hash {
         &self.hash
     }
 
     /// Returns the `Approvals`.
-    pub fn approvals(&self) -> &BTreeSet<Approval> {
+    pub(crate) fn approvals(&self) -> &BTreeSet<Approval> {
         &self.approvals
     }
 
@@ -211,13 +211,13 @@ impl MetaTransactionV1 {
     ///   * the transaction hash is correct (see [`TransactionV1::has_valid_hash`] for details)
     ///   * approvals are non-empty, and
     ///   * all approvals are valid signatures of the signed hash
-    pub fn verify(&self) -> Result<(), InvalidTransactionV1> {
+    pub(crate) fn verify(&self) -> Result<(), InvalidTransactionV1> {
         self.is_verified.get_or_init(|| self.do_verify()).clone()
     }
 
     /// Returns `Ok` if and only if this transaction's body hashes to the value of `body_hash()`,
     /// and if this transaction's header hashes to the value claimed as the transaction hash.
-    pub fn has_valid_hash(&self) -> &Result<(), InvalidTransactionV1> {
+    pub(crate) fn has_valid_hash(&self) -> &Result<(), InvalidTransactionV1> {
         &self.has_valid_hash
     }
 
@@ -243,39 +243,39 @@ impl MetaTransactionV1 {
     }
 
     /// Returns the entry point of the transaction.
-    pub fn entry_point(&self) -> &TransactionEntryPoint {
+    pub(crate) fn entry_point(&self) -> &TransactionEntryPoint {
         &self.entry_point
     }
 
     /// Returns the hash_addr and entry point name of a smart contract, if applicable.
-    pub fn contract_direct_address(&self) -> Option<(HashAddr, String)> {
+    pub(crate) fn contract_direct_address(&self) -> Option<(HashAddr, String)> {
         let hash_addr = self.target().contract_hash_addr()?;
         let entry_point = self.entry_point.custom_entry_point()?;
         Some((hash_addr, entry_point))
     }
 
     /// Returns the transaction lane.
-    pub fn lane_id(&self) -> u8 {
+    pub(crate) fn lane_id(&self) -> u8 {
         self.lane_id
     }
 
     /// Returns payload hash of the transaction.
-    pub fn payload_hash(&self) -> &Digest {
+    pub(crate) fn payload_hash(&self) -> &Digest {
         &self.payload_hash
     }
 
     /// Returns the pricing mode for the transaction.
-    pub fn pricing_mode(&self) -> &PricingMode {
+    pub(crate) fn pricing_mode(&self) -> &PricingMode {
         &self.pricing_mode
     }
 
     /// Returns the initiator_addr of the transaction.
-    pub fn initiator_addr(&self) -> &InitiatorAddr {
+    pub(crate) fn initiator_addr(&self) -> &InitiatorAddr {
         &self.initiator_addr
     }
 
     /// Returns the target of the transaction.
-    pub fn target(&self) -> &TransactionTarget {
+    pub(crate) fn target(&self) -> &TransactionTarget {
         &self.target
     }
 
@@ -296,14 +296,14 @@ impl MetaTransactionV1 {
     }
 
     /// Returns the creation timestamp of the `Deploy`.
-    pub fn timestamp(&self) -> Timestamp {
+    pub(crate) fn timestamp(&self) -> Timestamp {
         self.timestamp
     }
 
     /// Returns the duration after the creation timestamp for which the `Deploy` will stay valid.
     ///
     /// After this duration has ended, the `Deploy` will be considered expired.
-    pub fn ttl(&self) -> TimeDiff {
+    pub(crate) fn ttl(&self) -> TimeDiff {
         self.ttl
     }
     /// Returns the scheduling of the transaction.
@@ -318,7 +318,7 @@ impl MetaTransactionV1 {
     /// Returns `Ok` if and only if:
     ///   * the chain_name is correct,
     ///   * the configured parameters are complied with at the given timestamp
-    pub fn is_config_compliant(
+    pub(crate) fn is_config_compliant(
         &self,
         chainspec: &Chainspec,
         timestamp_leeway: TimeDiff,
@@ -740,7 +740,7 @@ impl MetaTransactionV1 {
     }
 
     /// Returns the gas price tolerance for the given transaction.
-    pub fn gas_price_tolerance(&self) -> u8 {
+    pub(crate) fn gas_price_tolerance(&self) -> u8 {
         match self.pricing_mode {
             PricingMode::PaymentLimited {
                 gas_price_tolerance,
@@ -758,12 +758,12 @@ impl MetaTransactionV1 {
     }
 
     /// Returns the serialized length of the transaction.
-    pub fn serialized_length(&self) -> usize {
+    pub(crate) fn serialized_length(&self) -> usize {
         self.serialized_length
     }
 
     /// Returns the gas limit for the transaction.
-    pub fn gas_limit(&self, chainspec: &Chainspec) -> Result<Gas, InvalidTransaction> {
+    pub(crate) fn gas_limit(&self, chainspec: &Chainspec) -> Result<Gas, InvalidTransaction> {
         self.pricing_mode()
             .gas_limit(chainspec, self.lane_id)
             .map_err(Into::into)
@@ -783,7 +783,7 @@ impl MetaTransactionV1 {
     }
 
     /// Returns the transferred value of the transaction.
-    pub fn transferred_value(&self) -> u64 {
+    pub(crate) fn transferred_value(&self) -> u64 {
         match &self.target {
             TransactionTarget::Native => 0,
             TransactionTarget::Stored { id: _, runtime } => match runtime {
