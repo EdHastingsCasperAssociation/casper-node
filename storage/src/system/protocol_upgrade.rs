@@ -17,11 +17,12 @@ use casper_types::{
     contracts::{ContractHash, ContractPackageStatus, NamedKeys},
     system::{
         auction::{
-            BidAddr, BidKind, DelegatorBid, DelegatorKind, SeigniorageRecipientsSnapshotV1,
-            SeigniorageRecipientsSnapshotV2, SeigniorageRecipientsV2, Unbond, ValidatorBid,
-            AUCTION_DELAY_KEY, DEFAULT_SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION,
-            LOCKED_FUNDS_PERIOD_KEY, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY,
-            SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION_KEY, UNBONDING_DELAY_KEY, VALIDATOR_SLOTS_KEY,
+            BidAddr, BidAddrTag, BidKind, DelegatorBid, DelegatorKind,
+            SeigniorageRecipientsSnapshotV1, SeigniorageRecipientsSnapshotV2,
+            SeigniorageRecipientsV2, Unbond, ValidatorBid, AUCTION_DELAY_KEY,
+            DEFAULT_SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION, LOCKED_FUNDS_PERIOD_KEY,
+            SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_VERSION_KEY,
+            UNBONDING_DELAY_KEY, VALIDATOR_SLOTS_KEY,
         },
         handle_payment::{ACCUMULATION_PURSE_KEY, PAYMENT_PURSE_KEY},
         mint::{
@@ -208,6 +209,7 @@ where
         self.handle_new_round_seigniorage_rate(system_entity_addresses.mint())?;
         self.handle_unbonds_migration()?;
         self.handle_bids_migration(
+            self.config.validator_minimum_bid_amount(),
             self.config.minimum_delegation_amount(),
             self.config.maximum_delegation_amount(),
         )?;
@@ -1223,10 +1225,11 @@ where
     /// Handle bids migration.
     pub fn handle_bids_migration(
         &mut self,
-        chainspec_minimum: u64,
-        chainspec_maximum: u64,
+        validator_minimum: u64,
+        delegation_minimum: u64,
+        delegation_maximum: u64,
     ) -> Result<(), ProtocolUpgradeError> {
-        if chainspec_maximum < chainspec_minimum {
+        if delegation_maximum < delegation_minimum {
             return Err(ProtocolUpgradeError::InvalidUpgradeConfig);
         }
         debug!("handle bids migration");
@@ -1258,8 +1261,10 @@ where
                 let validator_bid_addr = BidAddr::from(validator_public_key.clone());
                 let validator_bid = {
                     let validator_bid = ValidatorBid::from(*existing_bid.clone());
+                    let inactive = validator_bid.staked_amount() < U512::from(validator_minimum);
                     validator_bid
-                        .with_min_max_delegation_amount(chainspec_maximum, chainspec_minimum)
+                        .with_inactive(inactive)
+                        .with_min_max_delegation_amount(delegation_maximum, delegation_minimum)
                 };
                 tc.write(
                     validator_bid_addr.into(),
@@ -1287,6 +1292,29 @@ where
                 }
             }
         }
+
+        let validator_bid_keys = tc
+            .get_by_byte_prefix(&[KeyTag::BidAddr as u8, BidAddrTag::Validator as u8])
+            .map_err(|_| ProtocolUpgradeError::UnexpectedKeyVariant)?;
+        for validator_bid_key in validator_bid_keys {
+            if let Some(StoredValue::BidKind(BidKind::Validator(validator_bid))) = tc
+                .get(&validator_bid_key)
+                .map_err(Into::<ProtocolUpgradeError>::into)?
+            {
+                let is_bid_inactive = validator_bid.inactive();
+                let has_less_than_validator_minimum =
+                    validator_bid.staked_amount() < U512::from(validator_minimum);
+                if !is_bid_inactive && has_less_than_validator_minimum {
+                    let inactive_bid = validator_bid.with_inactive(true);
+                    info!("marking bid inactive {validator_bid_key}");
+                    tc.write(
+                        validator_bid_key,
+                        StoredValue::BidKind(BidKind::Validator(Box::new(inactive_bid))),
+                    );
+                }
+            }
+        }
+
         Ok(())
     }
 

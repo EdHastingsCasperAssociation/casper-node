@@ -184,10 +184,17 @@ impl ExecutionArtifactBuilder {
             return Err(());
         }
         self.with_added_consumed(wasm_v1_result.consumed());
-        if let (None, Some(err)) = (&self.error_message, wasm_v1_result.error()) {
+
+        if let Some(err) = wasm_v1_result.error() {
             self.error_message = Some(format!("{}", err));
+        } else if wasm_v1_result.consumed() == Gas::zero() {
+            self.error_message = Some("Wasm consumed 0 gas".to_string());
+        }
+
+        if self.error_message.is_some() {
             return Ok(self);
         }
+
         self.with_appended_transfers(&mut wasm_v1_result.transfers().clone())
             .with_appended_messages(&mut wasm_v1_result.messages().clone())
             .with_appended_effects(wasm_v1_result.effects().clone());

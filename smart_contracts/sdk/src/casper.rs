@@ -13,7 +13,7 @@ use crate::{
 };
 
 use casper_executor_wasm_common::{
-    error::{result_from_code, Error},
+    error::{result_from_code, CommonResult, HOST_ERROR_SUCCESS},
     flags::ReturnFlags,
     keyspace::{Keyspace, KeyspaceTag},
 };
@@ -41,7 +41,7 @@ extern "C" fn alloc_callback<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
     len: usize,
     ctx: *mut c_void,
 ) -> *mut u8 {
-    let opt_closure = ctx as *mut Option<F>;
+    let opt_closure = ctx.cast::<Option<F>>();
     let allocated_ptr = unsafe { (*opt_closure).take().unwrap()(len) };
     match allocated_ptr {
         Some(ptr) => ptr.as_ptr(),
@@ -107,7 +107,7 @@ pub fn ret(flags: ReturnFlags, data: Option<&[u8]>) {
 pub fn read<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
     key: Keyspace,
     f: F,
-) -> Result<Option<()>, Error> {
+) -> Result<Option<()>, CommonResult> {
     let (key_space, key_bytes) = match key {
         Keyspace::State => (KeyspaceTag::State as u64, &[][..]),
         Keyspace::Context(key_bytes) => (KeyspaceTag::Context as u64, key_bytes),
@@ -147,13 +147,13 @@ pub fn read<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
 
     match result_from_code(ret) {
         Ok(()) => Ok(Some(())),
-        Err(Error::NotFound) => Ok(None),
+        Err(CommonResult::NotFound) => Ok(None),
         Err(err) => Err(err),
     }
 }
 
 /// Write to the global state.
-pub fn write(key: Keyspace, value: &[u8]) -> Result<(), Error> {
+pub fn write(key: Keyspace, value: &[u8]) -> Result<(), CommonResult> {
     let (key_space, key_bytes) = match key {
         Keyspace::State => (KeyspaceTag::State as u64, &[][..]),
         Keyspace::Context(key_bytes) => (KeyspaceTag::Context as u64, key_bytes),
@@ -237,7 +237,7 @@ pub(crate) fn call_into<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
 }
 
 fn call_result_from_code(result_code: u32) -> Result<(), CallError> {
-    if result_code == 0 {
+    if result_code == HOST_ERROR_SUCCESS {
         Ok(())
     } else {
         Err(CallError::try_from(result_code).expect("Unexpected error code"))
@@ -305,7 +305,7 @@ pub fn read_into_vec(key: Keyspace) -> Option<Vec<u8>> {
 }
 
 /// Read from the global state into a vector.
-pub fn has_state() -> Result<bool, Error> {
+pub fn has_state() -> Result<bool, CommonResult> {
     // TODO: Host side optimized `casper_exists` to check if given entry exists in the global state.
     let mut vec = Vec::new();
     let read_info = read(Keyspace::State, |size| reserve_vec_space(&mut vec, size))?;
@@ -316,7 +316,7 @@ pub fn has_state() -> Result<bool, Error> {
 }
 
 /// Read state from the global state.
-pub fn read_state<T: Default + BorshDeserialize>() -> Result<T, Error> {
+pub fn read_state<T: Default + BorshDeserialize>() -> Result<T, CommonResult> {
     let mut vec = Vec::new();
     let read_info = read(Keyspace::State, |size| reserve_vec_space(&mut vec, size))?;
     match read_info {
@@ -326,7 +326,7 @@ pub fn read_state<T: Default + BorshDeserialize>() -> Result<T, Error> {
 }
 
 /// Write state to the global state.
-pub fn write_state<T: BorshSerialize>(state: &T) -> Result<(), Error> {
+pub fn write_state<T: BorshSerialize>(state: &T) -> Result<(), CommonResult> {
     let new_state = borsh::to_vec(state).unwrap();
     write(Keyspace::State, &new_state)?;
     Ok(())
@@ -457,18 +457,19 @@ impl CasperABI for Entity {
 }
 
 /// Get the balance of an account or contract.
+#[must_use]
 pub fn get_balance_of(entity_kind: &Entity) -> u128 {
     let (kind, addr) = match entity_kind {
         Entity::Account(addr) => (0, addr),
         Entity::Contract(addr) => (1, addr),
     };
-    let mut output = MaybeUninit::uninit();
+    let mut output: MaybeUninit<u128> = MaybeUninit::uninit();
     let ret = unsafe {
         casper_sdk_sys::casper_env_balance(
             kind,
             addr.as_ptr(),
             addr.len(),
-            output.as_mut_ptr() as *mut c_void,
+            output.as_mut_ptr().cast(),
         )
     };
     if ret == 1 {
@@ -479,10 +480,13 @@ pub fn get_balance_of(entity_kind: &Entity) -> u128 {
 }
 
 /// Get the transferred token value passed to the contract.
+#[must_use]
 pub fn transferred_value() -> u128 {
     let mut value = MaybeUninit::<u128>::uninit();
-    unsafe { casper_sdk_sys::casper_env_transferred_value(value.as_mut_ptr() as *mut _) };
-    unsafe { value.assume_init() }
+    unsafe {
+        casper_sdk_sys::casper_env_transferred_value(value.as_mut_ptr().cast());
+        value.assume_init()
+    }
 }
 
 /// Transfer tokens from the current contract to another account or contract.
@@ -501,7 +505,7 @@ pub fn get_block_time() -> u64 {
 }
 
 #[doc(hidden)]
-pub fn emit_raw(topic: &str, payload: &[u8]) -> Result<(), Error> {
+pub fn emit_raw(topic: &str, payload: &[u8]) -> Result<(), CommonResult> {
     let ret = unsafe {
         casper_sdk_sys::casper_emit(topic.as_ptr(), topic.len(), payload.as_ptr(), payload.len())
     };
@@ -509,7 +513,7 @@ pub fn emit_raw(topic: &str, payload: &[u8]) -> Result<(), Error> {
 }
 
 /// Emit a message.
-pub fn emit<M>(message: M) -> Result<(), Error>
+pub fn emit<M>(message: M) -> Result<(), CommonResult>
 where
     M: Message,
 {

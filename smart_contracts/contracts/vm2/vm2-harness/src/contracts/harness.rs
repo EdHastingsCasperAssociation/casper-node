@@ -11,7 +11,7 @@ use casper_sdk::{
             ENTRY_POINT_PAYMENT_CALLER, ENTRY_POINT_PAYMENT_DIRECT_INVOCATION_ONLY,
             ENTRY_POINT_PAYMENT_SELF_ONWARD,
         },
-        error::Error,
+        error::CommonResult,
         keyspace::Keyspace,
     },
     collections::Map,
@@ -99,7 +99,7 @@ impl Harness {
 
         assert_eq!(
             casper::write(Keyspace::PaymentInfo("this does not exists"), &[0]),
-            Err(Error::NotFound)
+            Err(CommonResult::NotFound)
         );
 
         {
@@ -123,7 +123,7 @@ impl Harness {
 
             assert_eq!(
                 casper::write(Keyspace::PaymentInfo("counter"), &[255, 255]),
-                Err(Error::InvalidInput)
+                Err(CommonResult::InvalidInput)
             );
         }
 

@@ -30,6 +30,7 @@ pub fn compute_wasm_bytecode_hash<T: AsRef<[u8]>>(wasm_bytes: T) -> [u8; 32] {
     hash.into()
 }
 
+#[must_use]
 pub fn compute_next_contract_hash_version(
     smart_contract_addr: [u8; 32],
     next_version: u32,

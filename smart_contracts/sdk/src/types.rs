@@ -1,11 +1,16 @@
-use crate::prelude::fmt::{self, Display, Formatter};
+use casper_executor_wasm_common::error::{
+    CALLEE_GAS_DEPLETED, CALLEE_NOT_CALLABLE, CALLEE_REVERTED, CALLEE_TRAPPED,
+};
 
-use crate::serializers::borsh::{BorshDeserialize, BorshSerialize};
-
-use crate::abi::{CasperABI, Definition, EnumVariant};
+use crate::{
+    abi::{CasperABI, Declaration, Definition, EnumVariant},
+    prelude::fmt,
+    serializers::borsh::{BorshDeserialize, BorshSerialize},
+};
 
 pub type Address = [u8; 32];
 
+// Keep in sync with [`casper_executor_wasm_common::error::CallError`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 #[borsh(crate = "crate::serializers::borsh")]
 pub enum CallError {
@@ -15,8 +20,8 @@ pub enum CallError {
     NotCallable,
 }
 
-impl Display for CallError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl fmt::Display for CallError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CallError::CalleeReverted => write!(f, "callee reverted"),
             CallError::CalleeTrapped => write!(f, "callee trapped"),
@@ -31,10 +36,10 @@ impl TryFrom<u32> for CallError {
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
-            1 => Ok(CallError::CalleeReverted),
-            2 => Ok(CallError::CalleeTrapped),
-            3 => Ok(CallError::CalleeGasDepleted),
-            4 => Ok(CallError::NotCallable),
+            CALLEE_REVERTED => Ok(Self::CalleeReverted),
+            CALLEE_TRAPPED => Ok(Self::CalleeTrapped),
+            CALLEE_GAS_DEPLETED => Ok(Self::CalleeGasDepleted),
+            CALLEE_NOT_CALLABLE => Ok(Self::NotCallable),
             _ => Err(()),
         }
     }
@@ -43,7 +48,7 @@ impl TryFrom<u32> for CallError {
 impl CasperABI for CallError {
     fn populate_definitions(_definitions: &mut crate::abi::Definitions) {}
 
-    fn declaration() -> crate::abi::Declaration {
+    fn declaration() -> Declaration {
         "CallError".into()
     }
 

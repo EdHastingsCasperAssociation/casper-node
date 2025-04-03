@@ -399,9 +399,9 @@ where
             .map_err(|e| ExecError::Interpreter(e.into()).into())
     }
 
-    /// Writes caller (deploy) account public key to dest_ptr in the Wasm
+    /// Writes caller (deploy) account public key to output_size_ptr in the Wasm
     /// memory.
-    fn get_caller(&mut self, output_size: u32) -> Result<Result<(), ApiError>, Trap> {
+    fn get_caller(&mut self, output_size_ptr: u32) -> Result<Result<(), ApiError>, Trap> {
         if !self.can_write_to_host_buffer() {
             // Exit early if the host buffer is already occupied
             return Ok(Err(ApiError::HostBufferFull));
@@ -416,7 +416,10 @@ where
 
         // Write output
         let output_size_bytes = value_size.to_le_bytes(); // Wasm is little-endian
-        if let Err(error) = self.try_get_memory()?.set(output_size, &output_size_bytes) {
+        if let Err(error) = self
+            .try_get_memory()?
+            .set(output_size_ptr, &output_size_bytes)
+        {
             return Err(ExecError::Interpreter(error.into()).into());
         }
         Ok(Ok(()))
