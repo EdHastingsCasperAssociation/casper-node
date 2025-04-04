@@ -356,9 +356,8 @@ impl Environment {
             Some(unsafe { slice::from_raw_parts(input_ptr, input_size) })
         };
 
-        let transferred_value: u128 = {
-            let value_ptr =
-                NonNull::new(transferred_value_ptr as *mut u128).expect("Valid pointer");
+        let transferred_value = {
+            let value_ptr = NonNull::new(transferred_value_ptr as *mut u64).expect("Valid pointer");
             unsafe { *value_ptr.as_ptr() }
         };
 

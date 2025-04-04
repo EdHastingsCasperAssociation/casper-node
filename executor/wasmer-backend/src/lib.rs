@@ -450,7 +450,7 @@ where
                     |env: FunctionEnvMut<WasmerEnv<S, E>>,
                      code_ptr: u32,
                      code_size: u32,
-                     value: WasmPtr<u128>,
+                     value: WasmPtr<u64>,
                      entry_point_ptr: u32,
                      entry_point_len: u32,
                      input_ptr: u32,
@@ -489,7 +489,7 @@ where
                     |env: FunctionEnvMut<WasmerEnv<S, E>>,
                      address_ptr: u32,
                      address_len: u32,
-                     value: WasmPtr<u128>,
+                     value: WasmPtr<u64>,
                      entry_point_ptr: u32,
                      entry_point_len: u32,
                      input_ptr: u32,
@@ -536,7 +536,7 @@ where
                     &mut store,
                     &function_env,
                     |env: FunctionEnvMut<WasmerEnv<S, E>>,
-                     output: WasmPtr<u128>|
+                     output: WasmPtr<u64>|
                      -> Result<(), VMError> {
                         let wasmer_caller = WasmerCaller { env };
                         host::casper_env_transferred_value(wasmer_caller, output.offset())?;
@@ -555,7 +555,7 @@ where
                      entity_kind,
                      entity_addr,
                      entity_addr_len,
-                     output_ptr: WasmPtr<u128>| {
+                     output_ptr: WasmPtr<u64>| {
                         let wasmer_caller = WasmerCaller { env };
                         host::casper_env_balance(
                             wasmer_caller,
@@ -577,7 +577,7 @@ where
                     |env: FunctionEnvMut<WasmerEnv<S, E>>,
                      address_ptr,
                      address_len,
-                     amount: WasmPtr<u128>| {
+                     amount: WasmPtr<u64>| {
                         let wasmer_caller = WasmerCaller { env };
                         host::casper_transfer(
                             wasmer_caller,
