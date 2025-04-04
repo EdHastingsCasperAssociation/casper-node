@@ -43,9 +43,17 @@ pub static ABI_COLLECTORS: [fn(&mut crate::abi::Definitions)] = [..];
 #[linkme(crate = crate::linkme)]
 pub static MESSAGES: [Message] = [..];
 
+/// This function is called by the host to collect the schema from the contract.
+///
+/// This is considered internal implementation detail and should not be used directly.
+/// Primary user of this API is `cargo-casper` tool that will use it to extract scheama from the
+/// contract.
+///
+/// # Safety
+/// Pointer to json bytes passed to the callback is valid only within the scope of that function.
 #[export_name = "__cargo_casper_collect_schema"]
-pub extern "C" fn cargo_casper_collect_schema(
-    callback: extern "C" fn(*const u8, usize, *mut c_void),
+pub unsafe extern "C" fn cargo_casper_collect_schema(
+    callback: unsafe extern "C" fn(*const u8, usize, *mut c_void),
     ctx: *mut c_void,
 ) {
     // Collect definitions
@@ -96,5 +104,7 @@ pub extern "C" fn cargo_casper_collect_schema(
 
     // Write the schema using the provided writer
     let json_bytes = serde_json::to_vec(&schema).expect("Serialized schema");
-    callback(json_bytes.as_ptr(), json_bytes.len(), ctx);
+
+    // Call the callback with the serialized schema
+    callback(json_bytes.as_ptr(), json_bytes.len(), ctx)
 }

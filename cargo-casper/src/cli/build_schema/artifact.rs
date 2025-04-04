@@ -19,9 +19,9 @@ unsafe extern "C" fn collect_schema_cb<T: FnOnce(&[u8])>(
     data_len: usize,
     ctx: *mut c_void,
 ) {
-    let ptr: *mut Option<T> = ctx as _;
-    let data = slice::from_raw_parts(data_ptr, data_len);
+    let ptr = ctx.cast::<Option<T>>();
     let ptr = (*ptr).take().unwrap();
+    let data = slice::from_raw_parts(data_ptr, data_len);
     ptr(data);
 }
 
@@ -32,8 +32,17 @@ where
     let collect_schema: Symbol<CollectSchema> =
         unsafe { library.get(COLLECT_SCHEMA_FUNC.as_bytes()).unwrap() };
 
-    let ptr = NonNull::from(&Some(cb));
-    unsafe { collect_schema(collect_schema_cb::<T>, ptr.as_ptr() as *mut _) };
+    // We need to wrap the callback in an `Option` to make sure it is not dropped
+    // before the callback is called.
+    let wrapped_cb = Some(cb);
+    let ptr = NonNull::from(&wrapped_cb);
+
+    unsafe {
+        collect_schema(
+            collect_schema_cb::<T>,
+            ptr.cast::<c_void>().as_ptr(),
+        )
+    };
 }
 
 impl Artifact {
@@ -53,9 +62,14 @@ impl Artifact {
         let mut value = None;
 
         collect_schema_helper(&self.library, |data| {
+            println!("Inside callback {:?}", std::str::from_utf8(data));
             value = Some(serde_json::from_slice(data));
         });
 
-        value.expect("Callback called")
+        let result = value.expect("Callback called");
+
+        eprintln!("{result:?}");
+
+        result
     }
 }
