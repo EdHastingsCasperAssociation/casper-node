@@ -654,6 +654,7 @@ dependencies = [
  "clap-cargo",
  "include_dir",
  "libloading",
+ "once_cell",
  "serde",
  "serde_json",
  "wabt",

@@ -1,6 +1,10 @@
-use std::{ffi::c_void, ptr::NonNull};
+use std::ffi::c_void;
 
-use crate::{abi::Declaration, linkme::distributed_slice};
+use crate::{
+    abi::{Declaration, Definitions},
+    linkme::distributed_slice,
+    schema::{Schema, SchemaMessage, SchemaType},
+};
 
 #[derive(Debug)]
 pub struct Param {
@@ -39,32 +43,58 @@ pub static ABI_COLLECTORS: [fn(&mut crate::abi::Definitions)] = [..];
 #[linkme(crate = crate::linkme)]
 pub static MESSAGES: [Message] = [..];
 
-#[no_mangle]
-pub extern "C" fn __cargo_casper_load_entrypoints(
-    callback: extern "C" fn(*const crate::schema::SchemaEntryPoint, usize, *mut c_void),
+#[export_name = "__cargo_casper_collect_schema"]
+pub extern "C" fn cargo_casper_collect_schema(
+    callback: extern "C" fn(*const u8, usize, *mut c_void),
     ctx: *mut c_void,
 ) {
-    let mut vec = Vec::new();
-    for entrypoint in ENTRYPOINTS {
-        let entrypoint = entrypoint();
-        vec.push(entrypoint);
-    }
-    callback(vec.as_ptr(), vec.len(), ctx);
-}
+    // Collect definitions
+    let definitions = {
+        let mut definitions = Definitions::default();
 
-#[no_mangle]
-pub extern "C" fn __cargo_casper_collect_abi(definitions: *mut crate::abi::Definitions) {
-    let mut ptr = NonNull::new(definitions).expect("non-null pointer");
-    for collector in ABI_COLLECTORS {
-        collector(unsafe { ptr.as_mut() });
-    }
-}
+        for abi_collector in ABI_COLLECTORS {
+            abi_collector(&mut definitions);
+        }
 
-#[no_mangle]
-pub extern "C" fn __cargo_casper_collect_messages(
-    callback: extern "C" fn(*const Message, usize, *mut c_void),
-    ctx: *mut c_void,
-) {
-    let mut ctx = NonNull::new(ctx).expect("non-null pointer");
-    callback(MESSAGES.as_ptr(), MESSAGES.len(), unsafe { ctx.as_mut() });
+        definitions
+    };
+
+    // Collect messages
+    let messages = {
+        let mut messages = Vec::new();
+
+        for message in MESSAGES {
+            messages.push(SchemaMessage {
+                name: message.name.to_owned(),
+                decl: message.decl.to_owned(),
+            });
+        }
+
+        messages
+    };
+
+    // Collect entrypoints
+    let entry_points = {
+        let mut entry_points = Vec::new();
+        for entrypoint in ENTRYPOINTS {
+            entry_points.push(entrypoint());
+        }
+        entry_points
+    };
+
+    // Construct a schema object from the extracted information
+    let schema = Schema {
+        name: "contract".to_string(),
+        version: None,
+        type_: SchemaType::Contract {
+            state: "Contract".to_string(),
+        },
+        definitions,
+        entry_points,
+        messages,
+    };
+
+    // Write the schema using the provided writer
+    let json_bytes = serde_json::to_vec(&schema).expect("Serialized schema");
+    callback(json_bytes.as_ptr(), json_bytes.len(), ctx);
 }

@@ -39,7 +39,7 @@ pub fn build_impl(
         // Write the schema next to the wasm
         let schema_file_path = production_wasm_path.with_extension("json");
 
-        std::fs::create_dir_all(&schema_file_path.parent().unwrap())
+        std::fs::create_dir_all(schema_file_path.parent().unwrap())
             .context("Failed creating directory for wasm schema")?;
 
         std::fs::write(&schema_file_path, contract_schema)
@@ -59,7 +59,7 @@ pub fn build_impl(
     // Run wasm optimizations passes that will shrink the size of the wasm.
     eprintln!("Applying optimizations...");
     Command::new("wasm-strip")
-        .args(&[&production_wasm_path])
+        .args([&production_wasm_path])
         .spawn()
         .context("Failed to execute wasm-strip command. Is wabt installed?")?;
 
