@@ -2,14 +2,17 @@
 pub mod native;
 
 use crate::{
+    abi::{CasperABI, EnumVariant},
     prelude::{
         ffi::c_void,
         marker::PhantomData,
         mem::MaybeUninit,
         ptr::{self, NonNull},
     },
+    reserve_vec_space,
     serializers::borsh::{BorshDeserialize, BorshSerialize},
-    Message,
+    types::{Address, CallError},
+    Message, ToCallData,
 };
 
 use casper_executor_wasm_common::{
@@ -18,13 +21,6 @@ use casper_executor_wasm_common::{
     keyspace::{Keyspace, KeyspaceTag},
 };
 use casper_sdk_sys::casper_env_caller;
-
-use crate::{
-    abi::{CasperABI, EnumVariant},
-    reserve_vec_space,
-    types::{Address, CallError},
-    ToCallData,
-};
 
 /// Print a message.
 #[inline]
@@ -276,8 +272,8 @@ pub fn upgrade(
 ) -> Result<(), CallError> {
     let code_ptr = code.as_ptr();
     let code_size = code.len();
-    let entry_point_ptr = entry_point.map(|s| s.as_ptr()).unwrap_or(ptr::null());
-    let entry_point_size = entry_point.map(|s| s.len()).unwrap_or(0);
+    let entry_point_ptr = entry_point.map(str::as_ptr).unwrap_or(ptr::null());
+    let entry_point_size = entry_point.map(str::len).unwrap_or(0);
     let input_ptr = input_data.map(|s| s.as_ptr()).unwrap_or(ptr::null());
     let input_size = input_data.map(|s| s.len()).unwrap_or(0);
 
@@ -383,6 +379,7 @@ pub fn call<T: ToCallData>(
 }
 
 /// Get the caller.
+#[must_use]
 pub fn get_caller() -> Entity {
     let mut addr = MaybeUninit::<Address>::uninit();
     let _dest = unsafe { NonNull::new_unchecked(addr.as_mut_ptr() as *mut u8) };
@@ -391,7 +388,7 @@ pub fn get_caller() -> Entity {
 
     // Pointer to the end of written bytes
     let _out_ptr =
-        unsafe { casper_env_caller(addr.as_mut_ptr() as *mut _, 32, entity_kind.as_mut_ptr()) };
+        unsafe { casper_env_caller(addr.as_mut_ptr().cast(), 32, entity_kind.as_mut_ptr()) };
 
     // let address = unsafe { addr.assume_init() };
     let entity_kind = unsafe { entity_kind.assume_init() };
@@ -414,6 +411,7 @@ pub enum Entity {
 
 impl Entity {
     /// Get the tag of the entity.
+    #[must_use]
     pub fn tag(&self) -> u32 {
         match self {
             Entity::Account(_) => 0,
@@ -421,10 +419,10 @@ impl Entity {
         }
     }
 
+    #[must_use]
     pub fn address(&self) -> &Address {
         match self {
-            Entity::Account(addr) => addr,
-            Entity::Contract(addr) => addr,
+            Entity::Account(addr) | Entity::Contract(addr) => addr,
         }
     }
 }

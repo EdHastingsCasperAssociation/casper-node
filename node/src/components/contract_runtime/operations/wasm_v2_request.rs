@@ -234,7 +234,7 @@ impl WasmV2Request {
                     .with_transaction_hash(transaction_hash)
                     .with_wasm_bytes(module_bytes)
                     .with_address_generator(address_generator)
-                    .with_transferred_value(value.into()) // TODO: Replace u128 to u64
+                    .with_transferred_value(value)
                     .with_chain_name(network_name)
                     .with_block_time(transaction.timestamp().into())
                     .with_state_hash(state_root_hash)
@@ -259,7 +259,7 @@ impl WasmV2Request {
                     .with_initiator(*initiator_account_hash)
                     .with_caller_key(initiator_key)
                     .with_chain_name(network_name)
-                    .with_transferred_value(value.into()) // TODO: Remove u128 internally
+                    .with_transferred_value(value)
                     .with_block_time(transaction.timestamp().into())
                     .with_input(input_data.clone().take_inner().into())
                     .with_state_hash(state_root_hash)

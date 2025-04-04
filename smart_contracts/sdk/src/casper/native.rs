@@ -7,7 +7,7 @@ use std::{
     panic::{self, UnwindSafe},
     ptr::{self, NonNull},
     slice,
-    sync::{Arc, RwLock},
+    sync::{Arc, LazyLock, RwLock},
 };
 
 use bytes::Bytes;
@@ -18,7 +18,6 @@ use casper_executor_wasm_common::{
     },
     flags::ReturnFlags,
 };
-use once_cell::sync::Lazy;
 use rand::Rng;
 
 use super::Entity;
@@ -69,7 +68,7 @@ pub mod private_exports {
 }
 
 /// List of sorted exports gathered from the contracts code.
-pub static EXPORTS: Lazy<Vec<&'static Export>> = Lazy::new(|| {
+pub static EXPORTS: LazyLock<Vec<&'static Export>> = LazyLock::new(|| {
     let mut exports = private_exports::EXPORTS.into_iter().collect::<Vec<_>>();
     exports.sort_by_key(|export| export.kind);
     exports
