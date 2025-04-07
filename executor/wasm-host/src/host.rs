@@ -194,7 +194,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
 
     metered_write(&mut caller, global_state_key, stored_value)?;
 
-    Ok(0)
+    Ok(HOST_ERROR_SUCCESS)
 }
 
 pub fn casper_print<S: GlobalStateReader, E: Executor>(
@@ -333,7 +333,7 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
     if out_ptr != 0 {
         caller.memory_write(out_ptr, &global_state_raw_bytes)?;
     }
-    Ok(0)
+    Ok(HOST_ERROR_SUCCESS)
 }
 
 fn keyspace_to_global_state_key<S: GlobalStateReader, E: Executor>(

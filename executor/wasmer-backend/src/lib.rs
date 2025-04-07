@@ -3,7 +3,7 @@ pub(crate) mod middleware;
 
 use std::{
     collections::BinaryHeap,
-    sync::{Arc, Weak},
+    sync::{Arc, LazyLock, Weak},
 };
 
 use bytes::Bytes;
@@ -18,7 +18,6 @@ use middleware::{
     gas_metering,
     gatekeeper::{Gatekeeper, GatekeeperConfig},
 };
-use once_cell::sync::Lazy;
 use regex::Regex;
 use wasmer::{
     AsStoreMut, AsStoreRef, CompilerConfig, Engine, Function, FunctionEnv, FunctionEnvMut, Imports,
@@ -139,7 +138,7 @@ impl<S: GlobalStateReader + 'static, E: Executor + 'static> WasmerCaller<'_, S, 
     /// Set the amount of gas used.
     fn set_remaining_points(&mut self, new_value: u64) {
         self.with_store_and_instance(|mut store, instance| {
-            metering::set_remaining_points(&mut store, instance, new_value)
+            metering::set_remaining_points(&mut store, instance, new_value);
         })
     }
 }
@@ -220,8 +219,6 @@ impl<S: GlobalStateReader + 'static, E: Executor + 'static> Caller for WasmerCal
         self.with_instance(|instance| instance.exports.contains(name))
     }
 }
-
-impl<S: GlobalStateReader, E: Executor> WasmerEnv<S, E> {}
 
 impl<S: GlobalStateReader, E: Executor> WasmerEnv<S, E> {
     fn new(context: Context<S, E>, code: Bytes, interface_version: InterfaceVersion) -> Self {
@@ -676,8 +673,8 @@ where
         };
 
         let interface_version = {
-            static RE: Lazy<Regex> =
-                Lazy::new(|| Regex::new(r"^interface_version_(?P<version>\d+)$").unwrap());
+            static RE: LazyLock<Regex> =
+                LazyLock::new(|| Regex::new(r"^interface_version_(?P<version>\d+)$").unwrap());
 
             let mut interface_versions = BinaryHeap::new();
             for import in module.imports() {
