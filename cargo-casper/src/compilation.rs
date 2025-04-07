@@ -60,7 +60,7 @@ impl<'a> CompileJob<'a> {
 
         if let Some(package_name) = self.package_name {
             build_args.push("-p");
-            build_args.push(&package_name);
+            build_args.push(package_name);
         }
 
         build_args.extend_from_slice(&[
@@ -94,18 +94,18 @@ impl<'a> CompileJob<'a> {
         let mut artifacts = Vec::new();
         for line in reader.lines() {
             let line = line?;
-            if let Ok(msg) = serde_json::from_str::<CargoMessage>(&line) {
-                if let CargoMessage::CompilerArtifact { filenames } = msg {
-                    for artifact in &filenames {
-                        let path = PathBuf::from(artifact);
-                        if path
-                            .parent()
-                            .and_then(|p| p.file_name())
-                            .and_then(OsStr::to_str)
-                            != Some("deps")
-                        {
-                            artifacts.push(PathBuf::from(artifact));
-                        }
+            if let Ok(CargoMessage::CompilerArtifact { filenames }) =
+                serde_json::from_str::<CargoMessage>(&line)
+            {
+                for artifact in &filenames {
+                    let path = PathBuf::from(artifact);
+                    if path
+                        .parent()
+                        .and_then(|p| p.file_name())
+                        .and_then(OsStr::to_str)
+                        != Some("deps")
+                    {
+                        artifacts.push(PathBuf::from(artifact));
                     }
                 }
             }
@@ -141,8 +141,7 @@ impl CompilationResults {
     pub fn get_artifact_by_extension(&self, extension: &str) -> Option<PathBuf> {
         self.artifacts()
             .iter()
-            .filter(|x| x.extension().map(|y| y.to_str()).flatten() == Some(extension))
-            .next()
+            .find(|x| x.extension().and_then(|y| y.to_str()) == Some(extension))
             .map(|x| x.into())
     }
 }
