@@ -50,6 +50,10 @@ where
         self.vector.insert(pos, value);
     }
 
+    pub fn remove(&mut self, index: u64) -> Option<T> {
+        self.vector.remove(index)
+    }
+
     #[inline]
     pub fn contains(&self, value: &T) -> bool {
         self.vector.binary_search(value).is_ok()
@@ -106,8 +110,13 @@ mod tests {
             assert!(sorted_vector.contains(&2));
             assert!(!sorted_vector.contains(&15));
 
-            let vec: Vec<_> = sorted_vector.iter().collect();
-            assert_eq!(vec, vec![0, 0, 1, 2, 3, 3]);
+            let vec_1: Vec<_> = sorted_vector.iter().collect();
+            assert_eq!(vec_1, vec![0, 0, 1, 2, 3, 3]);
+
+            sorted_vector.remove(2);
+
+            let vec_2: Vec<_> = sorted_vector.iter().collect();
+            assert_eq!(vec_2, vec![0, 0, 2, 3, 3]);
         })
         .unwrap();
     }

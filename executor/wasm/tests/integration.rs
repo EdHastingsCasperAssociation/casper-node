@@ -771,6 +771,7 @@ fn call_dummy_host_fn_by_name(
             HostFunctionCostsV2 {
                 read: HostFunction::fixed(1),
                 write: HostFunction::fixed(1),
+                remove: HostFunction::fixed(1),
                 copy_input: HostFunction::fixed(1),
                 ret: HostFunction::fixed(1),
                 create: HostFunction::fixed(1),
@@ -865,6 +866,7 @@ fn write_n_bytes_at_limit(
             HostFunctionCostsV2 {
                 read: HostFunction::fixed(0),
                 write: HostFunction::fixed(0),
+                remove: HostFunction::fixed(0),
                 copy_input: HostFunction::fixed(0),
                 ret: HostFunction::fixed(0),
                 create: HostFunction::fixed(0),

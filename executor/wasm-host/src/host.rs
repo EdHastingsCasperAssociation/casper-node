@@ -212,12 +212,12 @@ pub fn casper_remove<S: GlobalStateReader, E: Executor>(
     key_ptr: u32,
     key_size: u32,
 ) -> VMResult<u32> {
-    // let write_cost = caller.context().config.host_function_costs().write;
-    // charge_host_function_call(
-    //     &mut caller,
-    //     &write_cost,
-    //     [key_space as u32, key_ptr, key_size, value_ptr, value_size],
-    // )?;
+    let write_cost = caller.context().config.host_function_costs().remove;
+    charge_host_function_call(
+        &mut caller,
+        &write_cost,
+        [key_space as u32, key_ptr, key_size],
+    )?;
 
     let keyspace_tag = match KeyspaceTag::from_u64(key_space) {
         Some(keyspace_tag) => keyspace_tag,
@@ -268,39 +268,7 @@ pub fn casper_remove<S: GlobalStateReader, E: Executor>(
         }
     };
 
-    // let value = caller.memory_read(value_ptr, value_size.try_into().unwrap())?;
-
-    // let stored_value = match keyspace {
-    //     Keyspace::State | Keyspace::Context(_) | Keyspace::NamedKey(_) => {
-    //         StoredValue::RawBytes(value)
-    //     }
-    //     Keyspace::PaymentInfo(_) => {
-    //         let entry_point_payment = match value.as_slice() {
-    //             [ENTRY_POINT_PAYMENT_CALLER] => EntryPointPayment::Caller,
-    //             [ENTRY_POINT_PAYMENT_DIRECT_INVOCATION_ONLY] => {
-    //                 EntryPointPayment::DirectInvocationOnly
-    //             }
-    //             [ENTRY_POINT_PAYMENT_SELF_ONWARD] => EntryPointPayment::SelfOnward,
-    //             _ => {
-    //                 // Invalid entry point payment variant
-    //                 return Ok(HOST_ERROR_INVALID_INPUT);
-    //             }
-    //         };
-
-    //         let entry_point = EntityEntryPoint::new(
-    //             "_",
-    //             Vec::new(),
-    //             CLType::Unit,
-    //             EntryPointAccess::Public,
-    //             EntryPointType::Called,
-    //             entry_point_payment,
-    //         );
-    //         let entry_point_value = EntryPointValue::V1CasperVm(entry_point);
-    //         StoredValue::EntryPoint(entry_point_value)
-    //     }
-    // };
-
-    // metered_write(&mut caller, global_state_key, stored_value)?;
+    caller.context_mut().tracking_copy.prune(global_state_key);
 
     Ok(0)
 }

@@ -80,7 +80,9 @@ where
         let mut prefix_bytes = self.prefix.as_bytes().to_owned();
         prefix_bytes.extend(&index.to_le_bytes());
         let prefix = Keyspace::Context(&prefix_bytes);
-        read_into_vec(prefix).map(|vec| borsh::from_slice(&vec).unwrap())
+        read_into_vec(prefix)
+            .unwrap()
+            .map(|vec| borsh::from_slice(&vec).unwrap())
     }
 
     pub fn iter(&self) -> impl Iterator<Item = T> + '_ {
@@ -167,7 +169,17 @@ where
             return None;
         }
 
-        let value = self.get(index).unwrap();
+        let value = {
+            let prefix_bytes = self.compute_prefix_bytes_for_index(index);
+            let item_keyspace = Keyspace::Context(&prefix_bytes);
+
+            let value_bytes = read_into_vec(item_keyspace).unwrap()?;
+
+            // SAFETY: If the read above worked, then this won't panic.
+            casper::remove(item_keyspace).unwrap();
+
+            borsh::from_slice(&value_bytes).unwrap()
+        };
 
         // Shift elements to the left
         for i in index..self.length - 1 {
@@ -194,14 +206,14 @@ where
         }
     }
 
-    fn get_prefix_bytes(&self, index: u64) -> Vec<u8> {
+    fn compute_prefix_bytes_for_index(&self, index: u64) -> Vec<u8> {
         let mut prefix_bytes = self.prefix.as_bytes().to_owned();
         prefix_bytes.extend(&index.to_le_bytes());
         prefix_bytes
     }
 
     fn write(&self, index: u64, value: T) {
-        let prefix_bytes = self.get_prefix_bytes(index);
+        let prefix_bytes = self.compute_prefix_bytes_for_index(index);
         let prefix = Keyspace::Context(&prefix_bytes);
         casper::write(prefix, &borsh::to_vec(&value).unwrap()).unwrap();
     }

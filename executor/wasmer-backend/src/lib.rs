@@ -10,8 +10,8 @@ use bytes::Bytes;
 use casper_executor_wasm_common::error::TrapCode;
 use casper_executor_wasm_host::context::Context;
 use casper_executor_wasm_interface::{
-    executor::Executor, Caller, Config, ExportError, GasUsage,
-    InterfaceVersion, MeteringPoints, VMError, VMResult, WasmInstance, WasmPreparationError,
+    executor::Executor, Caller, Config, ExportError, GasUsage, InterfaceVersion, MeteringPoints,
+    VMError, VMResult, WasmInstance, WasmPreparationError,
 };
 use casper_storage::global_state::GlobalStateReader;
 use middleware::{
