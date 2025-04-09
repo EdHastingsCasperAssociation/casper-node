@@ -223,7 +223,7 @@ pub fn casper_remove<S: GlobalStateReader, E: Executor>(
         Some(keyspace_tag) => keyspace_tag,
         None => {
             // Unknown keyspace received, return error
-            return Ok(1);
+            return Ok(HOST_ERROR_NOT_FOUND);
         }
     };
 
@@ -237,7 +237,7 @@ pub fn casper_remove<S: GlobalStateReader, E: Executor>(
                 Ok(key_name) => key_name,
                 Err(_) => {
                     // TODO: Invalid key name encoding
-                    return Ok(1);
+                    return Ok(HOST_ERROR_INVALID_DATA);
                 }
             };
 
@@ -247,7 +247,7 @@ pub fn casper_remove<S: GlobalStateReader, E: Executor>(
             let key_name = match std::str::from_utf8(&key_payload_bytes) {
                 Ok(key_name) => key_name,
                 Err(_) => {
-                    return Ok(1);
+                    return Ok(HOST_ERROR_NOT_FOUND);
                 }
             };
 
@@ -264,13 +264,13 @@ pub fn casper_remove<S: GlobalStateReader, E: Executor>(
         Some(global_state_key) => global_state_key,
         None => {
             // Unknown keyspace received, return error
-            return Ok(1);
+            return Ok(HOST_ERROR_NOT_FOUND);
         }
     };
 
     caller.context_mut().tracking_copy.prune(global_state_key);
 
-    Ok(0)
+    Ok(HOST_ERROR_SUCCESS)
 }
 
 pub fn casper_print<S: GlobalStateReader, E: Executor>(
