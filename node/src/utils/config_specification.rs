@@ -3,7 +3,7 @@ use tracing::error;
 use crate::MainReactorConfig as Config;
 
 /// We don't allow flakiness to be turned on in mainnet and testnet
-const NETWORK_NAMES_NOT_ALLOWING_FLAKINESS: [&str; 2] = ["casper", "casper-test"];
+const NETWORK_NAMES_NOT_ALLOWING_FLAKINESS: &[&str] = &["casper", "casper-test"];
 
 pub fn validate_config(network_name: &str, config: &Config) -> bool {
     if config.network.blocklist_retain_max_duration < config.network.blocklist_retain_min_duration {
