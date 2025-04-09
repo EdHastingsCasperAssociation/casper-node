@@ -646,14 +646,19 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
         casper::remove(keyspace).unwrap();
         // No value exists
         assert_eq!(casper::read_into_vec(keyspace), Ok(None));
-        // Removing again (aka removing non-existent key) is idempotent
-        casper::remove(keyspace).unwrap();
+        // Removing again (aka removing non-existent key) should raise an error
+        assert_eq!(casper::remove(keyspace), Err(CommonResult::NotFound));
         // Re-reading already purged value wouldn't be an issue
         assert_eq!(casper::read_into_vec(keyspace), Ok(None));
         // Write a new value under same key
         casper::write(keyspace, &value_2).unwrap();
         // New value exists
         assert_eq!(casper::read_into_vec(keyspace), Ok(Some(value_2.to_vec())));
+
+        // Attempting to remove a definetely non-existent key should be an error
+        let keyspace = Keyspace::Context(b"this key definetely does not exists");
+        let result = casper::remove(keyspace);
+        assert_eq!(result, Err(CommonResult::NotFound));
     }
 
     log!("👋 Goodbye");

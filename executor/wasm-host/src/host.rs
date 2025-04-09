@@ -8,7 +8,7 @@ use casper_executor_wasm_common::{
         ENTRY_POINT_PAYMENT_SELF_ONWARD,
     },
     error::{
-        CallError, TrapCode, CALLEE_NOT_CALLABLE, CALLEE_SUCCEEDED, CALLEE_TRAPPED,
+        CallError, CALLEE_NOT_CALLABLE, CALLEE_SUCCEEDED, CALLEE_TRAPPED,
         HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT,
         HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED, HOST_ERROR_MESSAGE_TOPIC_FULL,
         HOST_ERROR_NOT_FOUND, HOST_ERROR_PAYLOAD_TOO_LONG, HOST_ERROR_SUCCESS,
@@ -130,7 +130,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
                 Ok(key_name) => key_name,
                 Err(_) => {
                     // TODO: Invalid key name encoding
-                    return Ok(HOST_ERROR_NOT_FOUND);
+                    return Ok(HOST_ERROR_INVALID_DATA);
                 }
             };
 
@@ -140,7 +140,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
             let key_name = match std::str::from_utf8(&key_payload_bytes) {
                 Ok(key_name) => key_name,
                 Err(_) => {
-                    return Ok(1);
+                    return Ok(HOST_ERROR_INVALID_DATA);
                 }
             };
 
@@ -247,13 +247,13 @@ pub fn casper_remove<S: GlobalStateReader, E: Executor>(
             let key_name = match std::str::from_utf8(&key_payload_bytes) {
                 Ok(key_name) => key_name,
                 Err(_) => {
-                    return Ok(HOST_ERROR_NOT_FOUND);
+                    return Ok(HOST_ERROR_INVALID_DATA);
                 }
             };
 
             if !caller.has_export(key_name) {
                 // Missing wasm export, unable to perform global state write
-                return Ok(1);
+                return Ok(HOST_ERROR_NOT_FOUND);
             }
 
             Keyspace::PaymentInfo(key_name)
@@ -268,7 +268,30 @@ pub fn casper_remove<S: GlobalStateReader, E: Executor>(
         }
     };
 
-    caller.context_mut().tracking_copy.prune(global_state_key);
+    let global_state_read_result = caller.context_mut().tracking_copy.read(&global_state_key);
+    match global_state_read_result {
+        Ok(Some(_stored_value)) => {
+            // Produce a prune transform only if value under a given key exists in the global state
+            caller.context_mut().tracking_copy.prune(global_state_key);
+        }
+        Ok(None) => {
+            // Entry does not exists, and we can't proceed with the prune operation
+            return Ok(HOST_ERROR_NOT_FOUND);
+        }
+        Err(error) => {
+            // To protect the network against potential non-determinism (i.e. one validator runs out
+            // of space or just faces I/O issues that other validators may not have) we're simply
+            // aborting the process, hoping that once the node goes back online issues are resolved
+            // on the validator side. TODO: We should signal this to the contract
+            // runtime somehow, and let validator nodes skip execution.
+            error!(
+                ?error,
+                ?global_state_key,
+                "Error while attempting a read before removing value; aborting"
+            );
+            panic!("Error while attempting a read before removing value; aborting key={global_state_key:?} error={error:?}")
+        }
+    }
 
     Ok(HOST_ERROR_SUCCESS)
 }
@@ -409,7 +432,7 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
     if out_ptr != 0 {
         caller.memory_write(out_ptr, &global_state_raw_bytes)?;
     }
-    Ok(0)
+    Ok(HOST_ERROR_SUCCESS)
 }
 
 fn keyspace_to_global_state_key<S: GlobalStateReader, E: Executor>(
