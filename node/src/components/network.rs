@@ -40,6 +40,8 @@ mod message_pack_format;
 mod metrics;
 mod outgoing;
 mod symmetry;
+#[cfg(test)]
+pub(crate) use config::NetworkFlakinessConfig;
 pub(crate) mod tasks;
 #[cfg(test)]
 mod tests;
