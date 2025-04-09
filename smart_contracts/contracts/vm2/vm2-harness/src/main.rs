@@ -9,7 +9,7 @@ extern crate alloc;
 use casper_macros::casper;
 use casper_sdk::{
     casper::{self, emit, emit_raw, Entity},
-    casper_executor_wasm_common::error::Error,
+    casper_executor_wasm_common::error::CommonResult,
     log,
     types::{Address, CallError},
 };
@@ -605,10 +605,13 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
         let large_topic_name = "a".repeat(257);
         let large_payload_data = vec![0; 16384];
 
-        assert_eq!(emit_raw(&large_topic_name, &[]), Err(Error::TopicTooLong));
+        assert_eq!(
+            emit_raw(&large_topic_name, &[]),
+            Err(CommonResult::TopicTooLong)
+        );
         assert_eq!(
             emit_raw(&small_topic_name, &large_payload_data),
-            Err(Error::PayloadTooLong)
+            Err(CommonResult::PayloadTooLong)
         );
 
         for i in 0..127u64 {
@@ -621,7 +624,7 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
 
         assert_eq!(
             emit_raw(&format!("Topic128"), &[128]),
-            Err(Error::TooManyTopics),
+            Err(CommonResult::TooManyTopics),
             "Emitting message with small payload failed"
         );
     }

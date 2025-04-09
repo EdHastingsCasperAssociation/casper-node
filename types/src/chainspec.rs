@@ -190,6 +190,7 @@ impl Chainspec {
             }
         };
         let fee_handling = self.core_config.fee_handling;
+        let validator_minimum_bid_amount = self.core_config.minimum_bid_amount;
         let maximum_delegation_amount = self.core_config.maximum_delegation_amount;
         let minimum_delegation_amount = self.core_config.minimum_delegation_amount;
         let enable_addressable_entity = self.core_config.enable_addressable_entity;
@@ -209,6 +210,7 @@ impl Chainspec {
             global_state_update,
             chainspec_registry,
             fee_handling,
+            validator_minimum_bid_amount,
             maximum_delegation_amount,
             minimum_delegation_amount,
             enable_addressable_entity,
@@ -256,13 +258,6 @@ impl Chainspec {
         self.transaction_config
             .transaction_v1_config
             .get_max_transaction_count(lane)
-    }
-
-    /// Returns the max payment defined by the wasm lanes.
-    pub fn get_max_payment_limit_for_wasm(&self) -> u64 {
-        self.transaction_config
-            .transaction_v1_config
-            .get_max_payment_limit_for_wasm()
     }
 }
 
@@ -313,6 +308,12 @@ impl Chainspec {
     /// Set allow prepaid.
     pub fn with_allow_prepaid(&mut self, allow_prepaid: bool) -> &mut Self {
         self.core_config.allow_prepaid = allow_prepaid;
+        self
+    }
+
+    /// Set block gas limit.
+    pub fn with_block_gas_limit(&mut self, block_gas_limit: u64) -> &mut Self {
+        self.transaction_config.block_gas_limit = block_gas_limit;
         self
     }
 }

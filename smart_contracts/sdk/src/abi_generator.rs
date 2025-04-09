@@ -1,6 +1,10 @@
-use std::{ffi::c_void, ptr::NonNull};
+use core::{mem, ptr::NonNull};
 
-use crate::{abi::Declaration, linkme::distributed_slice};
+use crate::{
+    abi::{Declaration, Definitions},
+    linkme::distributed_slice,
+    schema::{Schema, SchemaMessage, SchemaType},
+};
 
 #[derive(Debug)]
 pub struct Param {
@@ -39,32 +43,68 @@ pub static ABI_COLLECTORS: [fn(&mut crate::abi::Definitions)] = [..];
 #[linkme(crate = crate::linkme)]
 pub static MESSAGES: [Message] = [..];
 
-#[no_mangle]
-pub extern "C" fn __cargo_casper_load_entrypoints(
-    callback: extern "C" fn(*const crate::schema::SchemaEntryPoint, usize, *mut c_void),
-    ctx: *mut c_void,
-) {
-    let mut vec = Vec::new();
-    for entrypoint in ENTRYPOINTS {
-        let entrypoint = entrypoint();
-        vec.push(entrypoint);
-    }
-    callback(vec.as_ptr(), vec.len(), ctx);
-}
+/// This function is called by the host to collect the schema from the contract.
+///
+/// This is considered internal implementation detail and should not be used directly.
+/// Primary user of this API is `cargo-casper` tool that will use it to extract scheama from the
+/// contract.
+///
+/// # Safety
+/// Pointer to json bytes passed to the callback is valid only within the scope of that function.
+#[export_name = "__cargo_casper_collect_schema"]
+pub unsafe extern "C" fn cargo_casper_collect_schema(size_ptr: *mut u64) -> *mut u8 {
+    // Collect definitions
+    let definitions = {
+        let mut definitions = Definitions::default();
 
-#[no_mangle]
-pub extern "C" fn __cargo_casper_collect_abi(definitions: *mut crate::abi::Definitions) {
-    let mut ptr = NonNull::new(definitions).expect("non-null pointer");
-    for collector in ABI_COLLECTORS {
-        collector(unsafe { ptr.as_mut() });
-    }
-}
+        for abi_collector in ABI_COLLECTORS {
+            abi_collector(&mut definitions);
+        }
 
-#[no_mangle]
-pub extern "C" fn __cargo_casper_collect_messages(
-    callback: extern "C" fn(*const Message, usize, *mut c_void),
-    ctx: *mut c_void,
-) {
-    let mut ctx = NonNull::new(ctx).expect("non-null pointer");
-    callback(MESSAGES.as_ptr(), MESSAGES.len(), unsafe { ctx.as_mut() });
+        definitions
+    };
+
+    // Collect messages
+    let messages = {
+        let mut messages = Vec::new();
+
+        for message in MESSAGES {
+            messages.push(SchemaMessage {
+                name: message.name.to_owned(),
+                decl: message.decl.to_owned(),
+            });
+        }
+
+        messages
+    };
+
+    // Collect entrypoints
+    let entry_points = {
+        let mut entry_points = Vec::new();
+        for entrypoint in ENTRYPOINTS {
+            entry_points.push(entrypoint());
+        }
+        entry_points
+    };
+
+    // Construct a schema object from the extracted information
+    let schema = Schema {
+        name: "contract".to_string(),
+        version: None,
+        type_: SchemaType::Contract {
+            state: "Contract".to_string(),
+        },
+        definitions,
+        entry_points,
+        messages,
+    };
+
+    // Write the schema using the provided writer
+    let mut json_bytes = serde_json::to_vec(&schema).expect("Serialized schema");
+    NonNull::new(size_ptr)
+        .expect("expected non-null ptr")
+        .write(json_bytes.len().try_into().expect("usize to u64"));
+    let ptr = json_bytes.as_mut_ptr();
+    mem::forget(json_bytes);
+    ptr
 }

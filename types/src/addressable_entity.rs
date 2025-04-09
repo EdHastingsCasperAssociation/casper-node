@@ -513,9 +513,12 @@ impl Distribution<EntityKindTag> for Standard {
     derive(JsonSchema),
     schemars(description = "Runtime used to execute a Transaction.")
 )]
+//Default is needed only in testing to meet EnumIter needs
+#[cfg_attr(any(feature = "testing", test), derive(Default))]
 #[serde(deny_unknown_fields)]
 #[repr(u8)]
 pub enum ContractRuntimeTag {
+    #[cfg_attr(any(feature = "testing", test), default)]
     VmCasperV1,
     VmCasperV2,
 }

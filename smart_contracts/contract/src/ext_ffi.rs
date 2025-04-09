@@ -225,16 +225,14 @@ extern "C" {
     /// * `action` - index representing the action threshold to set
     /// * `threshold` - new value of the threshold for performing this action
     pub fn casper_set_action_threshold(permission_level: u32, threshold: u32) -> i32;
-    /// This function returns the public key of the account for this deploy. The
-    /// result is always 36-bytes in length (4 bytes prefix on a 32-byte public
-    /// key); it is up to the caller to ensure the right amount of memory is
-    /// allocated at `dest_ptr`, data corruption in the wasm memory could occur
-    /// otherwise.
+    /// Returns the caller of the current context, i.e. the [`AccountHash`] of the
+    /// account which made the transaction request. The value stored in the host
+    /// buffer is always 32-bytes in length.
     ///
     /// # Arguments
     ///
-    /// * `dest_ptr` - pointer to position in wasm memory where to write the result
-    pub fn casper_get_caller(output_size: *mut usize) -> i32;
+    /// * `output_size_ptr` - pointer to a value where the size of the account hash will be set.
+    pub fn casper_get_caller(output_size_ptr: *mut usize) -> i32;
     /// This function gets the timestamp which will be in the block this deploy is
     /// included in. The return value is always a 64-bit unsigned integer,
     /// representing the number of milliseconds since the Unix epoch. It is up to
@@ -537,7 +535,7 @@ extern "C" {
     /// * `message_topics_size` - size of serialized BTreeMap<String, MessageTopicOperation>
     /// * `output_ptr` - pointer to a memory where host assigned contract hash is set to
     /// * `output_size` - expected width of output (currently 32)
-    pub fn casper_add_package_version(
+    pub fn casper_add_package_version_with_message_topics(
         package_hash_ptr: *const u8,
         package_hash_size: usize,
         version_ptr: *const u32,

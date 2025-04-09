@@ -1,5 +1,5 @@
 pub(crate) mod imports;
-mod metering_middleware;
+pub(crate) mod middleware;
 
 use std::{
     collections::BinaryHeap,
@@ -7,13 +7,17 @@ use std::{
 };
 
 use bytes::Bytes;
+use casper_executor_wasm_common::error::TrapCode;
 use casper_executor_wasm_host::{context::Context, host};
 use casper_executor_wasm_interface::{
     executor::Executor, u32_from_host_result, Caller, Config, ExportError, GasUsage,
-    InterfaceVersion, MeteringPoints, TrapCode, VMError, VMResult, WasmInstance,
-    WasmPreparationError,
+    InterfaceVersion, MeteringPoints, VMError, VMResult, WasmInstance, WasmPreparationError,
 };
 use casper_storage::global_state::GlobalStateReader;
+use middleware::{
+    gas_metering,
+    gatekeeper::{Gatekeeper, GatekeeperConfig},
+};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use wasmer::{
@@ -23,8 +27,6 @@ use wasmer::{
 };
 use wasmer_compiler_singlepass::Singlepass;
 use wasmer_middlewares::metering;
-
-use metering_middleware::make_wasmer_metering_middleware;
 
 fn from_wasmer_memory_access_error(error: wasmer::MemoryAccessError) -> VMError {
     let trap_code = match error {
@@ -41,7 +43,7 @@ fn from_wasmer_memory_access_error(error: wasmer::MemoryAccessError) -> VMError 
         _ => {
             // All errors are handled and converted to a trap code, but we have to add this as
             // wasmer's errors are #[non_exhaustive]
-            unreachable!("Unexpected error: {:?}", error)
+            unreachable!("Unexpected error: {error:?}")
         }
     };
     VMError::Trap(trap_code)
@@ -289,11 +291,12 @@ where
         context: Context<S, E>,
         config: Config,
     ) -> Result<Self, WasmPreparationError> {
-        // let mut store = Engine
         let engine = {
             let mut singlepass_compiler = Singlepass::new();
-            let metering = make_wasmer_metering_middleware(config.gas_limit());
-            singlepass_compiler.push_middleware(metering);
+            let gatekeeper_config = GatekeeperConfig::default();
+            singlepass_compiler.push_middleware(Arc::new(Gatekeeper::new(gatekeeper_config)));
+            singlepass_compiler
+                .push_middleware(gas_metering::gas_metering_middleware(config.gas_limit()));
             singlepass_compiler
         };
 

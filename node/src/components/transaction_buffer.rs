@@ -447,7 +447,6 @@ impl TransactionBuffer {
         }
 
         let mut holds = HashSet::new();
-        let mut dead = HashSet::new();
 
         let mut have_hit_mint_limit = false;
         let mut have_hit_wasm_limit = false;
@@ -511,18 +510,16 @@ impl TransactionBuffer {
                             // it should be physically impossible for a duplicate transaction or
                             // transaction to be in the transaction buffer, thus this should be
                             // unreachable
-                            error!(
+                            warn!(
                                 ?transaction_hash,
                                 "TransactionBuffer: duplicated transaction or transfer in transaction buffer"
                             );
-                            dead.insert(transaction_hash);
                         }
                         AddError::Expired => {
                             info!(
                                 ?transaction_hash,
                                 "TransactionBuffer: expired transaction or transfer in transaction buffer"
                             );
-                            dead.insert(transaction_hash);
                         }
                         AddError::Count(lane_id) => {
                             match lane_id {
@@ -588,7 +585,6 @@ impl TransactionBuffer {
                 }
             }
         }
-        self.dead.extend(dead);
 
         // Put a hold on all proposed transactions / transfers and update metrics
         match self.hold.entry(timestamp) {
@@ -797,7 +793,7 @@ where
                             self.register_transaction(*transaction);
                         }
                         None => {
-                            warn!("cannot register un-stored transaction({})", transaction_id);
+                            debug!("cannot register un-stored transaction({})", transaction_id);
                         }
                     }
                     Effects::new()

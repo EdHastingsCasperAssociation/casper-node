@@ -11,14 +11,18 @@ use casper_execution_engine::{
     engine_state::{BlockInfo, Error as EngineError, ExecutableItem, ExecutionEngineV1},
     execution::ExecError,
 };
-use casper_executor_wasm_common::{chain_utils, flags::ReturnFlags};
+use casper_executor_wasm_common::{
+    chain_utils,
+    error::{CallError, TrapCode},
+    flags::ReturnFlags,
+};
 use casper_executor_wasm_host::context::Context;
 use casper_executor_wasm_interface::{
     executor::{
         ExecuteError, ExecuteRequest, ExecuteRequestBuilder, ExecuteResult,
         ExecuteWithProviderError, ExecuteWithProviderResult, ExecutionKind, Executor,
     },
-    ConfigBuilder, GasUsage, HostError, TrapCode, VMError, WasmInstance,
+    ConfigBuilder, GasUsage, VMError, WasmInstance,
 };
 use casper_executor_wasmer_backend::WasmerEngine;
 use casper_storage::{
@@ -246,7 +250,7 @@ impl ExecutorV2 {
             Err(mint_error) => {
                 error!(?mint_error, "Failed to create a purse");
                 return Err(InstallContractError::SystemContract(
-                    HostError::CalleeTrapped(TrapCode::UnreachableCodeReached),
+                    CallError::CalleeTrapped(TrapCode::UnreachableCodeReached),
                 ));
             }
         };
@@ -592,7 +596,7 @@ impl ExecutorV2 {
             Err(VMError::Return { flags, data }) => {
                 let host_error = if flags.contains(ReturnFlags::REVERT) {
                     // The contract has reverted.
-                    Some(HostError::CalleeReverted)
+                    Some(CallError::CalleeReverted)
                 } else {
                     // Merge the tracking copy parts since the execution has succeeded.
                     initial_tracking_copy.apply_changes(
@@ -614,7 +618,7 @@ impl ExecutorV2 {
                 })
             }
             Err(VMError::OutOfGas) => Ok(ExecuteResult {
-                host_error: Some(HostError::CalleeGasDepleted),
+                host_error: Some(CallError::CalleeGasDepleted),
                 output: None,
                 gas_usage,
                 effects: final_tracking_copy.effects(),
@@ -622,7 +626,7 @@ impl ExecutorV2 {
                 messages: final_tracking_copy.messages(),
             }),
             Err(VMError::Trap(trap_code)) => Ok(ExecuteResult {
-                host_error: Some(HostError::CalleeTrapped(trap_code)),
+                host_error: Some(CallError::CalleeTrapped(trap_code)),
                 output: None,
                 gas_usage,
                 effects: initial_tracking_copy.effects(),
@@ -632,7 +636,7 @@ impl ExecutorV2 {
             Err(VMError::Export(export_error)) => {
                 error!(?export_error, "export error");
                 Ok(ExecuteResult {
-                    host_error: Some(HostError::NotCallable),
+                    host_error: Some(CallError::NotCallable),
                     output: None,
                     gas_usage,
                     effects: initial_tracking_copy.effects(),
@@ -709,14 +713,14 @@ impl ExecutorV2 {
             .map(Bytes::from);
 
         let host_error = match wasm_v1_result.error() {
-            Some(EngineError::Exec(ExecError::GasLimit)) => Some(HostError::CalleeGasDepleted),
+            Some(EngineError::Exec(ExecError::GasLimit)) => Some(CallError::CalleeGasDepleted),
             Some(EngineError::Exec(ExecError::Revert(revert_code))) => {
                 assert!(output.is_none(), "output should be None"); // ExecutionEngineV1 sets output to None when error occurred.
                 let revert_code: u32 = (*revert_code).into();
                 output = Some(revert_code.to_le_bytes().to_vec().into()); // Pass serialized revert code as output.
-                Some(HostError::CalleeReverted)
+                Some(CallError::CalleeReverted)
             }
-            Some(_) => Some(HostError::CalleeTrapped(TrapCode::UnreachableCodeReached)),
+            Some(_) => Some(CallError::CalleeTrapped(TrapCode::UnreachableCodeReached)),
             None => None,
         };
 
@@ -772,14 +776,14 @@ impl ExecutorV2 {
                 cache: _,
                 messages,
             }) => match state_provider.commit_effects(state_root_hash, effects.clone()) {
-                Ok(post_state_hash) => Ok(ExecuteWithProviderResult {
+                Ok(post_state_hash) => Ok(ExecuteWithProviderResult::new(
                     host_error,
                     output,
                     gas_usage,
-                    post_state_hash,
                     effects,
+                    post_state_hash,
                     messages,
-                }),
+                )),
                 Err(error) => Err(error.into()),
             },
             Err(error) => Err(ExecuteWithProviderError::Execute(error)),

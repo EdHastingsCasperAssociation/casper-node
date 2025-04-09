@@ -58,8 +58,8 @@ use casper_types::{
     runtime_args,
     system::{
         auction::{
-            BidKind, EraValidators, Unbond, UnbondKind, UnbondingPurse, ValidatorWeights,
-            WithdrawPurses, ARG_ERA_END_TIMESTAMP_MILLIS, ARG_EVICTED_VALIDATORS,
+            BidAddrTag, BidKind, EraValidators, Unbond, UnbondKind, UnbondingPurse, ValidatorBid,
+            ValidatorWeights, WithdrawPurses, ARG_ERA_END_TIMESTAMP_MILLIS, ARG_EVICTED_VALIDATORS,
             AUCTION_DELAY_KEY, ERA_ID_KEY, METHOD_RUN_AUCTION, UNBONDING_DELAY_KEY,
         },
         mint::{MINT_GAS_HOLD_HANDLING_KEY, MINT_GAS_HOLD_INTERVAL_KEY},
@@ -823,6 +823,7 @@ where
         let allow_auction_bids = config.core_config.allow_auction_bids;
         let compute_rewards = config.core_config.compute_rewards;
         let max_delegators_per_validator = config.core_config.max_delegators_per_validator;
+        let minimum_bid_amount = config.core_config.minimum_bid_amount;
         let minimum_delegation_amount = config.core_config.minimum_delegation_amount;
         let balance_hold_interval = config.core_config.gas_hold_interval.millis();
         let include_credits = config.core_config.fee_handling == FeeHandling::NoFee;
@@ -839,6 +840,7 @@ where
             allow_auction_bids,
             compute_rewards,
             max_delegators_per_validator,
+            minimum_bid_amount,
             minimum_delegation_amount,
             balance_hold_interval,
             include_credits,
@@ -1007,6 +1009,7 @@ where
             self.chainspec.core_config.allow_auction_bids,
             self.chainspec.core_config.compute_rewards,
             self.chainspec.core_config.max_delegators_per_validator,
+            self.chainspec.core_config.minimum_bid_amount,
             self.chainspec.core_config.minimum_delegation_amount,
             self.chainspec.core_config.gas_hold_interval.millis(),
             include_credits,
@@ -1784,6 +1787,33 @@ where
         }
 
         ret
+    }
+
+    /// Retrieve the bid for a validator by their public key.
+    pub fn get_validator_bid(&mut self, validator_public_key: PublicKey) -> Option<ValidatorBid> {
+        let state_root_hash = self.get_post_state_hash();
+
+        let tracking_copy = self
+            .data_access_layer
+            .tracking_copy(state_root_hash)
+            .unwrap()
+            .unwrap();
+
+        let reader = tracking_copy.reader();
+
+        let validator_keys = reader
+            .keys_with_prefix(&[KeyTag::BidAddr as u8, BidAddrTag::Validator as u8])
+            .unwrap_or_default();
+
+        for key in validator_keys.into_iter() {
+            if let Ok(Some(StoredValue::BidKind(BidKind::Validator(bid)))) = reader.read(&key) {
+                if bid.validator_public_key() == &validator_public_key {
+                    return Some(*bid);
+                }
+            }
+        }
+
+        None
     }
 
     /// Gets [`BTreeMap<AccountHash, Vec<UnbondingPurse>>`].

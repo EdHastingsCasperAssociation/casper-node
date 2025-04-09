@@ -34,6 +34,7 @@ pub enum Keyspace<'a> {
 }
 
 impl Keyspace<'_> {
+    #[must_use]
     pub fn as_tag(&self) -> KeyspaceTag {
         match self {
             Keyspace::State => KeyspaceTag::State,
@@ -43,6 +44,7 @@ impl Keyspace<'_> {
         }
     }
 
+    #[must_use]
     pub fn as_u64(&self) -> u64 {
         self.as_tag() as u64
     }

@@ -8,16 +8,16 @@ pub mod transaction_v1_payload;
 
 #[cfg(any(feature = "std", feature = "testing", test))]
 use super::InitiatorAddrAndSecretKey;
-#[cfg(any(all(feature = "std", feature = "testing"), test))]
-use super::{TransactionEntryPoint, TransactionTarget};
 use crate::{
     bytesrepr::{self, Error, FromBytes, ToBytes},
     crypto,
 };
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
+use crate::{testing::TestRng, TransactionConfig, LARGE_WASM_LANE_ID};
+#[cfg(any(feature = "std", test))]
 use crate::{
-    testing::TestRng, TransactionConfig, AUCTION_LANE_ID, INSTALL_UPGRADE_LANE_ID,
-    LARGE_WASM_LANE_ID, MINT_LANE_ID,
+    TransactionEntryPoint, TransactionTarget, TransactionV1Config, AUCTION_LANE_ID,
+    INSTALL_UPGRADE_LANE_ID, MINT_LANE_ID,
 };
 #[cfg(any(feature = "std", test, feature = "testing"))]
 use alloc::collections::BTreeMap;
@@ -39,7 +39,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "std", test))]
 use thiserror::Error;
-use tracing::debug;
+use tracing::{error, trace};
 pub use transaction_v1_payload::TransactionV1Payload;
 #[cfg(any(feature = "std", test))]
 use transaction_v1_payload::TransactionV1PayloadJson;
@@ -168,16 +168,6 @@ impl TransactionV1 {
             #[cfg(any(feature = "once_cell", test))]
             is_verified: OnceCell::new(),
         }
-    }
-
-    // ctor from payload
-    pub fn from_payload(payload: TransactionV1Payload) -> Self {
-        let hash = Digest::hash(
-            payload
-                .to_bytes()
-                .unwrap_or_else(|error| panic!("should serialize body: {}", error)),
-        );
-        TransactionV1::new(hash.into(), payload, BTreeSet::new())
     }
 
     #[cfg(any(feature = "std", test, feature = "testing"))]
@@ -421,13 +411,15 @@ impl TransactionV1 {
 
     /// Checks if the declared hash of the transaction matches calculated hash.
     pub fn has_valid_hash(&self) -> Result<(), InvalidTransactionV1> {
-        let computed_hash = Digest::hash(
-            self.payload
-                .to_bytes()
-                .unwrap_or_else(|error| panic!("should serialize body: {}", error)),
-        );
+        let computed_hash = Digest::hash(self.payload.to_bytes().map_err(|error| {
+            error!(
+                ?error,
+                "Could not serialize transaction for purpose of calculating hash."
+            );
+            InvalidTransactionV1::CouldNotSerializeTransaction
+        })?);
         if TransactionV1Hash::new(computed_hash) != self.hash {
-            debug!(?self, ?computed_hash, "invalid transaction hash");
+            trace!(?self, ?computed_hash, "invalid transaction hash");
             return Err(InvalidTransactionV1::InvalidTransactionHash);
         }
         Ok(())
@@ -447,7 +439,7 @@ impl TransactionV1 {
 
     fn do_verify(&self) -> Result<(), InvalidTransactionV1> {
         if self.approvals.is_empty() {
-            debug!(?self, "transaction has no approvals");
+            trace!(?self, "transaction has no approvals");
             return Err(InvalidTransactionV1::EmptyApprovals);
         }
 
@@ -455,9 +447,11 @@ impl TransactionV1 {
 
         for (index, approval) in self.approvals.iter().enumerate() {
             if let Err(error) = crypto::verify(self.hash, approval.signature(), approval.signer()) {
-                debug!(
+                trace!(
                     ?self,
-                    "failed to verify transaction approval {}: {}", index, error
+                    "failed to verify transaction approval {}: {}",
+                    index,
+                    error
                 );
                 return Err(InvalidTransactionV1::InvalidApproval { index, error });
             }
@@ -626,5 +620,135 @@ impl Ord for TransactionV1 {
 impl PartialOrd for TransactionV1 {
     fn partial_cmp(&self, other: &TransactionV1) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+#[cfg(any(feature = "std", test))]
+/// Calculates the laned based on properties of the transaction
+pub fn calculate_transaction_lane(
+    entry_point: &TransactionEntryPoint,
+    target: &TransactionTarget,
+    pricing_mode: &PricingMode,
+    config: &TransactionV1Config,
+    size_estimation: u64,
+    runtime_args_size: u64,
+) -> Result<u8, InvalidTransactionV1> {
+    use crate::TransactionRuntimeParams;
+
+    use super::get_lane_for_non_install_wasm;
+
+    match target {
+        TransactionTarget::Native => match entry_point {
+            TransactionEntryPoint::Transfer | TransactionEntryPoint::Burn => Ok(MINT_LANE_ID),
+            TransactionEntryPoint::AddBid
+            | TransactionEntryPoint::WithdrawBid
+            | TransactionEntryPoint::Delegate
+            | TransactionEntryPoint::Undelegate
+            | TransactionEntryPoint::Redelegate
+            | TransactionEntryPoint::ActivateBid
+            | TransactionEntryPoint::ChangeBidPublicKey
+            | TransactionEntryPoint::AddReservations
+            | TransactionEntryPoint::CancelReservations => Ok(AUCTION_LANE_ID),
+            TransactionEntryPoint::Call => Err(InvalidTransactionV1::EntryPointCannotBeCall),
+            TransactionEntryPoint::Custom(_) => {
+                Err(InvalidTransactionV1::EntryPointCannotBeCustom {
+                    entry_point: entry_point.clone(),
+                })
+            }
+        },
+        TransactionTarget::Stored { .. } => match entry_point {
+            TransactionEntryPoint::Custom(_) => get_lane_for_non_install_wasm(
+                config,
+                pricing_mode,
+                size_estimation,
+                runtime_args_size,
+            )
+            .map_err(Into::into),
+            TransactionEntryPoint::Call
+            | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
+            | TransactionEntryPoint::AddBid
+            | TransactionEntryPoint::WithdrawBid
+            | TransactionEntryPoint::Delegate
+            | TransactionEntryPoint::Undelegate
+            | TransactionEntryPoint::Redelegate
+            | TransactionEntryPoint::ActivateBid
+            | TransactionEntryPoint::ChangeBidPublicKey
+            | TransactionEntryPoint::AddReservations
+            | TransactionEntryPoint::CancelReservations => {
+                Err(InvalidTransactionV1::EntryPointMustBeCustom {
+                    entry_point: entry_point.clone(),
+                })
+            }
+        },
+        TransactionTarget::Session {
+            is_install_upgrade,
+            runtime: TransactionRuntimeParams::VmCasperV1,
+            ..
+        } => match entry_point {
+            TransactionEntryPoint::Call => {
+                if *is_install_upgrade {
+                    Ok(INSTALL_UPGRADE_LANE_ID)
+                } else {
+                    get_lane_for_non_install_wasm(
+                        config,
+                        pricing_mode,
+                        size_estimation,
+                        runtime_args_size,
+                    )
+                    .map_err(Into::into)
+                }
+            }
+            TransactionEntryPoint::Custom(_)
+            | TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
+            | TransactionEntryPoint::AddBid
+            | TransactionEntryPoint::WithdrawBid
+            | TransactionEntryPoint::Delegate
+            | TransactionEntryPoint::Undelegate
+            | TransactionEntryPoint::Redelegate
+            | TransactionEntryPoint::ActivateBid
+            | TransactionEntryPoint::ChangeBidPublicKey
+            | TransactionEntryPoint::AddReservations
+            | TransactionEntryPoint::CancelReservations => {
+                Err(InvalidTransactionV1::EntryPointMustBeCall {
+                    entry_point: entry_point.clone(),
+                })
+            }
+        },
+        TransactionTarget::Session {
+            is_install_upgrade,
+            runtime: TransactionRuntimeParams::VmCasperV2 { .. },
+            ..
+        } => match entry_point {
+            TransactionEntryPoint::Call | TransactionEntryPoint::Custom(_) => {
+                if *is_install_upgrade {
+                    Ok(INSTALL_UPGRADE_LANE_ID)
+                } else {
+                    get_lane_for_non_install_wasm(
+                        config,
+                        pricing_mode,
+                        size_estimation,
+                        runtime_args_size,
+                    )
+                    .map_err(Into::into)
+                }
+            }
+            TransactionEntryPoint::Transfer
+            | TransactionEntryPoint::Burn
+            | TransactionEntryPoint::AddBid
+            | TransactionEntryPoint::WithdrawBid
+            | TransactionEntryPoint::Delegate
+            | TransactionEntryPoint::Undelegate
+            | TransactionEntryPoint::Redelegate
+            | TransactionEntryPoint::ActivateBid
+            | TransactionEntryPoint::ChangeBidPublicKey
+            | TransactionEntryPoint::AddReservations
+            | TransactionEntryPoint::CancelReservations => {
+                Err(InvalidTransactionV1::EntryPointMustBeCall {
+                    entry_point: entry_point.clone(),
+                })
+            }
+        },
     }
 }

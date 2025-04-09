@@ -19,6 +19,8 @@ use crate::file_utils::{ReadFileError, WriteFileError};
 #[derive(Clone, Eq, PartialEq, Debug, Serialize)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[non_exhaustive]
+//Default is needed only in testing to meet EnumIter needs
+#[cfg_attr(any(feature = "testing", test), derive(Default))]
 pub enum Error {
     /// Error resulting from creating or using asymmetric key types.
     AsymmetricKey(String),
@@ -34,6 +36,7 @@ pub enum Error {
     FromBase64(base64::DecodeError),
 
     /// Signature error.
+    #[cfg_attr(any(feature = "testing", test), default)]
     SignatureError,
 
     /// Error trying to manipulate the system key.

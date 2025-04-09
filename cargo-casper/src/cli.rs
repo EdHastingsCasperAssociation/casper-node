@@ -27,7 +27,7 @@ pub(crate) fn extract_embedded_dir(target: &Path, dir: &Dir) -> io::Result<PathB
                 std::fs::write(file_path, file.contents())?;
             }
             DirEntry::Dir(sub_dir) => {
-                extract_embedded_dir(&target, sub_dir)?;
+                extract_embedded_dir(target, sub_dir)?;
             }
         }
     }

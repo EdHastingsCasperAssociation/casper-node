@@ -87,7 +87,7 @@ pub trait Auction:
             return Err(Error::AuctionBidsDisabled.into());
         }
 
-        if amount < U512::from(minimum_bid_amount) {
+        if amount == U512::zero() {
             return Err(Error::BondTooSmall.into());
         }
 
@@ -109,11 +109,14 @@ pub trait Auction:
         let (target, validator_bid) = if let Some(BidKind::Validator(mut validator_bid)) =
             self.read_bid(&validator_bid_key)?
         {
+            let updated_stake = validator_bid.increase_stake(amount)?;
+            if updated_stake < U512::from(minimum_bid_amount) {
+                return Err(Error::BondTooSmall.into());
+            }
             // update an existing validator bid
             if validator_bid.inactive() {
                 validator_bid.activate();
             }
-            validator_bid.increase_stake(amount)?;
             validator_bid.with_delegation_rate(delegation_rate);
             validator_bid.set_delegation_amount_boundaries(
                 minimum_delegation_amount,
@@ -141,6 +144,9 @@ pub trait Auction:
 
             (*validator_bid.bonding_purse(), validator_bid)
         } else {
+            if amount < U512::from(minimum_bid_amount) {
+                return Err(Error::BondTooSmall.into());
+            }
             // create new validator bid
             let bonding_purse = self.create_purse()?;
             let validator_bid = ValidatorBid::unlocked(
@@ -684,6 +690,7 @@ pub trait Auction:
         max_delegators_per_validator: u32,
         include_credits: bool,
         credit_cap: Ratio<U512>,
+        minimum_bid_amount: u64,
     ) -> Result<(), ApiError> {
         debug!("run_auction called");
 
@@ -725,45 +732,15 @@ pub trait Auction:
             }
         }
 
-        // Compute next auction winners
-        let winners: ValidatorWeights = {
-            let locked_validators = validator_bids_detail.validator_weights(
-                era_id,
-                era_end_timestamp_millis,
-                vesting_schedule_period_millis,
-                true,
-                include_credits,
-                credit_cap,
-            )?;
-
-            let remaining_auction_slots = validator_slots.saturating_sub(locked_validators.len());
-            if remaining_auction_slots > 0 {
-                let unlocked_validators = validator_bids_detail.validator_weights(
-                    era_id,
-                    era_end_timestamp_millis,
-                    vesting_schedule_period_millis,
-                    false,
-                    include_credits,
-                    credit_cap,
-                )?;
-                let mut unlocked_validators = unlocked_validators
-                    .iter()
-                    .map(|(public_key, validator_bid)| (public_key.clone(), *validator_bid))
-                    .collect::<Vec<(PublicKey, U512)>>();
-
-                unlocked_validators.sort_by(|(_, lhs), (_, rhs)| rhs.cmp(lhs));
-                locked_validators
-                    .into_iter()
-                    .chain(
-                        unlocked_validators
-                            .into_iter()
-                            .take(remaining_auction_slots),
-                    )
-                    .collect()
-            } else {
-                locked_validators
-            }
-        };
+        let winners = validator_bids_detail.pick_winners(
+            era_id,
+            validator_slots,
+            minimum_bid_amount,
+            include_credits,
+            credit_cap,
+            era_end_timestamp_millis,
+            vesting_schedule_period_millis,
+        )?;
 
         let (validator_bids, validator_credits, delegator_bids, reservations) =
             validator_bids_detail.destructure();
@@ -893,7 +870,7 @@ pub trait Auction:
 
     /// Activates a given validator's bid.  To be used when a validator has been marked as inactive
     /// by consensus (aka "evicted").
-    fn activate_bid(&mut self, validator: PublicKey) -> Result<(), Error> {
+    fn activate_bid(&mut self, validator: PublicKey, minimum_bid: u64) -> Result<(), Error> {
         let provided_account_hash = AccountHash::from(&validator);
 
         if !self.is_allowed_session_caller(&provided_account_hash) {
@@ -902,9 +879,13 @@ pub trait Auction:
 
         let key = BidAddr::from(validator).into();
         if let Some(BidKind::Validator(mut validator_bid)) = self.read_bid(&key)? {
-            validator_bid.activate();
-            self.write_bid(key, BidKind::Validator(validator_bid))?;
-            Ok(())
+            if validator_bid.staked_amount() >= minimum_bid.into() {
+                validator_bid.activate();
+                self.write_bid(key, BidKind::Validator(validator_bid))?;
+                Ok(())
+            } else {
+                Err(Error::BondTooSmall)
+            }
         } else {
             Err(Error::ValidatorNotFound)
         }

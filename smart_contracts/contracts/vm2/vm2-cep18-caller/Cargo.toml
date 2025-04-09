@@ -10,4 +10,4 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 casper-sdk = { path = "../../../sdk" }
 vm2-cep18 = { path = "../vm2-cep18" }
-borsh = { version = "1.2.0", features = ["derive"] }
+borsh = { version = "1.5", features = ["derive"] }
