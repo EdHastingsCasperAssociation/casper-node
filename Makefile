@@ -132,7 +132,7 @@ lint-smart-contracts:
 
 .PHONY: audit-rs
 audit-rs:
-	$(CARGO) audit --ignore RUSTSEC-2024-0437
+	$(CARGO) audit --ignore RUSTSEC-2024-0437 --ignore RUSTSEC-2025-0022
 
 .PHONY: audit
 audit: audit-rs

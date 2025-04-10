@@ -1,4 +1,4 @@
-use std::ffi::c_void;
+use core::{mem, ptr::NonNull};
 
 use crate::{
     abi::{Declaration, Definitions},
@@ -52,10 +52,7 @@ pub static MESSAGES: [Message] = [..];
 /// # Safety
 /// Pointer to json bytes passed to the callback is valid only within the scope of that function.
 #[export_name = "__cargo_casper_collect_schema"]
-pub unsafe extern "C" fn cargo_casper_collect_schema(
-    callback: unsafe extern "C" fn(*const u8, usize, *mut c_void),
-    ctx: *mut c_void,
-) {
+pub unsafe extern "C" fn cargo_casper_collect_schema(size_ptr: *mut u64) -> *mut u8 {
     // Collect definitions
     let definitions = {
         let mut definitions = Definitions::default();
@@ -103,8 +100,11 @@ pub unsafe extern "C" fn cargo_casper_collect_schema(
     };
 
     // Write the schema using the provided writer
-    let json_bytes = serde_json::to_vec(&schema).expect("Serialized schema");
-
-    // Call the callback with the serialized schema
-    callback(json_bytes.as_ptr(), json_bytes.len(), ctx)
+    let mut json_bytes = serde_json::to_vec(&schema).expect("Serialized schema");
+    NonNull::new(size_ptr)
+        .expect("expected non-null ptr")
+        .write(json_bytes.len().try_into().expect("usize to u64"));
+    let ptr = json_bytes.as_mut_ptr();
+    mem::forget(json_bytes);
+    ptr
 }
