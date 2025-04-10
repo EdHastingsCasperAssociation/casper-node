@@ -1,21 +1,12 @@
 use std::{
     ffi::OsStr,
-    io::{BufRead, BufReader},
     path::PathBuf,
     process::{Command, Stdio},
 };
 
-use anyhow::{anyhow, Context, Result};
-use serde::Deserialize;
+use anyhow::{anyhow, Result};
 
-#[derive(Deserialize)]
-#[serde(tag = "reason")]
-enum CargoMessage {
-    #[serde(rename = "compiler-artifact")]
-    CompilerArtifact { filenames: Vec<String> },
-    #[serde(other)]
-    Other,
-}
+use crate::utils::command_runner::{self, DEFAULT_MAX_LINES};
 
 /// Represents a job to compile a Cargo project.
 pub(crate) struct CompileJob<'a> {
@@ -70,7 +61,8 @@ impl<'a> CompileJob<'a> {
             &features_str,
             "--lib",
             "--release",
-            "--message-format=json",
+            "--color=always",
+            "--message-format=json-diagnostic-rendered-ansi",
         ]);
 
         // Run the cargo build command and capture the output
@@ -86,41 +78,61 @@ impl<'a> CompileJob<'a> {
             command.current_dir(in_directory);
         }
 
-        let mut handle = command.spawn().context("Failed spawning child process")?;
+        // Run the process and capture the output from both stdout and stderr.
+        let handle = command_runner::run_process(&mut command)?;
 
-        let stdout = handle.stdout.take().unwrap();
-        let reader = BufReader::new(stdout);
-
+        let mut log_trail = command_runner::LogTrailBuilder::new()
+            .max_lines(DEFAULT_MAX_LINES)
+            .interactive(command_runner::Interactive::Auto)
+            .build();
         let mut artifacts = Vec::new();
-        for line in reader.lines() {
-            let line = line?;
-            if let Ok(CargoMessage::CompilerArtifact { filenames }) =
-                serde_json::from_str::<CargoMessage>(&line)
-            {
-                for artifact in &filenames {
-                    let path = PathBuf::from(artifact);
-                    if path
-                        .parent()
-                        .and_then(|p| p.file_name())
-                        .and_then(OsStr::to_str)
-                        != Some("deps")
+        for line in &handle.receiver {
+            match line {
+                command_runner::Line::Stdout(line) => {
+                    match serde_json::from_str::<cargo_metadata::Message>(&line.to_string())
+                        .expect("Parse")
                     {
-                        artifacts.push(PathBuf::from(artifact));
+                        cargo_metadata::Message::CompilerArtifact(artifact) => {
+                            for artifact in &artifact.filenames {
+                                let path = PathBuf::from(artifact);
+                                if path
+                                    .parent()
+                                    .and_then(|p| p.file_name())
+                                    .and_then(OsStr::to_str)
+                                    != Some("deps")
+                                {
+                                    artifacts.push(PathBuf::from(artifact));
+                                }
+                            }
+                        }
+                        cargo_metadata::Message::CompilerMessage(compiler_message) => {
+                            log_trail.push_line(compiler_message.to_string())?;
+                        }
+                        cargo_metadata::Message::BuildScriptExecuted(_build_script) => {}
+                        cargo_metadata::Message::BuildFinished(_build_finished) => {}
+                        cargo_metadata::Message::TextLine(text) => log_trail.push_line(text)?,
+                        _ => todo!(),
                     }
+                }
+                command_runner::Line::Stderr(line) => {
+                    log_trail.push_line(line)?;
                 }
             }
         }
 
-        let output = handle
-            .wait_with_output()
-            .context("Failed compiling user wasm")?;
-
-        if !output.status.success() {
-            return Err(anyhow!(
-                "Cargo build failed:\nSTDERR: {}\nSTDOUT: {}",
-                String::from_utf8_lossy(&output.stderr),
-                String::from_utf8_lossy(&output.stdout)
-            ));
+        match handle.wait() {
+            Ok(()) => {
+                // Process completed successfully.
+            }
+            Err(command_runner::Outcome::Io(error)) => {
+                return Err(anyhow!("Cargo build failed with error code: {error}"));
+            }
+            Err(command_runner::Outcome::ErrorCode(code)) => {
+                return Err(anyhow!("Cargo build failed with error code: {code}"));
+            }
+            Err(command_runner::Outcome::Signal(signal)) => {
+                return Err(anyhow!("Cargo build was terminated by signal: {signal}"));
+            }
         }
 
         Ok(CompilationResults { artifacts })
