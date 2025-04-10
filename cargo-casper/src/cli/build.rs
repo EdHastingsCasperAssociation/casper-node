@@ -25,7 +25,7 @@ pub fn build_impl(
             String::from_utf8(buffer.into_inner()).context("Failed to read contract schema")?;
 
         // Build the contract with above schema injected
-        eprintln!("Building contract with schema injected...");
+        eprintln!("🔨 Step 2: Building contract with schema injected...");
         let production_wasm_path = CompileJob::new(
             package_name,
             None,
@@ -48,7 +48,7 @@ pub fn build_impl(
         production_wasm_path
     } else {
         // Compile and move to specified output directory
-        eprintln!("Building contract...");
+        eprintln!("🔨 Step 2: Building contract...");
         CompileJob::new(package_name, None, vec![])
             .dispatch("wasm32-unknown-unknown", Option::<String>::None)
             .context("Failed to compile user wasm")?
@@ -57,7 +57,7 @@ pub fn build_impl(
     };
 
     // Run wasm optimizations passes that will shrink the size of the wasm.
-    eprintln!("Applying optimizations...");
+    eprintln!("🔨 Step 3: Applying optimizations...");
     Command::new("wasm-strip")
         .args([&production_wasm_path])
         .spawn()
@@ -83,7 +83,7 @@ pub fn build_impl(
     }
 
     // Report paths
-    eprintln!("Completed. Build artifacts:");
+    eprintln!("✅ Completed. Build artifacts:");
     eprintln!("{:?}", out_wasm_path.canonicalize()?);
     if let Some(schema_path) = out_schema_path {
         eprintln!("{:?}", schema_path.canonicalize()?);
