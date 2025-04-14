@@ -1,7 +1,5 @@
 use std::{collections::BTreeMap, convert::TryInto, ops::Mul};
 
-use num_rational::Ratio;
-
 use super::{
     Auction, EraValidators, MintProvider, RuntimeProvider, StorageProvider, ValidatorWeights,
 };
@@ -16,8 +14,9 @@ use casper_types::{
         ERA_END_TIMESTAMP_MILLIS_KEY, ERA_ID_KEY, SEIGNIORAGE_RECIPIENTS_SNAPSHOT_KEY,
         UNBONDING_DELAY_KEY, VALIDATOR_SLOTS_KEY,
     },
-    ApiError, CLTyped, EraId, Key, KeyTag, PublicKey, URef, U512,
+    AccessRights, ApiError, CLTyped, EraId, Key, KeyTag, PublicKey, URef, U512,
 };
+use num_rational::Ratio;
 use tracing::{debug, error, warn};
 
 /// Maximum length of bridge records chain.
@@ -185,6 +184,7 @@ impl ValidatorBidsDetail {
         U512::zero()
     }
 
+    #[allow(unused)]
     pub(crate) fn validator_bids(&self) -> &ValidatorBids {
         &self.validator_bids
     }
@@ -1394,4 +1394,215 @@ where
     }
 
     Ok(ret)
+}
+
+/// Handles forced unbonding of delegators when a validator raises the min or lowers the max amount
+/// they allow delegators to stake with them.
+pub fn process_updated_delegator_stake_boundaries<P: Auction>(
+    provider: &mut P,
+    validator_bid: &mut ValidatorBid,
+    minimum_delegation_amount: u64,
+    maximum_delegation_amount: u64,
+) -> Result<(), Error> {
+    // check modified delegation bookends
+    let raised_min = validator_bid.minimum_delegation_amount() < minimum_delegation_amount;
+    let lowered_max = validator_bid.maximum_delegation_amount() < maximum_delegation_amount;
+    if !raised_min && !lowered_max {
+        return Ok(());
+    }
+
+    let era_end_timestamp_millis = get_era_end_timestamp_millis(provider)?;
+    if validator_bid.is_locked(era_end_timestamp_millis) {
+        // cannot increase the min or decrease the max while vesting is locked
+        // as this could result in vested delegators being forcibly unbonded, thus
+        // prematurely allowing liquidity on a network still in its vesting period.
+        return Err(Error::ValidatorFundsLocked);
+    }
+
+    // set updated delegation amount range
+    validator_bid
+        .set_delegation_amount_boundaries(minimum_delegation_amount, maximum_delegation_amount);
+
+    let validator_public_key = validator_bid.validator_public_key();
+    let min_delegation = minimum_delegation_amount.into();
+    let max_delegation = maximum_delegation_amount.into();
+    let delegators = read_delegator_bids(provider, validator_public_key)?;
+    for mut delegator in delegators {
+        let delegator_staked_amount = delegator.staked_amount();
+        let unbond_amount = if delegator_staked_amount < min_delegation {
+            // fully unbond the staked amount as it is below the min
+            delegator_staked_amount
+        } else if delegator_staked_amount > max_delegation {
+            // partially unbond the staked amount to not exceed the max
+            delegator_staked_amount.saturating_sub(max_delegation)
+        } else {
+            // nothing to unbond
+            U512::zero()
+        };
+        // skip delegators within the range
+        if unbond_amount.is_zero() {
+            continue;
+        }
+
+        let unbond_kind = delegator.unbond_kind();
+        create_unbonding_purse(
+            provider,
+            validator_public_key.clone(),
+            unbond_kind,
+            *delegator.bonding_purse(),
+            unbond_amount,
+            None,
+        )?;
+
+        let updated_stake = match delegator.decrease_stake(unbond_amount, era_end_timestamp_millis)
+        {
+            Ok(updated_stake) => updated_stake,
+            // Work around the case when the locked amounts table has yet to be
+            // initialized (likely pre-90 day mark).
+            Err(Error::DelegatorFundsLocked) => continue,
+            Err(err) => return Err(err),
+        };
+
+        let delegator_bid_addr = delegator.bid_addr();
+        if updated_stake.is_zero() {
+            debug!("pruning delegator bid {}", delegator_bid_addr);
+            provider.prune_bid(delegator_bid_addr);
+        } else {
+            debug!(
+                "forced undelegation for {} reducing {} by {} to {}",
+                delegator_bid_addr, delegator_staked_amount, unbond_amount, updated_stake
+            );
+            provider.write_bid(
+                delegator_bid_addr.into(),
+                BidKind::Delegator(Box::new(delegator)),
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Handles an attempt by a validator to lower the number of delegator reserve slots
+/// they allow. An attempt to lower the number below the current count of occupied reservations
+/// will fail. An attempt to increase the number above the global allowed maximum of a given
+/// network will also fail.
+pub fn process_updated_delegator_reservation_slots<P: Auction>(
+    provider: &mut P,
+    validator_bid: &mut ValidatorBid,
+    max_delegators_per_validator: u32,
+    reserved_slots: u32,
+) -> Result<(), Error> {
+    if reserved_slots == validator_bid.reserved_slots() {
+        return Ok(());
+    }
+
+    let validator_public_key = validator_bid.validator_public_key();
+
+    let validator_bid_addr = BidAddr::from(validator_public_key.clone());
+    // cannot reserve fewer slots than there are reservations
+    let reservation_count = provider.reservation_count(&validator_bid_addr)?;
+    if reserved_slots < reservation_count as u32 {
+        return Err(Error::ReservationSlotsCountTooSmall);
+    }
+
+    // cannot reserve more slots than there are free delegator slots
+    let max_reserved_slots = {
+        let used_reservation_count = provider.used_reservation_count(&validator_bid_addr)?;
+        let delegator_count = provider.delegator_count(&validator_bid_addr)?;
+        let normal_delegators = delegator_count.saturating_sub(used_reservation_count) as u32;
+        max_delegators_per_validator.saturating_sub(normal_delegators)
+    };
+    if reserved_slots > max_reserved_slots {
+        return Err(Error::ExceededReservationSlotsLimit);
+    }
+    validator_bid.with_reserved_slots(reserved_slots);
+    Ok(())
+}
+
+/// Processes undelegation with optional redelegation target.
+pub fn process_undelegation<P: Auction>(
+    provider: &mut P,
+    delegator_kind: DelegatorKind,
+    validator_public_key: PublicKey,
+    amount: U512,
+    new_validator: Option<PublicKey>,
+) -> Result<U512, Error> {
+    match &delegator_kind {
+        DelegatorKind::PublicKey(pk) => {
+            let account_hash = pk.to_account_hash();
+            if !provider.is_allowed_session_caller(&account_hash) {
+                return Err(Error::InvalidContext);
+            }
+        }
+        DelegatorKind::Purse(addr) => {
+            let uref = URef::new(*addr, AccessRights::WRITE);
+            if !provider.is_valid_uref(uref) {
+                return Err(Error::InvalidContext);
+            }
+        }
+    }
+
+    let new_validator_public_key = {
+        // check redelegation target for existence
+        if let Some(new_validator_public_key) = new_validator {
+            let new_validator_bid_key = BidAddr::from(new_validator_public_key.clone()).into();
+            match read_validator_bid(provider, &new_validator_bid_key) {
+                Err(Error::ValidatorNotFound) => return Err(Error::RedelegationValidatorNotFound),
+                Err(err) => return Err(err),
+                Ok(_) => Some(new_validator_public_key),
+            }
+        } else {
+            None
+        }
+    };
+
+    let validator_bid_key = BidAddr::from(validator_public_key.clone()).into();
+    let validator_bid = read_validator_bid(provider, &validator_bid_key)?;
+
+    let delegator_bid_addr = BidAddr::new_delegator_kind(&validator_public_key, &delegator_kind);
+    let mut delegator_bid = read_delegator_bid(provider, &delegator_bid_addr.into())?;
+
+    let bonding_purse = *delegator_bid.bonding_purse();
+    let initial_staked_amount = delegator_bid.staked_amount();
+    let (unbonding_amount, updated_stake) = {
+        let era_end_timestamp_millis = get_era_end_timestamp_millis(provider)?;
+
+        // cannot unbond more than you have
+        let unbonding_amount = U512::min(amount, initial_staked_amount);
+        let rem = delegator_bid.decrease_stake(unbonding_amount, era_end_timestamp_millis)?;
+        if rem < validator_bid.minimum_delegation_amount().into() {
+            // if the remaining stake is less than the validator's min delegation amount
+            // unbond all the delegator's stake
+            let zeroed = delegator_bid.decrease_stake(rem, era_end_timestamp_millis)?;
+            (initial_staked_amount, zeroed)
+        } else {
+            (unbonding_amount, rem)
+        }
+    };
+
+    if updated_stake.is_zero() {
+        debug!("pruning delegator bid {}", delegator_bid_addr);
+        provider.prune_bid(delegator_bid_addr);
+    } else {
+        provider.write_bid(delegator_bid_addr.into(), BidKind::Delegator(delegator_bid))?;
+    }
+
+    if !unbonding_amount.is_zero() {
+        let unbond_kind = delegator_kind.into();
+
+        create_unbonding_purse(
+            provider,
+            validator_public_key,
+            unbond_kind,
+            bonding_purse,
+            unbonding_amount,
+            new_validator_public_key,
+        )?;
+
+        debug!(
+            "undelegation for {} reducing {} by {} to {}",
+            delegator_bid_addr, initial_staked_amount, unbonding_amount, updated_stake
+        );
+    }
+
+    Ok(updated_stake)
 }

@@ -59,13 +59,13 @@ pub enum Error {
     /// assert_eq!(6, Error::BidNotFound as u8);
     /// ```
     BidNotFound = 6,
-    /// Validator's account hash was not found in the map.
+    /// Validator was not found in the map.
     /// ```
     /// # use casper_types::system::auction::Error;
     /// assert_eq!(7, Error::ValidatorNotFound as u8);
     /// ```
     ValidatorNotFound = 7,
-    /// Delegator's account hash was not found in the map.
+    /// Delegator was not found in the map.
     /// ```
     /// # use casper_types::system::auction::Error;
     /// assert_eq!(8, Error::DelegatorNotFound as u8);
@@ -401,6 +401,12 @@ pub enum Error {
     /// assert_eq!(61, Error::UnexpectedStoredValueVariant as u8);
     /// ```
     UnexpectedStoredValueVariant = 61,
+    /// Redelegation validator was not found in the map.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(62, Error::RedelegationValidatorNotFound as u8);
+    /// ```
+    RedelegationValidatorNotFound = 62,
 }
 
 impl Display for Error {
@@ -468,6 +474,8 @@ impl Display for Error {
             Error::ReservationSlotsCountTooSmall => formatter.write_str("Reserved slots count is less than number of existing reservations"),
             Error::UnexpectedUnbondVariant => formatter.write_str("Unexpected unbond variant"),
             Error::UnexpectedStoredValueVariant => formatter.write_str("Unexpected stored value variant"),
+            Error::RedelegationValidatorNotFound => formatter.write_str("Redelegation validator not found"),
+
         }
     }
 }
@@ -570,6 +578,9 @@ impl TryFrom<u8> for Error {
             d if d == Error::UnexpectedUnbondVariant as u8 => Ok(Error::UnexpectedUnbondVariant),
             d if d == Error::UnexpectedStoredValueVariant as u8 => {
                 Ok(Error::UnexpectedStoredValueVariant)
+            }
+            d if d == Error::RedelegationValidatorNotFound as u8 => {
+                Ok(Error::RedelegationValidatorNotFound)
             }
             _ => Err(TryFromU8ForError(())),
         }

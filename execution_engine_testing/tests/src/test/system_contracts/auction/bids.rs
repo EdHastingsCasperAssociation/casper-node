@@ -12,11 +12,10 @@ use casper_engine_test_support::{
     genesis_config_builder::GenesisConfigBuilder, utils, ChainspecConfig, ExecuteRequestBuilder,
     LmdbWasmTestBuilder, StepRequestBuilder, UpgradeRequestBuilder, DEFAULT_ACCOUNTS,
     DEFAULT_ACCOUNT_ADDR, DEFAULT_ACCOUNT_INITIAL_BALANCE, DEFAULT_AUCTION_DELAY,
-    DEFAULT_BLOCK_TIME, DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_EXEC_CONFIG,
-    DEFAULT_GENESIS_CONFIG_HASH, DEFAULT_GENESIS_TIMESTAMP_MILLIS,
-    DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS, DEFAULT_MAXIMUM_DELEGATION_AMOUNT,
-    DEFAULT_PROTOCOL_VERSION, DEFAULT_ROUND_SEIGNIORAGE_RATE, DEFAULT_UNBONDING_DELAY,
-    LOCAL_GENESIS_REQUEST, MINIMUM_ACCOUNT_CREATION_BALANCE, SYSTEM_ADDR,
+    DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_EXEC_CONFIG, DEFAULT_GENESIS_CONFIG_HASH,
+    DEFAULT_GENESIS_TIMESTAMP_MILLIS, DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS,
+    DEFAULT_MAXIMUM_DELEGATION_AMOUNT, DEFAULT_PROTOCOL_VERSION, DEFAULT_ROUND_SEIGNIORAGE_RATE,
+    DEFAULT_UNBONDING_DELAY, LOCAL_GENESIS_REQUEST, MINIMUM_ACCOUNT_CREATION_BALANCE, SYSTEM_ADDR,
     TIMESTAMP_MILLIS_INCREMENT,
 };
 use casper_execution_engine::{
@@ -855,8 +854,6 @@ fn should_forcibly_undelegate_after_setting_validator_limits() {
         .collect();
     assert_eq!(bids.len(), 3);
 
-    builder.forced_undelegate(None, DEFAULT_PROTOCOL_VERSION, DEFAULT_BLOCK_TIME);
-
     let bids: Vec<_> = builder
         .get_bids()
         .into_iter()
@@ -984,9 +981,6 @@ fn should_force_undelegate_with_genesis_delegators() {
         .exec(validator_1_add_bid_request)
         .expect_success()
         .commit();
-
-    let result = builder.forced_undelegate(None, DEFAULT_PROTOCOL_VERSION, DEFAULT_BLOCK_TIME);
-    assert!(result.is_success(), "expected success but got {:?}", result);
 }
 
 #[ignore]
