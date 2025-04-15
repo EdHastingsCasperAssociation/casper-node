@@ -235,6 +235,20 @@ impl BidAddr {
         }
     }
 
+    /// Create a new instance of a [`BidAddr`] for delegator unbonds.
+    pub fn new_delegator_unbond(validator: &PublicKey, delegator_kind: &DelegatorKind) -> Self {
+        match &delegator_kind {
+            DelegatorKind::PublicKey(pk) => BidAddr::UnbondAccount {
+                validator: validator.to_account_hash(),
+                unbonder: pk.to_account_hash(),
+            },
+            DelegatorKind::Purse(addr) => BidAddr::UnbondPurse {
+                validator: validator.to_account_hash(),
+                unbonder: *addr,
+            },
+        }
+    }
+
     /// Create a new instance of a [`BidAddr`].
     pub fn new_from_public_keys(
         validator: &PublicKey,

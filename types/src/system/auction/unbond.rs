@@ -345,6 +345,14 @@ impl Unbond {
             (ret, None)
         }
     }
+
+    /// Returns the unbond era with the highest era of creation.
+    pub fn target_unbond_era(&self) -> Option<UnbondEra> {
+        self.eras()
+            .iter()
+            .max_by(|x, y| x.era_of_creation().cmp(&y.era_of_creation()))
+            .cloned()
+    }
 }
 
 impl ToBytes for Unbond {
