@@ -603,7 +603,7 @@ impl DistributeTarget {
             DistributeTarget::Delegator(db) => Ok(*db.bonding_purse()),
             DistributeTarget::Unbond(unbond) => match unbond.target_unbond_era() {
                 Some(unbond_era) => Ok(*unbond_era.bonding_purse()),
-                None => Err(Error::ValidatorNotFound),
+                None => Err(Error::MissingPurse),
             },
         }
     }
