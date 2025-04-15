@@ -1406,7 +1406,7 @@ pub fn process_updated_delegator_stake_boundaries<P: Auction>(
 ) -> Result<(), Error> {
     // check modified delegation bookends
     let raised_min = validator_bid.minimum_delegation_amount() < minimum_delegation_amount;
-    let lowered_max = validator_bid.maximum_delegation_amount() < maximum_delegation_amount;
+    let lowered_max = validator_bid.maximum_delegation_amount() > maximum_delegation_amount;
     if !raised_min && !lowered_max {
         return Ok(());
     }
@@ -1465,12 +1465,11 @@ pub fn process_updated_delegator_stake_boundaries<P: Auction>(
 
         let delegator_bid_addr = delegator.bid_addr();
         if updated_stake.is_zero() {
-            debug!("pruning delegator bid {}", delegator_bid_addr);
+            debug!("pruning delegator bid {delegator_bid_addr}");
             provider.prune_bid(delegator_bid_addr);
         } else {
             debug!(
-                "forced undelegation for {} reducing {} by {} to {}",
-                delegator_bid_addr, delegator_staked_amount, unbond_amount, updated_stake
+                "forced undelegation for {delegator_bid_addr} reducing {delegator_staked_amount} by {unbond_amount} to {updated_stake}",
             );
             provider.write_bid(
                 delegator_bid_addr.into(),
@@ -1599,8 +1598,7 @@ pub fn process_undelegation<P: Auction>(
         )?;
 
         debug!(
-            "undelegation for {} reducing {} by {} to {}",
-            delegator_bid_addr, initial_staked_amount, unbonding_amount, updated_stake
+            "undelegation for {delegator_bid_addr} reducing {initial_staked_amount} by {unbonding_amount} to {updated_stake}"
         );
     }
 
