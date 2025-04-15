@@ -103,6 +103,12 @@ where
         self.length += 1;
     }
 
+    /// Clears the vector, removing all values.
+    pub fn clear(&mut self) {
+        self.length = 0;
+        // TODO: Remove all elements from global state
+    }
+
     #[inline(always)]
     pub fn len(&self) -> u64 {
         self.length
@@ -162,6 +168,10 @@ where
     }
 
     /// Removes the element at the specified index and returns it.
+    /// 
+    /// Note: Because this shifts over the remaining elements, it has a
+    /// worst-case performance of O(n). If you don’t need the order of
+    /// elements to be preserved, use `swap_remove` instead.
     pub fn remove(&mut self, index: u64) -> Option<T> {
         if index >= self.length {
             return None;
@@ -178,6 +188,25 @@ where
         self.length -= 1;
 
         Some(value)
+    }
+
+    /// Removes the element at the specified index and returns it.
+    /// 
+    /// The removed element is replaced by the last element of the vector.
+    /// This does not preserve ordering of the remaining elements, but is O(1).
+    pub fn swap_remove(&mut self, index: u64) -> Option<T> {
+        if index >= self.length {
+            return None;
+        }
+
+        let value_to_remove = self.get(index).unwrap();
+        let last_value = self.get(self.len() - 1).unwrap();
+
+        self.write(index, last_value);
+        self.length -= 1;
+        // TODO: remove self.len() - 1 from global state
+
+        Some(value_to_remove)
     }
 
     pub fn retain<F>(&mut self, mut f: F)
