@@ -351,7 +351,7 @@ pub fn new_withdraw_bid_args<A: Into<U512>>(
     Ok(args)
 }
 
-/// Checks the given `RuntimeArgs` are suitable for use in an withdraw_bid transaction.
+/// Checks the given `RuntimeArgs` are suitable for use in a withdraw_bid transaction.
 pub fn has_valid_withdraw_bid_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
     let args = args
         .as_named()
@@ -480,7 +480,7 @@ pub fn has_valid_change_bid_public_key_args(
     Ok(())
 }
 
-/// Creates a `RuntimeArgs` suitable for use in a add resrvations transaction.
+/// Creates a `RuntimeArgs` suitable for use in an add reservations transaction.
 #[cfg(test)]
 pub fn new_add_reservations_args(
     reservations: Vec<Reservation>,
@@ -490,7 +490,7 @@ pub fn new_add_reservations_args(
     Ok(args)
 }
 
-/// Checks the given `TransactionArgs` are suitable for use in a add reservations transaction.
+/// Checks the given `TransactionArgs` are suitable for use in an add reservations transaction.
 pub fn has_valid_add_reservations_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
     let args = args
         .as_named()
@@ -511,7 +511,7 @@ pub fn new_cancel_reservations_args(
     Ok(args)
 }
 
-/// Checks the given `TransactionArgs` are suitable for use in a add reservations transaction.
+/// Checks the given `TransactionArgs` are suitable for use in an add reservations transaction.
 pub fn has_valid_cancel_reservations_args(
     args: &TransactionArgs,
 ) -> Result<(), InvalidTransactionV1> {
@@ -527,10 +527,12 @@ pub fn has_valid_cancel_reservations_args(
 mod tests {
     use core::ops::Range;
 
-    use rand::Rng;
-
     use super::*;
+    use casper_execution_engine::engine_state::engine_config::{
+        DEFAULT_MAXIMUM_DELEGATION_AMOUNT, DEFAULT_MINIMUM_DELEGATION_AMOUNT,
+    };
     use casper_types::{runtime_args, testing::TestRng, CLType, TransactionArgs};
+    use rand::Rng;
 
     #[test]
     fn should_validate_transfer_args() {
@@ -675,15 +677,20 @@ mod tests {
             Err(expected_error)
         );
     }
+    #[cfg(test)]
+    fn check_add_bid_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
+        has_valid_add_bid_args(&Chainspec::default(), args)
+    }
 
     #[test]
     fn should_validate_add_bid_args() {
         let rng = &mut TestRng::new();
-
-        let minimum_delegation_amount = rng.gen::<bool>().then(|| rng.gen());
-        let maximum_delegation_amount = minimum_delegation_amount
-            .map(|minimum_delegation_amount| minimum_delegation_amount + rng.gen::<u32>() as u64);
-        let reserved_slots = rng.gen::<bool>().then(|| rng.gen::<u32>());
+        let floor = DEFAULT_MINIMUM_DELEGATION_AMOUNT;
+        let ceiling = DEFAULT_MAXIMUM_DELEGATION_AMOUNT;
+        let reserved_max = 1200; // there doesn't seem to be a const for this?
+        let minimum_delegation_amount = rng.gen::<bool>().then(|| rng.gen_range(floor..floor * 2));
+        let maximum_delegation_amount = rng.gen::<bool>().then(|| rng.gen_range(floor..ceiling));
+        let reserved_slots = rng.gen::<bool>().then(|| rng.gen_range(0..reserved_max));
 
         // Check random args.
         let mut args = new_add_bid_args(
@@ -695,11 +702,11 @@ mod tests {
             reserved_slots,
         )
         .unwrap();
-        has_valid_add_bid_args(&TransactionArgs::Named(args.clone())).unwrap();
+        check_add_bid_args(&TransactionArgs::Named(args.clone())).unwrap();
 
         // Check with extra arg.
         args.insert("a", 1).unwrap();
-        has_valid_add_bid_args(&TransactionArgs::Named(args)).unwrap();
+        check_add_bid_args(&TransactionArgs::Named(args)).unwrap();
     }
 
     #[test]
@@ -715,7 +722,7 @@ mod tests {
             arg_name: ADD_BID_ARG_PUBLIC_KEY.name.to_string(),
         };
         assert_eq!(
-            has_valid_add_bid_args(&TransactionArgs::Named(args)),
+            check_add_bid_args(&TransactionArgs::Named(args)),
             Err(expected_error)
         );
 
@@ -728,7 +735,7 @@ mod tests {
             arg_name: ADD_BID_ARG_DELEGATION_RATE.name.to_string(),
         };
         assert_eq!(
-            has_valid_add_bid_args(&TransactionArgs::Named(args)),
+            check_add_bid_args(&TransactionArgs::Named(args)),
             Err(expected_error)
         );
 
@@ -741,7 +748,7 @@ mod tests {
             arg_name: ADD_BID_ARG_AMOUNT.name.to_string(),
         };
         assert_eq!(
-            has_valid_add_bid_args(&TransactionArgs::Named(args)),
+            check_add_bid_args(&TransactionArgs::Named(args)),
             Err(expected_error)
         );
     }
@@ -762,7 +769,7 @@ mod tests {
             CLType::U64,
         );
         assert_eq!(
-            has_valid_add_bid_args(&TransactionArgs::Named(args)),
+            check_add_bid_args(&TransactionArgs::Named(args)),
             Err(expected_error)
         );
     }
@@ -1310,7 +1317,7 @@ mod tests {
             has_valid_transfer_args(&args, 0).as_ref(),
             Err(&expected_error)
         );
-        assert_eq!(has_valid_add_bid_args(&args).as_ref(), Err(&expected_error));
+        assert_eq!(check_add_bid_args(&args).as_ref(), Err(&expected_error));
         assert_eq!(
             has_valid_withdraw_bid_args(&args).as_ref(),
             Err(&expected_error)
