@@ -706,7 +706,7 @@ pub trait Auction:
             let mut undelegates = vec![];
             let mut prunes = vec![];
             for (delegator_kind, delegator_reward) in reward_info.delegator_rewards {
-                let mut delegator_bid_addrs = vec![];
+                let mut delegator_bid_addrs = Vec::with_capacity(2);
                 delegator_bid_addrs.push(BidAddr::new_delegator_kind_relaxed(
                     validator_bid_addr.validator_account_hash(),
                     &delegator_kind,

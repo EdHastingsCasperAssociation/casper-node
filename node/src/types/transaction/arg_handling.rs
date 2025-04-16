@@ -5,8 +5,8 @@ use casper_types::{
     account::AccountHash,
     bytesrepr::FromBytes,
     system::auction::{DelegatorKind, Reservation, ARG_VALIDATOR},
-    CLType, CLTyped, CLValue, CLValueError, InvalidTransactionV1, PublicKey, RuntimeArgs,
-    TransactionArgs, URef, U512,
+    CLType, CLTyped, CLValue, CLValueError, Chainspec, InvalidTransactionV1, PublicKey,
+    RuntimeArgs, TransactionArgs, URef, U512,
 };
 #[cfg(test)]
 use casper_types::{bytesrepr::ToBytes, TransferTarget};
@@ -299,16 +299,43 @@ pub fn new_add_bid_args<A: Into<U512>>(
 }
 
 /// Checks the given `RuntimeArgs` are suitable for use in an add_bid transaction.
-pub fn has_valid_add_bid_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
+pub fn has_valid_add_bid_args(
+    chainspec: &Chainspec,
+    args: &TransactionArgs,
+) -> Result<(), InvalidTransactionV1> {
     let args = args
         .as_named()
         .ok_or(InvalidTransactionV1::ExpectedNamedArguments)?;
     let _public_key = ADD_BID_ARG_PUBLIC_KEY.get(args)?;
     let _delegation_rate = ADD_BID_ARG_DELEGATION_RATE.get(args)?;
-    let _amount = ADD_BID_ARG_AMOUNT.get(args)?;
-    let _minimum_delegation_amount = ADD_BID_ARG_MINIMUM_DELEGATION_AMOUNT.get(args)?;
-    let _maximum_delegation_amount = ADD_BID_ARG_MAXIMUM_DELEGATION_AMOUNT.get(args)?;
-    let _reserved_slots = ADD_BID_ARG_RESERVED_SLOTS.get(args)?;
+    let amount = ADD_BID_ARG_AMOUNT.get(args)?;
+    if amount.is_zero() {
+        return Err(InvalidTransactionV1::InsufficientAmount { attempted: amount });
+    }
+    let minimum_delegation_amount = ADD_BID_ARG_MINIMUM_DELEGATION_AMOUNT.get(args)?;
+    if let Some(attempted) = minimum_delegation_amount {
+        let floor = chainspec.core_config.minimum_delegation_amount;
+        if attempted < floor {
+            return Err(InvalidTransactionV1::InvalidMinimumDelegationAmount { floor, attempted });
+        }
+    }
+    let maximum_delegation_amount = ADD_BID_ARG_MAXIMUM_DELEGATION_AMOUNT.get(args)?;
+    if let Some(attempted) = maximum_delegation_amount {
+        let ceiling = chainspec.core_config.maximum_delegation_amount;
+        if attempted > ceiling {
+            return Err(InvalidTransactionV1::InvalidMaximumDelegationAmount {
+                ceiling,
+                attempted,
+            });
+        }
+    }
+    let reserved_slots = ADD_BID_ARG_RESERVED_SLOTS.get(args)?;
+    if let Some(attempted) = reserved_slots {
+        let ceiling = chainspec.core_config.max_delegators_per_validator;
+        if ceiling != 0 && attempted > ceiling {
+            return Err(InvalidTransactionV1::InvalidReservedSlots { ceiling, attempted });
+        }
+    }
     Ok(())
 }
 
