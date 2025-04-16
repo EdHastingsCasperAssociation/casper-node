@@ -589,6 +589,13 @@ pub fn create_unbonding_purse<P: Auction>(
 pub enum DistributeTarget {
     /// Validator bid.
     Validator(Box<ValidatorBid>),
+    /// Bridged validator bid.
+    BridgedValidator {
+        /// The current addr for the bridged validator.
+        bridged_validator_addr: BidAddr,
+        /// Validator bid.
+        validator_bid: Box<ValidatorBid>,
+    },
     /// Delegator bid.
     Delegator(Box<DelegatorBid>),
     /// Unbond record.
@@ -600,6 +607,9 @@ impl DistributeTarget {
     pub fn bonding_purse(&self) -> Result<URef, Error> {
         match self {
             DistributeTarget::Validator(vb) => Ok(*vb.bonding_purse()),
+            DistributeTarget::BridgedValidator { validator_bid, .. } => {
+                Ok(*validator_bid.bonding_purse())
+            }
             DistributeTarget::Delegator(db) => Ok(*db.bonding_purse()),
             DistributeTarget::Unbond(unbond) => match unbond.target_unbond_era() {
                 Some(unbond_era) => Ok(*unbond_era.bonding_purse()),
@@ -615,10 +625,17 @@ pub fn get_distribution_target<P: RuntimeProvider + StorageProvider>(
     provider: &mut P,
     bid_addr: BidAddr,
 ) -> Result<DistributeTarget, Error> {
-    let mut validator_bid_addr = bid_addr;
+    let mut current_bid_addr = bid_addr;
+    let mut bridged = false;
     for _ in 0..MAX_BRIDGE_CHAIN_LENGTH {
-        match provider.read_bid(&validator_bid_addr.into())? {
+        match provider.read_bid(&current_bid_addr.into())? {
             Some(BidKind::Validator(validator_bid)) => {
+                if bridged {
+                    return Ok(DistributeTarget::BridgedValidator {
+                        bridged_validator_addr: current_bid_addr,
+                        validator_bid,
+                    });
+                }
                 return Ok(DistributeTarget::Validator(validator_bid));
             }
             Some(BidKind::Delegator(delegator_bid)) => {
@@ -628,7 +645,8 @@ pub fn get_distribution_target<P: RuntimeProvider + StorageProvider>(
                 return Ok(DistributeTarget::Unbond(unbond));
             }
             Some(BidKind::Bridge(bridge)) => {
-                validator_bid_addr = BidAddr::from(bridge.new_validator_public_key().clone());
+                current_bid_addr = BidAddr::from(bridge.new_validator_public_key().clone());
+                bridged = true;
             }
             None => {
                 // in the case of missing validator or delegator bids, check unbonds
@@ -643,6 +661,7 @@ pub fn get_distribution_target<P: RuntimeProvider + StorageProvider>(
                     {
                         return Ok(DistributeTarget::Unbond(unbond));
                     }
+                    return Err(Error::ValidatorNotFound);
                 }
 
                 if let BidAddr::DelegatedAccount {
@@ -660,6 +679,7 @@ pub fn get_distribution_target<P: RuntimeProvider + StorageProvider>(
                     {
                         return Ok(DistributeTarget::Unbond(unbond));
                     }
+                    return Err(Error::DelegatorNotFound);
                 }
 
                 if let BidAddr::DelegatedPurse {
@@ -677,6 +697,7 @@ pub fn get_distribution_target<P: RuntimeProvider + StorageProvider>(
                     {
                         return Ok(DistributeTarget::Unbond(unbond));
                     }
+                    return Err(Error::DelegatorNotFound);
                 }
 
                 break;
@@ -687,43 +708,6 @@ pub fn get_distribution_target<P: RuntimeProvider + StorageProvider>(
         };
     }
     Err(Error::BridgeRecordChainTooLong)
-}
-
-/// Returns most recent validator public key if public key has been changed
-/// or the validator has withdrawn their bid completely.
-pub fn get_most_recent_validator_public_key<P>(
-    provider: &mut P,
-    mut validator_public_key: PublicKey,
-) -> Result<PublicKey, Error>
-where
-    P: RuntimeProvider + StorageProvider,
-{
-    let mut validator_bid_addr = BidAddr::from(validator_public_key.clone());
-    let mut found_validator_bid_chain_tip = false;
-    for _ in 0..MAX_BRIDGE_CHAIN_LENGTH {
-        match provider.read_bid(&validator_bid_addr.into())? {
-            Some(BidKind::Validator(validator_bid)) => {
-                validator_public_key = validator_bid.validator_public_key().clone();
-                found_validator_bid_chain_tip = true;
-                break;
-            }
-            Some(BidKind::Bridge(bridge)) => {
-                validator_public_key = bridge.new_validator_public_key().clone();
-                validator_bid_addr = BidAddr::from(validator_public_key.clone());
-            }
-            _ => {
-                // Validator has withdrawn their bid, so there's nothing at the tip.
-                // In this case we add the reward to a delegator's unbond.
-                found_validator_bid_chain_tip = true;
-                break;
-            }
-        };
-    }
-    if !found_validator_bid_chain_tip {
-        Err(Error::BridgeRecordChainTooLong)
-    } else {
-        Ok(validator_public_key)
-    }
 }
 
 #[derive(Debug)]

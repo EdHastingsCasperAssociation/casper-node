@@ -222,31 +222,47 @@ impl BidAddr {
     }
 
     /// Create a new instance of a [`BidAddr`].
-    pub fn new_delegator_kind(validator: &PublicKey, delegator_kind: &DelegatorKind) -> Self {
+    pub fn new_delegator_kind_relaxed(
+        validator: AccountHash,
+        delegator_kind: &DelegatorKind,
+    ) -> Self {
         match delegator_kind {
             DelegatorKind::PublicKey(pk) => BidAddr::DelegatedAccount {
-                validator: validator.to_account_hash(),
+                validator: validator,
                 delegator: pk.to_account_hash(),
             },
             DelegatorKind::Purse(addr) => BidAddr::DelegatedPurse {
-                validator: validator.to_account_hash(),
+                validator: validator,
                 delegator: *addr,
+            },
+        }
+    }
+
+    /// Create a new instance of a [`BidAddr`].
+    pub fn new_delegator_kind(validator: &PublicKey, delegator_kind: &DelegatorKind) -> Self {
+        Self::new_delegator_kind_relaxed(validator.to_account_hash(), delegator_kind)
+    }
+
+    /// Create a new instance of a [`BidAddr`] for delegator unbonds.
+    pub fn new_delegator_unbond_relaxed(
+        validator: AccountHash,
+        delegator_kind: &DelegatorKind,
+    ) -> Self {
+        match &delegator_kind {
+            DelegatorKind::PublicKey(pk) => BidAddr::UnbondAccount {
+                validator: validator,
+                unbonder: pk.to_account_hash(),
+            },
+            DelegatorKind::Purse(addr) => BidAddr::UnbondPurse {
+                validator: validator,
+                unbonder: *addr,
             },
         }
     }
 
     /// Create a new instance of a [`BidAddr`] for delegator unbonds.
     pub fn new_delegator_unbond(validator: &PublicKey, delegator_kind: &DelegatorKind) -> Self {
-        match &delegator_kind {
-            DelegatorKind::PublicKey(pk) => BidAddr::UnbondAccount {
-                validator: validator.to_account_hash(),
-                unbonder: pk.to_account_hash(),
-            },
-            DelegatorKind::Purse(addr) => BidAddr::UnbondPurse {
-                validator: validator.to_account_hash(),
-                unbonder: *addr,
-            },
-        }
+        Self::new_delegator_unbond_relaxed(validator.to_account_hash(), delegator_kind)
     }
 
     /// Create a new instance of a [`BidAddr`].

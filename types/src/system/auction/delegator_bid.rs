@@ -153,11 +153,6 @@ impl DelegatorBid {
         }
     }
 
-    /// Sets the stake of the provided bid
-    pub fn set_stake(&mut self, amount: U512) {
-        self.staked_amount = amount;
-    }
-
     /// Increases the stake of the provided bid
     pub fn increase_stake(&mut self, amount: U512) -> Result<U512, Error> {
         let updated_staked_amount = self

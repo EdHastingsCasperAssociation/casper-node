@@ -5285,11 +5285,27 @@ fn should_change_validator_bid_public_key() {
     builder.advance_eras_by_default_auction_delay();
 
     // redelegate funds to validator 3
+    // NOTE: previously, this would leave a remaining delegation to the original delegator behind
+    // with less than that min delegation bid. Under the new logic if the remaining del bid amount
+    // would be less than the min, it gets converted to a full unbond instead of a partial unbond
+    let attempted_partial_unbond_redlegate_amount =
+        U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT);
+    let actual_delegated_amount = U512::from(DELEGATE_AMOUNT_1);
+    assert!(
+        attempted_partial_unbond_redlegate_amount < actual_delegated_amount,
+        "attempted partial amount should be less than actual delegated amount"
+    );
+    let attempted_remaining_delegation_amount =
+        actual_delegated_amount - attempted_partial_unbond_redlegate_amount;
+    assert!(
+        attempted_remaining_delegation_amount < DEFAULT_MINIMUM_DELEGATION_AMOUNT.into(),
+        "attempted remainder should be less than minimum in this case"
+    );
     let delegator_1_redelegate_request = ExecuteRequestBuilder::standard(
         *BID_ACCOUNT_1_ADDR,
         CONTRACT_REDELEGATE,
         runtime_args! {
-            ARG_AMOUNT => U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT),
+            ARG_AMOUNT => attempted_partial_unbond_redlegate_amount,
             ARG_VALIDATOR => NON_FOUNDER_VALIDATOR_1_PK.clone(),
             ARG_DELEGATOR => BID_ACCOUNT_1_PK.clone(),
             ARG_NEW_VALIDATOR => NON_FOUNDER_VALIDATOR_3_PK.clone()
@@ -5308,12 +5324,16 @@ fn should_change_validator_bid_public_key() {
         .filter(|bid| !bid.is_unbond())
         .collect();
 
-    assert_eq!(bids.len(), 4);
+    assert_eq!(
+        bids.len(),
+        3,
+        "with unbonds filtered out there should be 3 bids"
+    );
     assert!(bids
         .validator_bid(&NON_FOUNDER_VALIDATOR_2_PK.clone())
         .is_none());
 
-    // change validator 1 bid public key
+    // change validator 1 bid public key to validator 2 public key
     let change_bid_public_key_request = ExecuteRequestBuilder::standard(
         *NON_FOUNDER_VALIDATOR_1_ADDR,
         CONTRACT_CHANGE_BID_PUBLIC_KEY,
@@ -5336,7 +5356,11 @@ fn should_change_validator_bid_public_key() {
         .into_iter()
         .filter(|bid| !bid.is_unbond())
         .collect();
-    assert_eq!(bids.len(), 5);
+    assert_eq!(
+        bids.len(),
+        4,
+        "with unbonds filtered out, there should be 4 bids"
+    );
     let new_validator_bid = bids
         .validator_bid(&NON_FOUNDER_VALIDATOR_2_PK.clone())
         .unwrap();
@@ -5368,17 +5392,25 @@ fn should_change_validator_bid_public_key() {
     let delegators = bids
         .delegators_by_validator_public_key(&NON_FOUNDER_VALIDATOR_2_PK)
         .expect("should have delegators");
-    assert_eq!(delegators.len(), 2);
-    let delegator = bids
-        .delegator_by_kind(
+    // NOTE: previously in this test the partial redelegate would have been allowed, and thus this
+    // delegator would have had delegations to the original validator (below min)
+    // and the redelegated target (the redelegated amount)
+    // The new logic converted it into a full unbond to avoid the remainder below min being
+    // left behind.
+    assert_eq!(
+        delegators.len(),
+        1,
+        "the remaining delegator should have bridged over"
+    );
+    assert!(
+        bids.delegator_by_kind(
             &NON_FOUNDER_VALIDATOR_2_PK,
             &DelegatorKind::PublicKey(BID_ACCOUNT_1_PK.clone()),
         )
-        .expect("should have account1 delegation");
-    assert_eq!(
-        delegator.staked_amount(),
-        U512::from(DELEGATE_AMOUNT_1 - UNDELEGATE_AMOUNT_1 - DEFAULT_MINIMUM_DELEGATION_AMOUNT)
+        .is_none(),
+        "the redelegated unbond should not have bridged over"
     );
+
     let delegator = bids
         .delegator_by_kind(
             &NON_FOUNDER_VALIDATOR_2_PK,
@@ -5404,25 +5436,24 @@ fn should_change_validator_bid_public_key() {
     .build();
 
     builder.exec(distribute_request).commit().expect_success();
-
     let bids: Vec<BidKind> = builder
         .get_bids()
         .into_iter()
         .filter(|bid| !bid.is_unbond())
         .collect();
-    assert_eq!(bids.len(), 5);
+    assert_eq!(
+        bids.len(),
+        4,
+        "excluding unbonds there should now be 4 bids"
+    );
 
-    let delegator = bids
-        .delegator_by_kind(
+    assert!(
+        bids.delegator_by_kind(
             &NON_FOUNDER_VALIDATOR_2_PK,
             &DelegatorKind::PublicKey(BID_ACCOUNT_1_PK.clone()),
         )
-        .expect("should have account1 delegation");
-    assert!(
-        delegator.staked_amount()
-            > U512::from(
-                DELEGATE_AMOUNT_1 - UNDELEGATE_AMOUNT_1 - DEFAULT_MINIMUM_DELEGATION_AMOUNT
-            )
+        .is_none(),
+        "should not have undelegated delegator"
     );
     let delegator = bids
         .delegator_by_kind(
@@ -5431,21 +5462,28 @@ fn should_change_validator_bid_public_key() {
         )
         .expect("should have account2 delegation");
     assert!(delegator.staked_amount() > U512::from(DELEGATE_AMOUNT_2));
+    let expected_reward = 12;
+    assert_eq!(
+        delegator.staked_amount(),
+        U512::from(DELEGATE_AMOUNT_2 + expected_reward)
+    );
 
     // advance eras until unbonds are processed
     builder.advance_eras_by(DEFAULT_UNBONDING_DELAY + 1);
 
     let bids = builder.get_bids();
-    assert_eq!(bids.len(), 6);
+    assert_eq!(bids.len(), 5, "with unbonds filtered there should be 5");
     let delegator = bids
         .delegator_by_kind(
             &NON_FOUNDER_VALIDATOR_3_PK,
             &DelegatorKind::PublicKey(BID_ACCOUNT_1_PK.clone()),
         )
         .expect("should have account1 delegation");
+
     assert_eq!(
         delegator.staked_amount(),
-        U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT)
+        U512::from(DELEGATE_AMOUNT_1 + expected_reward),
+        "the fully redelegated amount plus the earned rewards"
     );
 }
 

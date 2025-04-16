@@ -627,6 +627,7 @@ pub trait Auction:
             let (validator_public_key, reward_info) = item?;
 
             let validator_bid_addr = BidAddr::Validator(validator_public_key.to_account_hash());
+            let mut bridged_validator_bid_addr: Option<BidAddr> = None;
             let validator_reward_amount = reward_info.validator_reward;
             let (validator_bonding_purse, min_del, max_del) =
                 match detail::get_distribution_target(self, validator_bid_addr) {
@@ -635,8 +636,28 @@ pub trait Auction:
                             debug!(?validator_public_key, "validator payout starting ");
                             let validator_bonding_purse = *validator_bid.bonding_purse();
                             validator_bid.increase_stake(validator_reward_amount)?;
+
                             self.write_bid(
                                 validator_bid_addr.into(),
+                                BidKind::Validator(validator_bid.clone()),
+                            )?;
+                            (
+                                validator_bonding_purse,
+                                validator_bid.minimum_delegation_amount().into(),
+                                validator_bid.maximum_delegation_amount().into(),
+                            )
+                        }
+                        DistributeTarget::BridgedValidator {
+                            bridged_validator_addr,
+                            mut validator_bid,
+                        } => {
+                            debug!(?validator_public_key, "bridged validator payout starting ");
+                            bridged_validator_bid_addr = Some(bridged_validator_addr); // <-- important
+                            let validator_bonding_purse = *validator_bid.bonding_purse();
+                            validator_bid.increase_stake(validator_reward_amount)?;
+
+                            self.write_bid(
+                                bridged_validator_addr.into(),
                                 BidKind::Validator(validator_bid.clone()),
                             )?;
                             (
@@ -684,87 +705,114 @@ pub trait Auction:
             debug!(?validator_public_key, "delegator payouts for validator");
             let mut undelegates = vec![];
             let mut prunes = vec![];
-            let mut counter = 0;
             for (delegator_kind, delegator_reward) in reward_info.delegator_rewards {
-                if delegator_reward.is_zero() {
-                    continue;
+                let mut delegator_bid_addrs = vec![];
+                delegator_bid_addrs.push(BidAddr::new_delegator_kind_relaxed(
+                    validator_bid_addr.validator_account_hash(),
+                    &delegator_kind,
+                ));
+                if let Some(bridged) = bridged_validator_bid_addr {
+                    delegator_bid_addrs.push(BidAddr::new_delegator_kind_relaxed(
+                        bridged.validator_account_hash(),
+                        &delegator_kind,
+                    ))
                 }
-                counter += 1;
-                let delegator_bid_addr =
-                    BidAddr::new_delegator_kind(&validator_public_key, &delegator_kind);
-                let delegator_bid_key = delegator_bid_addr.into();
-                let delegator_bonding_purse =
-                    match detail::get_distribution_target(self, delegator_bid_addr) {
-                        Ok(target) => match target {
-                            DistributeTarget::Delegator(mut delegator_bid) => {
-                                let delegator_bonding_purse = *delegator_bid.bonding_purse();
-                                let current_stake = delegator_bid.staked_amount();
-                                let potential_stake =
-                                    current_stake.saturating_add(delegator_reward);
-                                if potential_stake < min_del {
-                                    // update the bid initially, but register for unbond and prune
-                                    let stake = delegator_bid.increase_stake(delegator_reward)?;
-                                    undelegates.push((
-                                        delegator_kind.clone(),
-                                        validator_public_key.clone(),
-                                        stake,
-                                    ));
-                                    prunes.push(delegator_bid_addr);
-                                } else if potential_stake > max_del {
-                                    // set stake to limit, unbond the rest
-                                    delegator_bid.set_stake(max_del);
-                                    let unbond_amount = potential_stake.saturating_sub(max_del);
-                                    if !unbond_amount.is_zero() {
+                let mut maybe_delegator_bonding_purse: Option<URef> = None;
+                for delegator_bid_addr in delegator_bid_addrs {
+                    if delegator_reward.is_zero() {
+                        maybe_delegator_bonding_purse = None;
+                        break; // if there is no reward to give, no need to continue looking
+                    } else {
+                        let delegator_bid_key = delegator_bid_addr.into();
+                        match detail::get_distribution_target(self, delegator_bid_addr) {
+                            Ok(target) => match target {
+                                DistributeTarget::Delegator(mut delegator_bid) => {
+                                    let delegator_bonding_purse = *delegator_bid.bonding_purse();
+                                    let increased_stake =
+                                        delegator_bid.increase_stake(delegator_reward)?;
+                                    if increased_stake < min_del {
+                                        // update the bid initially, but register for unbond and
+                                        // prune
                                         undelegates.push((
                                             delegator_kind.clone(),
                                             validator_public_key.clone(),
-                                            unbond_amount,
+                                            increased_stake,
                                         ));
+                                        prunes.push(delegator_bid_addr);
+                                    } else if increased_stake > max_del {
+                                        // update the bid initially, but register overage for unbond
+                                        let unbond_amount = increased_stake.saturating_sub(max_del);
+                                        if !unbond_amount.is_zero() {
+                                            undelegates.push((
+                                                delegator_kind.clone(),
+                                                validator_public_key.clone(),
+                                                unbond_amount,
+                                            ));
+                                        }
                                     }
-                                } else {
-                                    delegator_bid.increase_stake(delegator_reward)?;
+                                    self.write_bid(
+                                        delegator_bid_key,
+                                        BidKind::Delegator(delegator_bid),
+                                    )?;
+                                    maybe_delegator_bonding_purse = Some(delegator_bonding_purse);
+                                    break;
                                 }
-                                self.write_bid(
-                                    delegator_bid_key,
-                                    BidKind::Delegator(delegator_bid),
-                                )?;
-                                delegator_bonding_purse
-                            }
-                            DistributeTarget::Unbond(unbond) => match unbond.target_unbond_era() {
-                                Some(mut unbond_era) => {
-                                    let unbond_addr = BidAddr::new_delegator_unbond(
-                                        &validator_public_key,
-                                        &delegator_kind,
-                                    );
-                                    let delegator_bonding_purse = *unbond_era.bonding_purse();
-                                    let new_amount =
-                                        unbond_era.amount().saturating_add(delegator_reward);
-                                    unbond_era.with_amount(new_amount);
-                                    self.write_unbond(unbond_addr, Some(*unbond.clone()))?;
-                                    delegator_bonding_purse
+                                DistributeTarget::Unbond(mut unbond) => {
+                                    match unbond.target_unbond_era_mut() {
+                                        Some(unbond_era) => {
+                                            let unbond_addr = BidAddr::new_delegator_unbond_relaxed(
+                                                delegator_bid_addr.validator_account_hash(),
+                                                &delegator_kind,
+                                            );
+                                            let delegator_bonding_purse =
+                                                *unbond_era.bonding_purse();
+                                            let new_amount = unbond_era
+                                                .amount()
+                                                .saturating_add(delegator_reward);
+
+                                            unbond_era.with_amount(new_amount);
+                                            self.write_unbond(unbond_addr, Some(*unbond.clone()))?;
+                                            maybe_delegator_bonding_purse =
+                                                Some(delegator_bonding_purse);
+                                            break;
+                                        }
+                                        None => {
+                                            debug!(
+                                                ?delegator_bid_key,
+                                                "neither delegator bid or unbond found"
+                                            );
+                                            // keep looking
+                                        }
+                                    }
                                 }
-                                None => {
-                                    warn!(
-                                        ?delegator_bid_key,
-                                        "neither delegator bid or unbond found"
-                                    );
-                                    continue;
+                                DistributeTarget::Validator(_)
+                                | DistributeTarget::BridgedValidator { .. } => {
+                                    return Err(Error::UnexpectedBidVariant)
                                 }
                             },
-                            DistributeTarget::Validator(_) => {
-                                return Err(Error::UnexpectedBidVariant)
+                            Err(Error::DelegatorNotFound) => {
+                                debug!(
+                                    ?validator_public_key,
+                                    ?delegator_bid_addr,
+                                    "delegator bid not found"
+                                );
+                                // keep looking
                             }
-                        },
-                        Err(err) => return Err(err),
-                    };
+                            Err(err) => return Err(err),
+                        }
+                    }
+                }
 
+                // we include 0 allocations for explicitness
                 let allocation = SeigniorageAllocation::delegator_kind(
                     delegator_kind,
                     validator_public_key.clone(),
                     delegator_reward,
                 );
                 seigniorage_allocations.push(allocation);
-                self.mint_into_existing_purse(delegator_reward, delegator_bonding_purse)?;
+                if let Some(delegator_bonding_purse) = maybe_delegator_bonding_purse {
+                    self.mint_into_existing_purse(delegator_reward, delegator_bonding_purse)?;
+                }
             }
 
             for (kind, pk, unbond_amount) in undelegates {
@@ -779,7 +827,7 @@ pub trait Auction:
 
             debug!(
                 ?validator_public_key,
-                delegator_set_size = counter,
+                delegator_set_size = seigniorage_allocations.len(),
                 "delegator payout finished"
             );
 

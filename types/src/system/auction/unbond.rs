@@ -353,6 +353,13 @@ impl Unbond {
             .max_by(|x, y| x.era_of_creation().cmp(&y.era_of_creation()))
             .cloned()
     }
+
+    /// Returns a mutable reference to the unbond era with the highest era of creation.
+    pub fn target_unbond_era_mut(&mut self) -> Option<&mut UnbondEra> {
+        self.eras_mut()
+            .iter_mut()
+            .max_by(|x, y| x.era_of_creation().cmp(&y.era_of_creation()))
+    }
 }
 
 impl ToBytes for Unbond {
