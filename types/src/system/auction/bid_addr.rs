@@ -228,11 +228,11 @@ impl BidAddr {
     ) -> Self {
         match delegator_kind {
             DelegatorKind::PublicKey(pk) => BidAddr::DelegatedAccount {
-                validator: validator,
+                validator,
                 delegator: pk.to_account_hash(),
             },
             DelegatorKind::Purse(addr) => BidAddr::DelegatedPurse {
-                validator: validator,
+                validator,
                 delegator: *addr,
             },
         }
@@ -250,11 +250,11 @@ impl BidAddr {
     ) -> Self {
         match &delegator_kind {
             DelegatorKind::PublicKey(pk) => BidAddr::UnbondAccount {
-                validator: validator,
+                validator,
                 unbonder: pk.to_account_hash(),
             },
             DelegatorKind::Purse(addr) => BidAddr::UnbondPurse {
-                validator: validator,
+                validator,
                 unbonder: *addr,
             },
         }
