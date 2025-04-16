@@ -168,16 +168,43 @@ where
         None
     }
 
+    /// Clears the map, removing all key-value pairs.
+    pub fn clear(&mut self) {
+        for hash in self.hashes() {
+            let prefix = self.create_prefix_from_hash(hash);
+            purge_at_key(Keyspace::Context(&prefix));
+        }
+
+        self.head_key_hash = None;
+    }
+
+    /// Returns true if the map contains a value for the specified key.
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.get(key).is_some()
+    }
+
+    /// Creates an iterator visiting all the hashes in arbitrary order.
+    pub fn hashes<'a>(&'a self) -> impl Iterator<Item = IterableMapKeyRepr> + 'a {
+        self.iter().map(|(hash, _)| hash)
+    }
+
+    /// Creates an iterator visiting all the values in arbitrary order.
+    pub fn values<'a>(&'a self) -> impl Iterator<Item = V> + 'a {
+        self.iter().map(|(_, value)| value)
+    }
+
+    // Returns true if the map contains no elements.
+    pub fn is_empty(&self) -> bool {
+        self.head_key_hash.is_none()
+    }
+
     /// Returns an iterator over the entries in the map.
     /// 
     /// Traverses entries in reverse-insertion order.
     /// Each item is a tuple of the hashed key and the value.
     ///
     /// Note: the original key type `K` is not recoverable during iteration.
-    pub fn iter(&self) -> IterableMapIter<K, V>
-    where
-        V: BorshDeserialize,
-    {
+    pub fn iter(&self) -> IterableMapIter<K, V> {
         IterableMapIter {
             prefix: &self.prefix,
             current: self.head_key_hash,
@@ -415,6 +442,172 @@ mod tests {
 
             assert_eq!(map.get(&1), Some("shared".to_string()));
             assert_eq!(map.get(&2), Some("shared".to_string()));
+        }).unwrap();
+    }
+
+    #[test]
+    fn clear_removes_all_entries() {
+        dispatch(|| {
+            let mut map = IterableMap::<u64, String>::new("test_map");
+            map.insert(1, "a".to_string());
+            map.insert(2, "b".to_string());
+            map.clear();
+            assert!(map.is_empty());
+            assert_eq!(map.iter().count(), 0);
+        }).unwrap();
+    }
+
+    #[test]
+    fn hashes_returns_reverse_insertion_order() {
+        dispatch(|| {
+            let mut map = IterableMap::<u64, String>::new("test_map");
+            let hash1 = 1u64.to_key_prefix();
+            let hash2 = 2u64.to_key_prefix();
+            map.insert(1, "a".to_string());
+            map.insert(2, "b".to_string());
+            let hashes: Vec<_> = map.hashes().collect();
+            assert_eq!(hashes, vec![hash2, hash1]);
+        }).unwrap();
+    }
+
+    #[test]
+    fn values_returns_values_in_reverse_insertion_order() {
+        dispatch(|| {
+            let mut map = IterableMap::<u64, String>::new("test_map");
+            map.insert(1, "a".to_string());
+            map.insert(2, "b".to_string());
+            let values: Vec<_> = map.values().collect();
+            assert_eq!(values, vec!["b".to_string(), "a".to_string()]);
+        }).unwrap();
+    }
+
+    #[test]
+    fn contains_key_returns_correctly() {
+        dispatch(|| {
+            let mut map = IterableMap::<u64, String>::new("test_map");
+            assert!(!map.contains_key(&1));
+            map.insert(1, "a".to_string());
+            assert!(map.contains_key(&1));
+            map.remove(&1);
+            assert!(!map.contains_key(&1));
+        }).unwrap();
+    }
+
+    #[test]
+    fn multiple_removals_and_insertions() {
+        dispatch(|| {
+            let mut map = IterableMap::<u64, String>::new("test_map");
+            map.insert(1, "a".to_string());
+            map.insert(2, "b".to_string());
+            map.insert(3, "c".to_string());
+            map.remove(&2);
+            assert_eq!(map.get(&2), None);
+            assert_eq!(map.get(&1), Some("a".to_string()));
+            assert_eq!(map.get(&3), Some("c".to_string()));
+            
+            map.insert(4, "d".to_string());
+            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            assert_eq!(values, vec!["d", "c", "a"]);
+        }).unwrap();
+    }
+
+    #[derive(BorshSerialize, BorshDeserialize, Debug, Clone, PartialEq, Eq)]
+    struct TestKey {
+        id: u64,
+        name: String,
+    }
+
+    #[test]
+    fn struct_as_key() {
+        dispatch(|| {
+            let key1 = TestKey { id: 1, name: "Key1".to_string() };
+            let key2 = TestKey { id: 2, name: "Key2".to_string() };
+            let mut map = IterableMap::<TestKey, String>::new("test_map");
+            
+            map.insert(key1.clone(), "a".to_string());
+            map.insert(key2.clone(), "b".to_string());
+            
+            assert_eq!(map.get(&key1), Some("a".to_string()));
+            assert_eq!(map.get(&key2), Some("b".to_string()));
+        }).unwrap();
+    }
+
+    #[test]
+    fn remove_middle_of_long_chain() {
+        dispatch(|| {
+            let mut map = IterableMap::<u64, String>::new("test_map");
+            map.insert(1, "a".to_string());
+            map.insert(2, "b".to_string());
+            map.insert(3, "c".to_string());
+            map.insert(4, "d".to_string());
+            map.insert(5, "e".to_string());
+            
+            // The order is 5,4,3,2,1
+            map.remove(&3); // Remove the middle entry
+            
+            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            assert_eq!(values, vec!["e", "d", "b", "a"]);
+            
+            // Check that entry 4's previous is now 2's hash
+            let hash4 = 4u64.to_key_prefix();
+            let prefix = map.create_prefix_from_hash(hash4);
+            let entry = map.get_entry(Keyspace::Context(&prefix)).unwrap();
+            assert_eq!(entry.previous, Some(2u64.to_key_prefix()));
+        }).unwrap();
+    }
+
+    #[test]
+    fn insert_after_remove_updates_head() {
+        dispatch(|| {
+            let mut map = IterableMap::<u64, String>::new("test_map");
+            map.insert(1, "a".to_string());
+            map.insert(2, "b".to_string());
+            map.remove(&2);
+            map.insert(3, "c".to_string());
+            
+            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            assert_eq!(values, vec!["c", "a"]);
+        }).unwrap();
+    }
+
+    #[test]
+    fn reinsert_removed_key() {
+        dispatch(|| {
+            let mut map = IterableMap::<u64, String>::new("test_map");
+            map.insert(1, "a".to_string());
+            map.remove(&1);
+            map.insert(1, "b".to_string());
+            
+            assert_eq!(map.get(&1), Some("b".to_string()));
+            assert_eq!(map.iter().next().unwrap().1, "b".to_string());
+        }).unwrap();
+    }
+
+    #[test]
+    fn iteration_reflects_modifications() {
+        dispatch(|| {
+            let mut map = IterableMap::<u64, String>::new("test_map");
+            map.insert(1, "a".to_string());
+            map.insert(2, "b".to_string());
+            let mut iter = map.iter();
+            assert_eq!(iter.next().unwrap().1, "b".to_string());
+            
+            map.remove(&2);
+            map.insert(3, "c".to_string());
+            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            assert_eq!(values, vec!["c", "a"]);
+        }).unwrap();
+    }
+
+    #[test]
+    fn unit_struct_as_key() {
+        #[derive(BorshSerialize)]
+        struct UnitKey;
+        
+        dispatch(|| {
+            let mut map = IterableMap::<UnitKey, String>::new("test_map");
+            map.insert(UnitKey, "value".to_string());
+            assert_eq!(map.get(&UnitKey), Some("value".to_string()));
         }).unwrap();
     }
 }
