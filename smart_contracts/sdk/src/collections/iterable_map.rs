@@ -511,14 +511,14 @@ mod tests {
         }).unwrap();
     }
 
-    #[derive(BorshSerialize, BorshDeserialize, Debug, Clone, PartialEq, Eq)]
-    struct TestKey {
-        id: u64,
-        name: String,
-    }
-
     #[test]
     fn struct_as_key() {
+        #[derive(BorshSerialize, BorshDeserialize, Debug, Clone, PartialEq, Eq)]
+        struct TestKey {
+            id: u64,
+            name: String,
+        }
+        
         dispatch(|| {
             let key1 = TestKey { id: 1, name: "Key1".to_string() };
             let key2 = TestKey { id: 2, name: "Key2".to_string() };
