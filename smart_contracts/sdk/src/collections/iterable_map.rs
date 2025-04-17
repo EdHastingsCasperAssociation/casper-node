@@ -88,7 +88,7 @@ where
         Self {
             prefix: prefix.into(),
             tail_key_hash: None,
-            _marker: Default::default(),
+            _marker: PhantomData,
         }
     }
 
@@ -339,8 +339,7 @@ where
     }
 
     fn get_entry(&self, keyspace: Keyspace) -> Option<IterableMapEntry<K, V>> {
-        read_into_vec(keyspace)
-            .and_then(|vec| borsh::from_slice(&vec).ok())
+        read_into_vec(keyspace).and_then(|vec| borsh::from_slice(&vec).ok())
     }
 
     fn create_prefix_from_key(&self, key: &K) -> Vec<u8> {
@@ -351,9 +350,9 @@ where
     fn create_prefix_from_ptr(&self, hash: &IterableMapPtr) -> Vec<u8> {
         let mut context_key = Vec::new();
         context_key.extend(self.prefix.as_bytes());
-        context_key.extend("_".as_bytes());
+        context_key.extend(b"_");
         context_key.put_u64_le(hash.hash);
-        context_key.extend("_".as_bytes());
+        context_key.extend(b"_");
         context_key.put_u64_le(hash.index);
         context_key
     }
@@ -411,9 +410,9 @@ where
         let current_hash = self.current?;
         let mut key_bytes = Vec::new();
         key_bytes.extend(self.prefix.as_bytes());
-        key_bytes.extend("_".as_bytes());
+        key_bytes.extend(b"_");
         key_bytes.put_u64_le(current_hash.hash);
-        key_bytes.extend("_".as_bytes());
+        key_bytes.extend(b"_");
         key_bytes.put_u64_le(current_hash.index);
 
         let context_key = Keyspace::Context(&key_bytes);
