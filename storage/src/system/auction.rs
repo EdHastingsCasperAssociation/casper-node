@@ -692,6 +692,10 @@ pub trait Auction:
                             return Err(Error::UnexpectedBidVariant);
                         }
                     },
+                    Err(Error::BridgeRecordChainTooLong) => {
+                        warn!(?validator_public_key, "bridge record chain too long");
+                        continue;
+                    }
                     Err(err) => return Err(err),
                 };
 

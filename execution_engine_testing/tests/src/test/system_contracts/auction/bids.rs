@@ -5605,7 +5605,7 @@ fn should_handle_excessively_long_bridge_record_chains() {
         *BID_ACCOUNT_2_ADDR,
         CONTRACT_REDELEGATE,
         runtime_args! {
-            ARG_AMOUNT => U512::from(UNDELEGATE_AMOUNT_2 + DEFAULT_MINIMUM_DELEGATION_AMOUNT),
+            ARG_AMOUNT => U512::from(UNDELEGATE_AMOUNT_2),
             ARG_VALIDATOR => NON_FOUNDER_VALIDATOR_2_PK.clone(),
             ARG_DELEGATOR => BID_ACCOUNT_2_PK.clone(),
             ARG_NEW_VALIDATOR => NON_FOUNDER_VALIDATOR_1_PK.clone()
@@ -5648,7 +5648,7 @@ fn should_handle_excessively_long_bridge_record_chains() {
         .into_iter()
         .filter(|bid| !bid.is_unbond())
         .collect();
-    assert_eq!(bids.len(), 24);
+    assert_eq!(bids.len(), 25);
     let new_validator_bid = bids.validator_bid(&current_bid_public_key).unwrap();
     assert_eq!(
         builder.get_purse_balance(*new_validator_bid.bonding_purse()),
@@ -5693,7 +5693,7 @@ fn should_handle_excessively_long_bridge_record_chains() {
         .expect("should have account2 delegation");
     assert_eq!(
         delegator.staked_amount(),
-        U512::from(DELEGATE_AMOUNT_2 - UNDELEGATE_AMOUNT_2 - DEFAULT_MINIMUM_DELEGATION_AMOUNT)
+        U512::from(DELEGATE_AMOUNT_2 - UNDELEGATE_AMOUNT_2)
     );
 
     // distribute rewards
@@ -5747,11 +5747,7 @@ fn should_handle_excessively_long_bridge_record_chains() {
     // verify that unbond was returned to main purse instead of being redelegated
     assert_eq!(
         builder.get_purse_balance(delegator_2_main_purse),
-        U512::from(
-            TRANSFER_AMOUNT - DELEGATE_AMOUNT_2
-                + UNDELEGATE_AMOUNT_2
-                + DEFAULT_MINIMUM_DELEGATION_AMOUNT
-        )
+        U512::from(TRANSFER_AMOUNT - DELEGATE_AMOUNT_2 + UNDELEGATE_AMOUNT_2)
     );
 }
 
