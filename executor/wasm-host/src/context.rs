@@ -22,7 +22,7 @@ pub struct Context<S: GlobalStateReader, E: Executor> {
     /// contract or session address.
     // pub state_address: Address,
     /// The amount of tokens that were send to the contract's purse at the time of the call.
-    pub transferred_value: u128,
+    pub transferred_value: u64,
     pub config: WasmV2Config,
     pub storage_costs: StorageCosts,
     pub message_limits: MessageLimits,

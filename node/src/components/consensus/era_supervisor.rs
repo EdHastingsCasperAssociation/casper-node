@@ -1539,6 +1539,32 @@ async fn join_2<T: Future, U: Future>(
     futures::join!(t, u)
 }
 
+// The created RewardedSignatures should contain bit vectors for each of the block for which
+// signatures are being cited. If we are eligible to cite 3 blocks, RewardsSignature will contain an
+// at-most 3 vectors of bit vectors (Vec<Vec<u8>>). With `signature_rewards_max_delay = 3` The logic
+// is - "we can cite signatures for the blocks parent, parents parent and parents parent parent".
+// If we are close to genesis, the outer vector will obviously not have 3 entries.
+// (At height 0 there is no parent, at height 1 there is no grandparent etc.)
+// The `rewarded_signatures` vector will look something like:
+//    [[255, 64],[128, 0],[0, 0]]
+// Entries in the outer vec are interpreted as:
+//   - on index 0 - the last finalized block
+//   - on index 1 - the penultimate finalized block
+//   - on index 2 - the penpenultimate finalized block
+//  There are at most `signature_rewards_max_delay` entries in this vector. if we are "close" to
+//  genesis there can be less (at height 0 there is no history, so there will be no cited blocks, at
+// height 1 we can only cite signatures from one block etc.)  Each entry in this vector is also a
+// vector of u8 numbers. To interpret them we need to realize that if we concatenate all the bytes
+// of the numbers, the  nth bit will say that the nth validators signature was either cited (if the
+// bit is 1) or not (if the bit is 0).  To figure out which validator is on position n, we need to
+// take all the validators relevant to the era of the  particular block, fetch their public keys and
+// sort them ascending. In the quoted example we see that:  For the parent on the proposed block we
+// cite signatures of validators on position 0, 1, 2, 3, 4, 5, 6, 7 and 9  For the grandparent on
+// the proposed block we cite signatures of validators on position 0  For the grandgrandparent on
+// the proposed block we cite no signatures  Please note that due to using u8 as the "packing"
+// mechanism it is possible that the byte vector will have more bits than there are validators - we
+// round  it up to 8 (ceiling(number_of_valuidators/8)), the remaining bits are only used as padding
+// to full bytes.
 fn create_rewarded_signatures(
     maybe_past_blocks_with_metadata: &[Option<BlockWithMetadata>],
     validator_matrix: ValidatorMatrix,
@@ -1594,4 +1620,137 @@ fn create_rewarded_signatures(
     }
 
     rewarded_signatures
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use crate::{
+        consensus::{
+            era_supervisor::create_rewarded_signatures,
+            tests::utils::{ALICE_PUBLIC_KEY, ALICE_SECRET_KEY, BOB_PUBLIC_KEY, CAROL_PUBLIC_KEY},
+            BlockContext, ClContext,
+        },
+        types::{BlockWithMetadata, ValidatorMatrix},
+    };
+    use casper_types::{
+        bytesrepr::{Bytes, ToBytes},
+        testing::TestRng,
+        Block, BlockHash, BlockSignatures, BlockSignaturesV2, BlockV2, Digest, EraId,
+        ProtocolVersion, PublicKey, RewardedSignatures, Signature, SingleBlockRewardedSignatures,
+        Timestamp, U512,
+    };
+
+    #[test]
+    fn should_set_first_bit_if_earliest_key_cited() {
+        // The first bit in the bit list should be set to 1 if the "lowest" (in the sense of public
+        // key comaparison) public key signature was cited.
+        let mut rng = TestRng::new();
+
+        let mut bs_v2 = BlockSignaturesV2::random(&mut rng);
+        bs_v2.insert_signature(
+            ALICE_PUBLIC_KEY.clone(),
+            Signature::ed25519([44; Signature::ED25519_LENGTH]).unwrap(),
+        );
+        let signatures = build_rewarded_signatures_without_historical_blocks(&mut rng, bs_v2);
+        assert_eq!(
+            signatures.to_bytes().unwrap(),
+            vec![Bytes::from(vec![128_u8])].to_bytes().unwrap()
+        );
+    }
+
+    #[test]
+    fn should_set_third_bit_if_the_first_validator_signature_cited() {
+        // Given there are three validators, if the first (by public key copmparison) validator
+        // signature was cited - the third bit should be set to 1
+        let mut rng = TestRng::new();
+
+        let mut bs_v2 = BlockSignaturesV2::random(&mut rng);
+        bs_v2.insert_signature(
+            BOB_PUBLIC_KEY.clone(),
+            Signature::ed25519([44; Signature::ED25519_LENGTH]).unwrap(),
+        );
+        let signatures = build_rewarded_signatures_without_historical_blocks(&mut rng, bs_v2);
+        assert_eq!(
+            signatures.to_bytes().unwrap(),
+            vec![Bytes::from(vec![32_u8])].to_bytes().unwrap()
+        );
+    }
+
+    #[test]
+    fn should_set_second_bit_if_the_second_validator_signature_cited() {
+        // Given there are three validators, if the second (by public key copmparison) validator
+        // signature was cited - the second bit should be set to 1
+        let mut rng = TestRng::new();
+
+        let mut bs_v2 = BlockSignaturesV2::random(&mut rng);
+        bs_v2.insert_signature(
+            CAROL_PUBLIC_KEY.clone(),
+            Signature::ed25519([44; Signature::ED25519_LENGTH]).unwrap(),
+        );
+        let signatures = build_rewarded_signatures_without_historical_blocks(&mut rng, bs_v2);
+        assert_eq!(
+            signatures.to_bytes().unwrap(),
+            vec![Bytes::from(vec![64_u8])].to_bytes().unwrap()
+        );
+    }
+
+    fn build_rewarded_signatures_without_historical_blocks(
+        rng: &mut TestRng,
+        bs_v2: BlockSignaturesV2,
+    ) -> RewardedSignatures {
+        assert!(*BOB_PUBLIC_KEY > *CAROL_PUBLIC_KEY && *CAROL_PUBLIC_KEY > *ALICE_PUBLIC_KEY);
+        let signatures_1 = BTreeSet::new();
+        let mut validator_public_keys: BTreeMap<PublicKey, U512> = BTreeMap::new();
+        // Making sure that Alice, Bob and Carols keys by stake have different ordering than
+        // by PublicKey
+        validator_public_keys.insert(
+            ALICE_PUBLIC_KEY.clone(),
+            U512::MAX.saturating_sub(100.into()),
+        );
+        validator_public_keys.insert(BOB_PUBLIC_KEY.clone(), 1_u64.into());
+        validator_public_keys.insert(CAROL_PUBLIC_KEY.clone(), U512::MAX);
+
+        let past_rewarded_signatures =
+            RewardedSignatures::new(vec![SingleBlockRewardedSignatures::from_validator_set(
+                &signatures_1,
+                validator_public_keys.keys(),
+            )]);
+
+        let block_v2 = BlockV2::new(
+            BlockHash::random(rng),
+            Digest::random(rng),
+            Digest::random(rng),
+            false,
+            None,
+            Timestamp::now(),
+            EraId::new(1),
+            1010,
+            ProtocolVersion::V2_0_0,
+            PublicKey::random(rng),
+            BTreeMap::new(),
+            past_rewarded_signatures,
+            1,
+            None,
+        );
+        let block = Block::V2(block_v2);
+
+        let block_1 = BlockWithMetadata {
+            block,
+            block_signatures: BlockSignatures::V2(bs_v2),
+        };
+        let maybe_past_blocks_with_metadata = vec![Some(block_1)];
+        let mut validator_matrix = ValidatorMatrix::new_with_validator(ALICE_SECRET_KEY.clone());
+        validator_matrix.register_validator_weights(EraId::new(1), validator_public_keys);
+        let timestamp = Timestamp::now();
+        let ancestor_values = vec![];
+        let block_context = BlockContext::<ClContext>::new(timestamp, ancestor_values);
+        create_rewarded_signatures(
+            &maybe_past_blocks_with_metadata,
+            validator_matrix,
+            &block_context,
+            1,
+        )
+    }
 }

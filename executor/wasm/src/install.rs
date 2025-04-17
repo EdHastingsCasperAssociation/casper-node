@@ -25,7 +25,7 @@ pub struct InstallContractRequest {
     /// Input data for the constructor.
     pub(crate) input: Option<Bytes>,
     /// Attached tokens value that to be transferred into the constructor.
-    pub(crate) transferred_value: u128,
+    pub(crate) transferred_value: u64,
     /// Transaction hash.
     pub(crate) transaction_hash: TransactionHash,
     /// Address generator.
@@ -51,7 +51,7 @@ pub struct InstallContractRequestBuilder {
     wasm_bytes: Option<Bytes>,
     entry_point: Option<String>,
     input: Option<Bytes>,
-    transferred_value: Option<u128>,
+    transferred_value: Option<u64>,
     transaction_hash: Option<TransactionHash>,
     address_generator: Option<Arc<RwLock<AddressGenerator>>>,
     chain_name: Option<Arc<str>>,
@@ -88,7 +88,7 @@ impl InstallContractRequestBuilder {
         self
     }
 
-    pub fn with_transferred_value(mut self, transferred_value: u128) -> Self {
+    pub fn with_transferred_value(mut self, transferred_value: u64) -> Self {
         self.transferred_value = Some(transferred_value);
         self
     }
