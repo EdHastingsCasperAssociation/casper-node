@@ -35,7 +35,7 @@ impl<V: IterableMapKey + BorshSerialize + BorshDeserialize + Clone> IterableSet<
     }
 
     /// Creates an iterator visiting all the values in arbitrary order.
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = V> + 'a {
+    pub fn iter(&self) -> impl Iterator<Item = V> + '_ {
         self.map.iter().map(|(_, value)| value)
     }
 

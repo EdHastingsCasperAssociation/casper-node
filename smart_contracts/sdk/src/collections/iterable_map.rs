@@ -150,7 +150,7 @@ where
     pub fn get(&self, key: &K) -> Option<V> {
         // If a slot is writable, it implicitly belongs the key
         let (_, at_ptr) = self.get_writable_slot(key);
-        at_ptr.map(|entry| entry.value).flatten()
+        at_ptr.and_then(|entry| entry.value)
     }
 
     /// Removes a key from the map. Returns the associated value if the key exists.
@@ -248,12 +248,12 @@ where
     }
 
     /// Creates an iterator visiting all the values in arbitrary order.
-    pub fn keys<'a>(&'a self) -> impl Iterator<Item = K> + 'a {
+    pub fn keys(&self) -> impl Iterator<Item = K> + '_ {
         self.iter().map(|(key, _)| key)
     }
 
     /// Creates an iterator visiting all the values in arbitrary order.
-    pub fn values<'a>(&'a self) -> impl Iterator<Item = V> + 'a {
+    pub fn values(&self) -> impl Iterator<Item = V> + '_ {
         self.iter().map(|(_, value)| value)
     }
 
@@ -271,7 +271,7 @@ where
     pub fn iter(&self) -> IterableMapIter<K, V> {
         IterableMapIter {
             prefix: &self.prefix,
-            current: self.tail_key_hash.clone(),
+            current: self.tail_key_hash,
             _marker: PhantomData,
         }
     }
@@ -340,8 +340,7 @@ where
 
     fn get_entry(&self, keyspace: Keyspace) -> Option<IterableMapEntry<K, V>> {
         read_into_vec(keyspace)
-            .map(|vec| borsh::from_slice(&vec).ok())
-            .flatten()
+            .and_then(|vec| borsh::from_slice(&vec).ok())
     }
 
     fn create_prefix_from_key(&self, key: &K) -> Vec<u8> {
@@ -395,13 +394,13 @@ where
     fn into_iter(self) -> Self::IntoIter {
         IterableMapIter {
             prefix: &self.prefix,
-            current: self.tail_key_hash.clone(),
+            current: self.tail_key_hash,
             _marker: PhantomData,
         }
     }
 }
 
-impl<'a, K, V> Iterator for IterableMapIter<'a, K, V>
+impl<K, V> Iterator for IterableMapIter<'_, K, V>
 where
     K: BorshDeserialize,
     V: BorshDeserialize,
@@ -419,11 +418,8 @@ where
 
         let context_key = Keyspace::Context(&key_bytes);
 
-        let Some(entry) = read_into_vec(context_key)
-            .map(|vec| borsh::from_slice::<IterableMapEntry<K, V>>(&vec).unwrap())
-        else {
-            return None;
-        };
+        let entry = read_into_vec(context_key)
+            .map(|vec| borsh::from_slice::<IterableMapEntry<K, V>>(&vec).unwrap())?;
 
         self.current = entry.previous;
         Some((
@@ -880,7 +876,7 @@ mod tests {
         dispatch(|| {
             let mut map = IterableMap::<CollidingKey, String>::new("test_map");
 
-            let keys = vec![
+            let keys = [
                 CollidingKey(42, 1),
                 CollidingKey(42, 2),
                 CollidingKey(42, 3),
