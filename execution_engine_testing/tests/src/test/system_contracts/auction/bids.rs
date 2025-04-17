@@ -1,11 +1,10 @@
+use assert_matches::assert_matches;
+use num_traits::{One, Zero};
+use once_cell::sync::Lazy;
 use std::{
     collections::{BTreeMap, BTreeSet},
     iter::FromIterator,
 };
-
-use assert_matches::assert_matches;
-use num_traits::{One, Zero};
-use once_cell::sync::Lazy;
 use tempfile::TempDir;
 
 use casper_engine_test_support::{
@@ -115,6 +114,7 @@ static BID_ACCOUNT_1_PK: Lazy<PublicKey> = Lazy::new(|| {
 });
 static BID_ACCOUNT_1_ADDR: Lazy<AccountHash> = Lazy::new(|| AccountHash::from(&*BID_ACCOUNT_1_PK));
 const BID_ACCOUNT_1_BALANCE: u64 = MINIMUM_ACCOUNT_CREATION_BALANCE;
+const BID_ACCOUNT_1_BOND: u64 = 200_000;
 
 static BID_ACCOUNT_2_PK: Lazy<PublicKey> = Lazy::new(|| {
     let secret_key = SecretKey::ed25519_from_bytes([206; SecretKey::ED25519_LENGTH]).unwrap();
@@ -922,33 +922,22 @@ fn should_forcibly_undelegate_after_setting_validator_limits() {
 
 #[ignore]
 #[test]
-fn should_force_undelegate_with_genesis_delegators() {
-    assert_ne!(*ACCOUNT_1_ADDR, *ACCOUNT_2_ADDR,);
-    assert_ne!(*ACCOUNT_2_ADDR, *BID_ACCOUNT_1_ADDR,);
-    assert_ne!(*ACCOUNT_2_ADDR, *DEFAULT_ACCOUNT_ADDR,);
+fn should_not_allow_delegator_stake_range_during_vesting() {
     let accounts = {
-        let mut tmp = DEFAULT_ACCOUNTS.clone();
-        let genesis_validator = GenesisAccount::account(
-            ACCOUNT_1_PK.clone(),
-            Motes::new(ACCOUNT_1_BALANCE),
+        let mut tmp: Vec<GenesisAccount> = DEFAULT_ACCOUNTS.clone();
+        let account_1 = GenesisAccount::account(
+            BID_ACCOUNT_1_PK.clone(),
+            Motes::new(BID_ACCOUNT_1_BALANCE),
             Some(GenesisValidator::new(
-                Motes::new(ACCOUNT_1_BOND),
+                Motes::new(BID_ACCOUNT_1_BOND),
                 DelegationRate::zero(),
             )),
         );
-        let genesis_delegator = GenesisAccount::delegator(
-            ACCOUNT_1_PK.clone(),
-            ACCOUNT_2_PK.clone(),
-            Motes::new(U512::zero()),
-            Motes::new(U512::from(DEFAULT_MAXIMUM_DELEGATION_AMOUNT - 1)),
-        );
-
-        tmp.push(genesis_validator);
-        tmp.push(genesis_delegator);
+        tmp.push(account_1);
         tmp
     };
 
-    let exec_config = GenesisConfigBuilder::new()
+    let genesis_config = GenesisConfigBuilder::new()
         .with_accounts(accounts)
         .with_locked_funds_period_millis(1)
         .build();
@@ -956,22 +945,22 @@ fn should_force_undelegate_with_genesis_delegators() {
     let run_genesis_request = GenesisRequest::new(
         DEFAULT_GENESIS_CONFIG_HASH,
         DEFAULT_PROTOCOL_VERSION,
-        exec_config,
+        genesis_config,
         DEFAULT_CHAINSPEC_REGISTRY.clone(),
     );
 
-    let chainspec = ChainspecConfig::default().with_vesting_schedule_period_millis(1);
-
-    let mut builder = LmdbWasmTestBuilder::new_temporary_with_config(chainspec);
+    let mut builder = LmdbWasmTestBuilder::default();
 
     builder.run_genesis(run_genesis_request);
+    // need to step past genesis era
+    builder.advance_era();
 
-    // set delegation limits
+    // attempt to change delegation limits
     let validator_1_add_bid_request = ExecuteRequestBuilder::standard(
-        *ACCOUNT_1_ADDR,
+        *BID_ACCOUNT_1_ADDR,
         CONTRACT_ADD_BID,
         runtime_args! {
-            ARG_PUBLIC_KEY => ACCOUNT_1_PK.clone(),
+            ARG_PUBLIC_KEY => BID_ACCOUNT_1_PK.clone(),
             ARG_AMOUNT => U512::from(ACCOUNT_1_BOND),
             ARG_DELEGATION_RATE => ADD_BID_DELEGATION_RATE_1,
             ARG_MINIMUM_DELEGATION_AMOUNT => DEFAULT_MINIMUM_DELEGATION_AMOUNT,
@@ -982,14 +971,55 @@ fn should_force_undelegate_with_genesis_delegators() {
 
     builder.exec(validator_1_add_bid_request).expect_failure();
 
-    builder.advance_eras_by(1_000);
+    let error = builder.get_error().expect("must have error");
+    let err_str = format!("{}", error);
+    assert!(
+        err_str.starts_with("ApiError::AuctionError(VestingLockout)"),
+        "should get vesting lockout error"
+    );
+}
 
-    // set delegation limits
-    let validator_1_add_bid_request_reattempt = ExecuteRequestBuilder::standard(
-        *ACCOUNT_1_ADDR,
+#[ignore]
+#[test]
+fn should_allow_delegator_stake_range_change_if_no_vesting() {
+    let accounts = {
+        let mut tmp: Vec<GenesisAccount> = DEFAULT_ACCOUNTS.clone();
+        let account_1 = GenesisAccount::account(
+            BID_ACCOUNT_1_PK.clone(),
+            Motes::new(BID_ACCOUNT_1_BALANCE),
+            Some(GenesisValidator::new(
+                Motes::new(BID_ACCOUNT_1_BOND),
+                DelegationRate::zero(),
+            )),
+        );
+        tmp.push(account_1);
+        tmp
+    };
+
+    let genesis_config = GenesisConfigBuilder::new()
+        .with_accounts(accounts)
+        .with_locked_funds_period_millis(0)
+        .build();
+
+    let run_genesis_request = GenesisRequest::new(
+        DEFAULT_GENESIS_CONFIG_HASH,
+        DEFAULT_PROTOCOL_VERSION,
+        genesis_config,
+        DEFAULT_CHAINSPEC_REGISTRY.clone(),
+    );
+
+    let mut builder = LmdbWasmTestBuilder::default();
+
+    builder.run_genesis(run_genesis_request);
+    // need to step past genesis era
+    builder.advance_era();
+
+    // attempt to change delegation limits
+    let validator_1_add_bid_request = ExecuteRequestBuilder::standard(
+        *BID_ACCOUNT_1_ADDR,
         CONTRACT_ADD_BID,
         runtime_args! {
-            ARG_PUBLIC_KEY => ACCOUNT_1_PK.clone(),
+            ARG_PUBLIC_KEY => BID_ACCOUNT_1_PK.clone(),
             ARG_AMOUNT => U512::from(ACCOUNT_1_BOND),
             ARG_DELEGATION_RATE => ADD_BID_DELEGATION_RATE_1,
             ARG_MINIMUM_DELEGATION_AMOUNT => DEFAULT_MINIMUM_DELEGATION_AMOUNT,
@@ -999,7 +1029,7 @@ fn should_force_undelegate_with_genesis_delegators() {
     .build();
 
     builder
-        .exec(validator_1_add_bid_request_reattempt)
+        .exec(validator_1_add_bid_request)
         .expect_success()
         .commit();
 }

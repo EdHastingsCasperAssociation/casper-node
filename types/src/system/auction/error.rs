@@ -407,6 +407,12 @@ pub enum Error {
     /// assert_eq!(62, Error::RedelegationValidatorNotFound as u8);
     /// ```
     RedelegationValidatorNotFound = 62,
+    /// Certain operations are not permitted on bid records during vesting periods.
+    /// ```
+    /// # use casper_types::system::auction::Error;
+    /// assert_eq!(63, Error::VestingLockout as u8);
+    /// ```
+    VestingLockout = 63,
 }
 
 impl Display for Error {
@@ -475,7 +481,7 @@ impl Display for Error {
             Error::UnexpectedUnbondVariant => formatter.write_str("Unexpected unbond variant"),
             Error::UnexpectedStoredValueVariant => formatter.write_str("Unexpected stored value variant"),
             Error::RedelegationValidatorNotFound => formatter.write_str("Redelegation validator not found"),
-
+            Error::VestingLockout => formatter.write_str("Cannot perform attempted action during vesting periods"),
         }
     }
 }
@@ -582,6 +588,7 @@ impl TryFrom<u8> for Error {
             d if d == Error::RedelegationValidatorNotFound as u8 => {
                 Ok(Error::RedelegationValidatorNotFound)
             }
+            d if d == Error::VestingLockout as u8 => Ok(Error::VestingLockout),
             _ => Err(TryFromU8ForError(())),
         }
     }

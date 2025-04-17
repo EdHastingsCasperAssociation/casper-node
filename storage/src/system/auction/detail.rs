@@ -1364,7 +1364,7 @@ pub fn process_updated_delegator_stake_boundaries<P: Auction>(
         // cannot increase the min or decrease the max while vesting is locked
         // as this could result in vested delegators being forcibly unbonded, thus
         // prematurely allowing liquidity on a network still in its vesting period.
-        return Err(Error::ValidatorFundsLocked);
+        return Err(Error::VestingLockout);
     }
 
     // set updated delegation amount range
