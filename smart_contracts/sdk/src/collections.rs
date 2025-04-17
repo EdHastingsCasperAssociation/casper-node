@@ -1,17 +1,15 @@
 mod lookup_key;
 
+mod iterable_map;
+mod iterable_set;
 mod map;
 mod set;
 pub mod sorted_vector;
 mod vector;
-mod iterable_map;
-mod iterable_set;
 
 pub use map::Map;
 pub use set::Set;
 pub use vector::Vector;
 
-pub use iterable_map::IterableMap;
-pub use iterable_map::IterableMapIter;
-pub use iterable_map::IterableMapKey;
-pub use iterable_map::IterableMapPtr;
+pub use iterable_map::{IterableMap, IterableMapIter, IterableMapKey, IterableMapPtr};
+pub use iterable_set::IterableSet;

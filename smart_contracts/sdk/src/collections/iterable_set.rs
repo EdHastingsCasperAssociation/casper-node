@@ -3,10 +3,10 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use super::{IterableMap, IterableMapKey};
 
 /// An iterable set backed by a map.
-/// TODO: Instead of naively relying on IterableMap, actually duplicate the impl with the tweak of
-/// not storing (V, V) but just V.
 pub struct IterableSet<V> {
-    pub(crate) map: IterableMap<V, V>
+    // TODO: Instead of naively relying on IterableMap, actually duplicate the impl with the tweak
+    // of not storing (V, V) but just V.
+    pub(crate) map: IterableMap<V, V>,
 }
 
 impl<V: IterableMapKey + BorshSerialize + BorshDeserialize + Clone> IterableSet<V> {
@@ -23,7 +23,7 @@ impl<V: IterableMapKey + BorshSerialize + BorshDeserialize + Clone> IterableSet<
     }
 
     /// Removes a value from the set.
-    /// 
+    ///
     /// Has a worst-case runtime of O(n).
     pub fn remove(&mut self, value: &V) {
         self.map.remove(value);

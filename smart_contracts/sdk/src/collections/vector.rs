@@ -53,7 +53,7 @@ where
     T: BorshSerialize + BorshDeserialize,
 {
     /// Constructs a new, empty Vector<T>.
-    /// 
+    ///
     /// The vector header will not write itself to the GS, even if
     /// values are pushed onto it later.
     pub fn new<S: Into<String>>(prefix: S) -> Self {
@@ -101,7 +101,8 @@ where
         (0..self.length).map(move |i| self.get(i).unwrap())
     }
 
-    /// Inserts an element at position `index` within the vector, shifting all elements after it to the right.
+    /// Inserts an element at position `index` within the vector, shifting all elements after it to
+    /// the right.
     pub fn insert(&mut self, index: u64, value: T) {
         assert!(index <= self.length, "index out of bounds");
 
@@ -136,7 +137,8 @@ where
         self.length == 0
     }
 
-    /// Binary searches this vector for a given element. If the vector is not sorted, the returned result is unspecified and meaningless.
+    /// Binary searches this vector for a given element. If the vector is not sorted, the returned
+    /// result is unspecified and meaningless.
     pub fn binary_search(&self, value: &T) -> Result<u64, u64>
     where
         T: Ord,
@@ -145,10 +147,11 @@ where
     }
 
     /// Binary searches this slice with a comparator function.
-    /// 
-    /// The comparator function should return an [Ordering] that indicates whether its argument is `Less`, `Equal` or `Greater`
-    /// the desired target. If the slice is not sorted or if the comparator function does not implement an order consistent with
-    /// the sort order of the underlying slice, the returned result is unspecified and meaningless.
+    ///
+    /// The comparator function should return an [Ordering] that indicates whether its argument is
+    /// `Less`, `Equal` or `Greater` the desired target. If the slice is not sorted or if the
+    /// comparator function does not implement an order consistent with the sort order of the
+    /// underlying slice, the returned result is unspecified and meaningless.
     pub fn binary_search_by<F>(&self, mut f: F) -> Result<u64, u64>
     where
         F: FnMut(&T) -> Ordering,
@@ -191,7 +194,7 @@ where
     }
 
     /// Removes the element at the specified index and returns it.
-    /// 
+    ///
     /// Note: Because this shifts over the remaining elements, it has a
     /// worst-case performance of O(n). If you don’t need the order of
     /// elements to be preserved, use `swap_remove` instead.
@@ -214,7 +217,7 @@ where
     }
 
     /// Removes the element at the specified index and returns it.
-    /// 
+    ///
     /// The removed element is replaced by the last element of the vector.
     /// This does not preserve ordering of the remaining elements, but is O(1).
     pub fn swap_remove(&mut self, index: u64) -> Option<T> {
@@ -360,7 +363,8 @@ pub(crate) mod tests {
             assert_eq!(vec.len(), 1);
             assert_eq!(vec.pop(), Some(1));
             assert!(vec.is_empty());
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -374,7 +378,8 @@ pub(crate) mod tests {
             assert!(!vec.contains(&3));
             vec.remove(0);
             assert!(!vec.contains(&1));
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -391,7 +396,8 @@ pub(crate) mod tests {
             assert_eq!(vec.get(0), None);
             vec.push(3);
             assert_eq!(vec.get(0), Some(3));
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -406,7 +412,8 @@ pub(crate) mod tests {
             assert_eq!(vec.binary_search(&3), Ok(2));
             assert_eq!(vec.binary_search(&0), Err(0));
             assert_eq!(vec.binary_search(&6), Err(5));
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -421,7 +428,8 @@ pub(crate) mod tests {
             assert_eq!(vec.iter().collect::<Vec<_>>(), vec![1, 4, 3]);
             assert_eq!(vec.swap_remove(2), Some(3));
             assert_eq!(vec.iter().collect::<Vec<_>>(), vec![1, 4]);
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -431,7 +439,8 @@ pub(crate) mod tests {
             vec.push(1);
             vec.insert(1, 2);
             assert_eq!(vec.iter().collect::<Vec<_>>(), vec![1, 2]);
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -446,7 +455,8 @@ pub(crate) mod tests {
             vec.push(TestStruct { field: 1 });
             vec.push(TestStruct { field: 2 });
             assert_eq!(vec.get(1), Some(TestStruct { field: 2 }));
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -465,7 +475,8 @@ pub(crate) mod tests {
             assert_eq!(vec.get(0), Some(1));
             vec.clear();
             assert!(vec.is_empty());
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -476,7 +487,8 @@ pub(crate) mod tests {
             assert_eq!(vec.remove(1), None);
             assert_eq!(vec.remove(0), Some(1));
             assert_eq!(vec.remove(0), None);
-        }).unwrap();
+        })
+        .unwrap();
     }
 
     #[test]
@@ -485,6 +497,7 @@ pub(crate) mod tests {
         dispatch(|| {
             let mut vec = Vector::<u64>::new("test");
             vec.insert(1, 1);
-        }).unwrap();
+        })
+        .unwrap();
     }
 }
