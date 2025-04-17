@@ -3,11 +3,13 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use super::{IterableMap, IterableMapKey};
 
 /// An iterable set backed by a map.
+/// TODO: Instead of naively relying on IterableMap, actually duplicate the impl with the tweak of
+/// not storing (V, V) but just V.
 pub struct IterableSet<V> {
     pub(crate) map: IterableMap<V, V>
 }
 
-impl<V: BorshSerialize + BorshDeserialize> IterableSet<V> {
+impl<V: IterableMapKey + BorshSerialize + BorshDeserialize + Clone> IterableSet<V> {
     /// Creates an empty [IterableMap] with the given prefix.
     pub fn new<S: Into<String>>(prefix: S) -> Self {
         Self {
@@ -17,8 +19,7 @@ impl<V: BorshSerialize + BorshDeserialize> IterableSet<V> {
 
     /// Inserts a value into the set.
     pub fn insert(&mut self, value: V) {
-        let hash = value.compute_key_hash();
-        self.map.insert_impl(hash, value);
+        self.map.insert(value.clone(), value);
     }
 
     /// Removes a value from the set.
