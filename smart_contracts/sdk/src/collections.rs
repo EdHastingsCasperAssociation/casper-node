@@ -5,6 +5,7 @@ mod set;
 pub mod sorted_vector;
 mod vector;
 mod iterable_map;
+mod iterable_set;
 
 pub use map::Map;
 pub use set::Set;

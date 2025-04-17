@@ -3,12 +3,12 @@ use core::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::BufMut;
 use casper_executor_wasm_common::keyspace::Keyspace;
-use const_fnv1a_hash::fnv1a_hash_128;
+use const_fnv1a_hash::fnv1a_hash_64;
 
 use crate::casper::{self, read_into_vec};
 
-/// Internal key representation after hashing. Currently [`u128`].
-pub type IterableMapKeyRepr = u128;
+/// Internal key representation after hashing. Currently [`u64`].
+pub type IterableMapKeyRepr = u64;
 
 /// Trait for types that can be used as keys in [IterableMap].
 /// Must produce a deterministic [IterableMapKeyRepr] prefix via hashing.
@@ -16,19 +16,19 @@ pub type IterableMapKeyRepr = u128;
 /// A blanket implementation is provided for all types that implement
 /// [BorshSerialize].
 pub trait IterableMapKey {
-    fn to_key_prefix(&self) -> IterableMapKeyRepr;
+    fn compute_key_hash(&self) -> IterableMapKeyRepr;
 }
 
 impl<K: BorshSerialize> IterableMapKey for K {
-    fn to_key_prefix(&self) -> IterableMapKeyRepr {
+    fn compute_key_hash(&self) -> IterableMapKeyRepr {
         let mut bytes = Vec::new();
         self.serialize(&mut bytes).unwrap();
-        fnv1a_hash_128(&bytes, None)
+        fnv1a_hash_64(&bytes, None)
     }
 }
 
 /// A singly-linked map. Each entry at key `K_n` stores `(V, K_{n-1})`,
-/// where `V` is the value and `K_{n-1}` is the key of the previous entry.
+/// where `V` is the value and `K_{n-1}` is the key hash of the previous entry.
 /// 
 /// This creates a constant spatial overhead; every entry stores a pointer
 /// to the one inserted before it.
@@ -45,7 +45,7 @@ pub struct IterableMap<K, V> {
     // Keys are hashed to u128 internally, but K is preserved to enforce type safety.
     // While this map could accept arbitrary u128 keys, requiring a concrete K prevents
     // misuse and clarifies intent at the type level.
-    pub(crate) head_key_hash: Option<IterableMapKeyRepr>,
+    pub(crate) tail_key_hash: Option<IterableMapKeyRepr>,
     _marker: PhantomData<(K, V)>
 }
 
@@ -66,7 +66,7 @@ where
     pub fn new<S: Into<String>>(prefix: S) -> Self {
         Self {
             prefix: prefix.into(),
-            head_key_hash: None,
+            tail_key_hash: None,
             _marker: Default::default(),
         }
     }
@@ -77,7 +77,13 @@ where
     /// 
     /// If the map did have this key present, the value is updated, and the old value is returned.
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        let prefix = self.create_prefix_from_key(&key);
+        let key_hash = key.compute_key_hash();
+        self.insert_impl(key_hash, value)
+    }
+
+    /// Internal implementation for element insertion at a given hash.
+    pub(crate) fn insert_impl(&mut self, key_hash: IterableMapKeyRepr, value: V) -> Option<V> {
+        let prefix = self.create_prefix_from_hash(key_hash);
         let context_key = Keyspace::Context(&prefix);
 
         // Either overwrite an existing entry, or create a new one.
@@ -90,11 +96,11 @@ where
             None => {
                 let entry = IterableMapEntry {
                     value,
-                    previous: self.head_key_hash
+                    previous: self.tail_key_hash
                 };
 
-                // Additionally, since this is a new entry, we need to update the head
-                self.head_key_hash = Some(key.to_key_prefix());
+                // Additionally, since this is a new entry, we need to update the tail
+                self.tail_key_hash = Some(key_hash);
 
                 (entry, None)
             }
@@ -120,7 +126,7 @@ where
     /// 
     /// Has a worst-case runtime of O(n).
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        let to_remove_hash = key.to_key_prefix();
+        let to_remove_hash = key.compute_key_hash();
         let to_remove_prefix = self.create_prefix_from_hash(to_remove_hash);
         let Some(to_remove_entry) = self.get_entry(Keyspace::Context(&to_remove_prefix)) else {
             // The entry to remove doesn't exist.
@@ -130,14 +136,14 @@ where
         // Purge the entry from global state
         purge_at_key(Keyspace::Context(&to_remove_prefix));
         
-        // Edge case when removing head
-        if self.head_key_hash == Some(to_remove_hash) {
-            self.head_key_hash = to_remove_entry.previous;
+        // Edge case when removing tail
+        if self.tail_key_hash == Some(to_remove_hash) {
+            self.tail_key_hash = to_remove_entry.previous;
             return Some(to_remove_entry.value);
         }
 
         // Scan the map, find entry to remove, join adjacent entries
-        let mut current_hash = self.head_key_hash;
+        let mut current_hash = self.tail_key_hash;
         while let Some(key) = current_hash {
             let current_prefix = self.create_prefix_from_hash(key);
             let current_context_key = Keyspace::Context(&current_prefix);
@@ -175,7 +181,7 @@ where
             purge_at_key(Keyspace::Context(&prefix));
         }
 
-        self.head_key_hash = None;
+        self.tail_key_hash = None;
     }
 
     /// Returns true if the map contains a value for the specified key.
@@ -195,7 +201,7 @@ where
 
     // Returns true if the map contains no elements.
     pub fn is_empty(&self) -> bool {
-        self.head_key_hash.is_none()
+        self.tail_key_hash.is_none()
     }
 
     /// Returns an iterator over the entries in the map.
@@ -207,7 +213,7 @@ where
     pub fn iter(&self) -> IterableMapIter<K, V> {
         IterableMapIter {
             prefix: &self.prefix,
-            current: self.head_key_hash,
+            current: self.tail_key_hash,
             _marker: PhantomData,
         }
     }
@@ -217,7 +223,7 @@ where
     }
 
     fn create_prefix_from_key(&self, key: &K) -> Vec<u8> {
-        let hash = key.to_key_prefix();
+        let hash = key.compute_key_hash();
         self.create_prefix_from_hash(hash)
     }
 
@@ -225,15 +231,15 @@ where
         let mut context_key = Vec::new();
         context_key.extend(self.prefix.as_bytes());
         context_key.extend("_".as_bytes());
-        context_key.put_u128_le(hash);
+        context_key.put_u64_le(hash);
         context_key
     }
 }
 
-// TODO: Rn we just overwrite with zeroes ¯\_(ツ)_/¯
+// TODO: Rn we just overwrite with empty arr ¯\_(ツ)_/¯
 // This is placeholder, and is to be removed when the appropriate functionality merges.
 fn purge_at_key(key: Keyspace) {
-    casper::write(key, &[0]).unwrap();
+    casper::write(key, &[]).unwrap();
 }
 
 /// Iterator over entries in an [`IterableMap`].
@@ -265,7 +271,7 @@ where
     fn into_iter(self) -> Self::IntoIter {
         IterableMapIter {
             prefix: &self.prefix,
-            current: self.head_key_hash,
+            current: self.tail_key_hash,
             _marker: PhantomData,
         }
     }
@@ -282,7 +288,7 @@ where
         let mut key_bytes = Vec::new();
         key_bytes.extend(self.prefix.as_bytes());
         key_bytes.extend("_".as_bytes());
-        key_bytes.put_u128_le(current_hash);
+        key_bytes.put_u64_le(current_hash);
 
         let context_key = Keyspace::Context(&key_bytes);
 
@@ -461,8 +467,8 @@ mod tests {
     fn hashes_returns_reverse_insertion_order() {
         dispatch(|| {
             let mut map = IterableMap::<u64, String>::new("test_map");
-            let hash1 = 1u64.to_key_prefix();
-            let hash2 = 2u64.to_key_prefix();
+            let hash1 = 1u64.compute_key_hash();
+            let hash2 = 2u64.compute_key_hash();
             map.insert(1, "a".to_string());
             map.insert(2, "b".to_string());
             let hashes: Vec<_> = map.hashes().collect();
@@ -549,10 +555,10 @@ mod tests {
             assert_eq!(values, vec!["e", "d", "b", "a"]);
             
             // Check that entry 4's previous is now 2's hash
-            let hash4 = 4u64.to_key_prefix();
+            let hash4 = 4u64.compute_key_hash();
             let prefix = map.create_prefix_from_hash(hash4);
             let entry = map.get_entry(Keyspace::Context(&prefix)).unwrap();
-            assert_eq!(entry.previous, Some(2u64.to_key_prefix()));
+            assert_eq!(entry.previous, Some(2u64.compute_key_hash()));
         }).unwrap();
     }
 
