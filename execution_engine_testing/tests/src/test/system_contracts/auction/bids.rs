@@ -852,7 +852,7 @@ fn should_forcibly_undelegate_after_setting_validator_limits() {
         .into_iter()
         .filter(|bid| !bid.is_unbond())
         .collect();
-    assert_eq!(bids.len(), 3);
+    assert_eq!(bids.len(), 2);
 
     let bids: Vec<_> = builder
         .get_bids()
@@ -950,8 +950,9 @@ fn should_force_undelegate_with_genesis_delegators() {
 
     let exec_config = GenesisConfigBuilder::new()
         .with_accounts(accounts)
-        .with_locked_funds_period_millis(CASPER_LOCKED_FUNDS_PERIOD_MILLIS)
+        .with_locked_funds_period_millis(1)
         .build();
+
     let run_genesis_request = GenesisRequest::new(
         DEFAULT_GENESIS_CONFIG_HASH,
         DEFAULT_PROTOCOL_VERSION,
@@ -959,7 +960,9 @@ fn should_force_undelegate_with_genesis_delegators() {
         DEFAULT_CHAINSPEC_REGISTRY.clone(),
     );
 
-    let mut builder = LmdbWasmTestBuilder::default();
+    let chainspec = ChainspecConfig::default().with_vesting_schedule_period_millis(1);
+
+    let mut builder = LmdbWasmTestBuilder::new_temporary_with_config(chainspec);
 
     builder.run_genesis(run_genesis_request);
 
@@ -977,8 +980,26 @@ fn should_force_undelegate_with_genesis_delegators() {
     )
     .build();
 
+    builder.exec(validator_1_add_bid_request).expect_failure();
+
+    builder.advance_eras_by(1_000);
+
+    // set delegation limits
+    let validator_1_add_bid_request_reattempt = ExecuteRequestBuilder::standard(
+        *ACCOUNT_1_ADDR,
+        CONTRACT_ADD_BID,
+        runtime_args! {
+            ARG_PUBLIC_KEY => ACCOUNT_1_PK.clone(),
+            ARG_AMOUNT => U512::from(ACCOUNT_1_BOND),
+            ARG_DELEGATION_RATE => ADD_BID_DELEGATION_RATE_1,
+            ARG_MINIMUM_DELEGATION_AMOUNT => DEFAULT_MINIMUM_DELEGATION_AMOUNT,
+            ARG_MAXIMUM_DELEGATION_AMOUNT => DEFAULT_MAXIMUM_DELEGATION_AMOUNT - 2,
+        },
+    )
+    .build();
+
     builder
-        .exec(validator_1_add_bid_request)
+        .exec(validator_1_add_bid_request_reattempt)
         .expect_success()
         .commit();
 }
@@ -3992,22 +4013,12 @@ fn should_delegate_and_redelegate() {
     );
 
     let bids = builder.get_bids();
-    assert_eq!(bids.len(), 4);
+    assert_eq!(bids.len(), 3);
 
-    let delegators = bids
-        .delegators_by_validator_public_key(&NON_FOUNDER_VALIDATOR_1_PK)
-        .expect("should have delegators");
-    assert_eq!(delegators.len(), 1);
-    let delegator = bids
-        .delegator_by_kind(
-            &NON_FOUNDER_VALIDATOR_1_PK,
-            &DelegatorKind::PublicKey(BID_ACCOUNT_1_PK.clone()),
-        )
-        .expect("should have delegator");
-    let delegated_amount_1 = delegator.staked_amount();
-    assert_eq!(
-        delegated_amount_1,
-        U512::from(DELEGATE_AMOUNT_1 - UNDELEGATE_AMOUNT_1 - DEFAULT_MINIMUM_DELEGATION_AMOUNT)
+    assert!(
+        bids.delegators_by_validator_public_key(&NON_FOUNDER_VALIDATOR_1_PK)
+            .is_none(),
+        "fully unbonded"
     );
 
     let delegators = bids
@@ -4023,7 +4034,8 @@ fn should_delegate_and_redelegate() {
     let redelegated_amount_1 = delegator.staked_amount();
     assert_eq!(
         redelegated_amount_1,
-        U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT)
+        U512::from(DELEGATE_AMOUNT_1),
+        "expected full unbond"
     );
 }
 
@@ -4135,16 +4147,6 @@ fn should_handle_redelegation_to_inactive_validator() {
 
     builder.advance_eras_by_default_auction_delay();
 
-    let delegator_1_main_purse = builder
-        .get_entity_by_account_hash(*DELEGATOR_1_ADDR)
-        .expect("should have default account")
-        .main_purse();
-
-    let delegator_2_main_purse = builder
-        .get_entity_by_account_hash(*DELEGATOR_2_ADDR)
-        .expect("should have default account")
-        .main_purse();
-
     let invalid_redelegate_request = ExecuteRequestBuilder::standard(
         *DELEGATOR_1_ADDR,
         CONTRACT_REDELEGATE,
@@ -4157,55 +4159,14 @@ fn should_handle_redelegation_to_inactive_validator() {
     )
     .build();
 
-    builder
-        .exec(invalid_redelegate_request)
-        .expect_success()
-        .commit();
+    builder.exec(invalid_redelegate_request).expect_failure();
 
-    builder.advance_era();
-
-    let valid_redelegate_request = ExecuteRequestBuilder::standard(
-        *DELEGATOR_2_ADDR,
-        CONTRACT_REDELEGATE,
-        runtime_args! {
-            ARG_AMOUNT => U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT),
-            ARG_VALIDATOR => NON_FOUNDER_VALIDATOR_1_PK.clone(),
-            ARG_DELEGATOR => DELEGATOR_2.clone(),
-            ARG_NEW_VALIDATOR => NON_FOUNDER_VALIDATOR_2_PK.clone()
-        },
+    let error = builder.get_error().expect("expected error");
+    let str = format!("{}", error);
+    assert!(
+        str.starts_with("ApiError::AuctionError(RedelegationValidatorNotFound)"),
+        "expected RedelegationValidatorNotFound"
     )
-    .build();
-
-    builder
-        .exec(valid_redelegate_request)
-        .expect_success()
-        .commit();
-
-    let delegator_1_purse_balance_before = builder.get_purse_balance(delegator_1_main_purse);
-    let delegator_2_purse_balance_before = builder.get_purse_balance(delegator_2_main_purse);
-
-    for _ in 0..=DEFAULT_UNBONDING_DELAY {
-        let delegator_2_purse_balance = builder.get_purse_balance(delegator_2_main_purse);
-        assert_eq!(delegator_2_purse_balance, delegator_2_purse_balance_before);
-
-        builder.advance_era();
-    }
-
-    // The invalid redelegation will force an unbond which will transfer funds to
-    // back to the main purse.
-    let delegator_1_purse_balance_after = builder.get_purse_balance(delegator_1_main_purse);
-    assert_eq!(
-        delegator_1_purse_balance_before
-            + U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT),
-        delegator_1_purse_balance_after
-    );
-
-    // The valid redelegation will not transfer funds back to the main purse.
-    let delegator_2_purse_balance_after = builder.get_purse_balance(delegator_2_main_purse);
-    assert_eq!(
-        delegator_2_purse_balance_before,
-        delegator_2_purse_balance_after
-    );
 }
 
 #[ignore]
@@ -5687,7 +5648,7 @@ fn should_handle_excessively_long_bridge_record_chains() {
         .into_iter()
         .filter(|bid| !bid.is_unbond())
         .collect();
-    assert_eq!(bids.len(), 25);
+    assert_eq!(bids.len(), 24);
     let new_validator_bid = bids.validator_bid(&current_bid_public_key).unwrap();
     assert_eq!(
         builder.get_purse_balance(*new_validator_bid.bonding_purse()),
