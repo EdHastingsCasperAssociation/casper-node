@@ -194,7 +194,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
 
     metered_write(&mut caller, global_state_key, stored_value)?;
 
-    Ok(0)
+    Ok(HOST_ERROR_SUCCESS)
 }
 
 pub fn casper_print<S: GlobalStateReader, E: Executor>(
@@ -333,7 +333,7 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
     if out_ptr != 0 {
         caller.memory_write(out_ptr, &global_state_raw_bytes)?;
     }
-    Ok(0)
+    Ok(HOST_ERROR_SUCCESS)
 }
 
 fn keyspace_to_global_state_key<S: GlobalStateReader, E: Executor>(
@@ -466,10 +466,10 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
         caller.bytecode()
     };
 
-    let value: u128 = {
-        let mut value_bytes = [0u8; 16];
+    let value = {
+        let mut value_bytes = [0u8; 8];
         caller.memory_read_into(value_ptr, &mut value_bytes)?;
-        u128::from_le_bytes(value_bytes)
+        u64::from_le_bytes(value_bytes)
     };
 
     let seed = if seed_ptr != 0 {
@@ -753,10 +753,10 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
         }
     };
 
-    let value: u128 = {
-        let mut value_bytes = [0u8; 16];
+    let value = {
+        let mut value_bytes = [0u8; 8];
         caller.memory_read_into(value_ptr, &mut value_bytes)?;
-        u128::from_le_bytes(value_bytes)
+        u64::from_le_bytes(value_bytes)
     };
 
     let tracking_copy = caller.context().tracking_copy.fork2();
@@ -1008,7 +1008,7 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
         .get_total_balance(Key::URef(purse))
         .expect("Total balance");
     assert!(total_balance.value() <= U512::from(u64::MAX));
-    let total_balance = total_balance.value().as_u128();
+    let total_balance = total_balance.value().as_u64();
 
     caller.memory_write(output_ptr, &total_balance.to_le_bytes())?;
 
@@ -1033,10 +1033,10 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
         return Ok(u32_from_host_result(Err(CallError::NotCallable)));
     }
 
-    let amount: u128 = {
-        let mut amount_bytes = [0u8; 16];
+    let amount = {
+        let mut amount_bytes = [0u8; 8];
         caller.memory_read_into(amount_ptr, &mut amount_bytes)?;
-        u128::from_le_bytes(amount_bytes)
+        u64::from_le_bytes(amount_bytes)
     };
 
     let (target_entity_addr, _runtime_footprint) = {
