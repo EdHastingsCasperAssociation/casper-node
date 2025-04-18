@@ -1389,6 +1389,34 @@ pub fn casper_env_block_time<S: GlobalStateReader, E: Executor>(
     Ok(block_time.value())
 }
 
+pub struct EnvInfo {
+    caller_id: u32,
+    transferred_value: u64,
+    balance: u32,
+    block_time: u64,
+}
+
+pub fn env_info<S: GlobalStateReader, E: Executor>(
+    mut caller: impl Caller<Context = Context<S, E>>,
+) -> VMResult<EnvInfo> {
+    let block_time_cost = caller.context().config.host_function_costs().env_info;
+    charge_host_function_call(&mut caller, &block_time_cost, [])?;
+
+    let caller_id = 0; // TODO
+
+    let transferred_value = caller.context().transferred_value;
+
+    let balance = 0; // TODO
+
+    let block_time = caller.context().block_time.value();
+    Ok(EnvInfo {
+        caller_id,
+        transferred_value,
+        balance,
+        block_time,
+    })
+}
+
 pub fn casper_emit<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
     topic_name_ptr: u32,

@@ -51,6 +51,8 @@ const DEFAULT_EMIT_COST: u32 = 200;
 const DEFAULT_EMIT_TOPIC_SIZE_WEIGHT: u32 = 100;
 const DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT: u32 = 100;
 
+const DEFAULT_ENV_INFO_COST: u32 = 10_000;
+
 /// Definition of a host function cost table.
 #[derive(Add, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
@@ -84,6 +86,8 @@ pub struct HostFunctionCostsV2 {
     pub print: HostFunction<[Cost; 2]>,
     /// Cost of calling the `emit` host function.
     pub emit: HostFunction<[Cost; 4]>,
+    /// Cost of calling the `env_info` host function.
+    pub env_info: HostFunction<[Cost; 0]>,
 }
 
 impl Zero for HostFunctionCostsV2 {
@@ -103,6 +107,7 @@ impl Zero for HostFunctionCostsV2 {
             call: HostFunction::zero(),
             print: HostFunction::zero(),
             emit: HostFunction::zero(),
+            env_info: HostFunction::zero(),
         }
     }
 
@@ -122,6 +127,7 @@ impl Zero for HostFunctionCostsV2 {
             call,
             print,
             emit,
+            env_info,
         } = self;
         read.is_zero()
             && write.is_zero()
@@ -137,6 +143,7 @@ impl Zero for HostFunctionCostsV2 {
             && call.is_zero()
             && print.is_zero()
             && emit.is_zero()
+            && env_info.is_zero()
     }
 }
 
@@ -210,6 +217,7 @@ impl Default for HostFunctionCostsV2 {
                     DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT,
                 ],
             ),
+            env_info: HostFunction::new(DEFAULT_ENV_INFO_COST, []),
         }
     }
 }
@@ -231,6 +239,7 @@ impl ToBytes for HostFunctionCostsV2 {
         ret.append(&mut self.call.to_bytes()?);
         ret.append(&mut self.print.to_bytes()?);
         ret.append(&mut self.emit.to_bytes()?);
+        ret.append(&mut self.env_info.to_bytes()?);
         Ok(ret)
     }
 
@@ -249,6 +258,7 @@ impl ToBytes for HostFunctionCostsV2 {
             + self.call.serialized_length()
             + self.print.serialized_length()
             + self.emit.serialized_length()
+            + self.env_info.serialized_length()
     }
 }
 
@@ -268,6 +278,7 @@ impl FromBytes for HostFunctionCostsV2 {
         let (call, rem) = FromBytes::from_bytes(rem)?;
         let (print, rem) = FromBytes::from_bytes(rem)?;
         let (emit, rem) = FromBytes::from_bytes(rem)?;
+        let (env_info, rem) = FromBytes::from_bytes(rem)?;
         Ok((
             HostFunctionCostsV2 {
                 read,
@@ -284,6 +295,7 @@ impl FromBytes for HostFunctionCostsV2 {
                 call,
                 print,
                 emit,
+                env_info,
             },
             rem,
         ))
@@ -308,6 +320,7 @@ impl Distribution<HostFunctionCostsV2> for Standard {
             call: rng.gen(),
             print: rng.gen(),
             emit: rng.gen(),
+            env_info: rng.gen(),
         }
     }
 }
@@ -342,6 +355,7 @@ pub mod gens {
             call in host_function_cost_v2_arb(),
             print in host_function_cost_v2_arb(),
             emit in host_function_cost_v2_arb(),
+            envinfo in host_function_cost_v2_arb(),
         ) -> HostFunctionCostsV2 {
             HostFunctionCostsV2 {
                 read,
@@ -358,6 +372,7 @@ pub mod gens {
                 call,
                 print,
                 emit,
+                env_info
             }
         }
     }
