@@ -44,8 +44,8 @@ impl IterableMapHash for i64 {}
 impl IterableMapHash for i128 {}
 impl IterableMapHash for String {}
 
-/// A singly-linked HashMap. Each entry at key `K_n` stores `(V, K_{n-1})`,
-/// where `V` is the value and `K_{n-1}` is the key hash of the previous entry.
+/// A map over global state that allows iteration. Each entry at key `K_n` stores `(K_{n}, V,
+/// K_{n-1})`, where `V` is the value and `K_{n-1}` is the key hash of the previous entry.
 ///
 /// This creates a constant spatial overhead; every entry stores a pointer
 /// to the one inserted before it.
@@ -53,6 +53,7 @@ impl IterableMapHash for String {}
 /// Enables iteration without a guaranteed ordering; updating an existing
 /// key does not affect position.
 ///
+/// Under the hood, this is a singly-linked HashMap with linear probing for collision resolution.
 /// Supports full traversal, typically in reverse-insertion order.
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
 #[borsh(crate = "crate::serializers::borsh")]
