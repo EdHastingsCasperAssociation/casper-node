@@ -561,11 +561,12 @@ impl MetaTransactionV1 {
             });
         }
 
-        self.is_body_metadata_valid(&transaction_config)
+        self.is_body_metadata_valid(chainspec, &transaction_config)
     }
 
     fn is_body_metadata_valid(
         &self,
+        chainspec: &Chainspec,
         config: &TransactionConfig,
     ) -> Result<(), InvalidTransactionV1> {
         let lane_id = self.lane_id;
@@ -624,7 +625,9 @@ impl MetaTransactionV1 {
                     config.native_transfer_minimum_motes,
                 ),
                 TransactionEntryPoint::Burn => arg_handling::has_valid_burn_args(&self.args),
-                TransactionEntryPoint::AddBid => arg_handling::has_valid_add_bid_args(&self.args),
+                TransactionEntryPoint::AddBid => {
+                    arg_handling::has_valid_add_bid_args(chainspec, &self.args)
+                }
                 TransactionEntryPoint::WithdrawBid => {
                     arg_handling::has_valid_withdraw_bid_args(&self.args)
                 }
