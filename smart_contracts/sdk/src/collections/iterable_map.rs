@@ -263,8 +263,6 @@ where
     ///
     /// Traverses entries in reverse-insertion order.
     /// Each item is a tuple of the hashed key and the value.
-    ///
-    /// Note: the original key type `K` is not recoverable during iteration.
     pub fn iter(&self) -> IterableMapIter<K, V> {
         IterableMapIter {
             prefix: &self.prefix,
