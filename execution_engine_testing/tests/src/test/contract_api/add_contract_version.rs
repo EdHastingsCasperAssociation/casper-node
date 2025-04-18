@@ -54,7 +54,8 @@ fn try_add_contract_version(
     );
 
     let txn_request = {
-        let initiator_addr = txn.initiator_addr().clone();
+        let wrapped = Transaction::from(txn.clone()).clone();
+        let initiator_addr = txn.initiator_addr();
         let is_standard_payment = if let PricingMode::PaymentLimited {
             standard_payment, ..
         } = txn.pricing_mode()
@@ -73,7 +74,6 @@ fn try_add_contract_version(
         let entry_point = txn
             .deserialize_field::<TransactionEntryPoint>(ENTRY_POINT_MAP_KEY)
             .unwrap();
-        let wrapped = Transaction::from(txn);
         let session_input_data = to_v1_session_input_data(
             is_standard_payment,
             initiator_addr,
@@ -175,7 +175,7 @@ fn build_transaction(
 
 fn to_v1_session_input_data<'a>(
     is_standard_payment: bool,
-    initiator_addr: InitiatorAddr,
+    initiator_addr: &'a InitiatorAddr,
     args: &'a RuntimeArgs,
     target: &'a TransactionTarget,
     entry_point: &'a TransactionEntryPoint,

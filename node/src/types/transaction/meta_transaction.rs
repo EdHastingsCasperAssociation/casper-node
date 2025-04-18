@@ -28,7 +28,7 @@ pub(crate) enum MetaTransaction {
 
 impl MetaTransaction {
     /// Returns the `TransactionHash` identifying this transaction.
-    pub fn hash(&self) -> TransactionHash {
+    pub(crate) fn hash(&self) -> TransactionHash {
         match self {
             MetaTransaction::Deploy(meta_deploy) => {
                 TransactionHash::from(*meta_deploy.deploy().hash())
@@ -38,7 +38,7 @@ impl MetaTransaction {
     }
 
     /// Timestamp.
-    pub fn timestamp(&self) -> Timestamp {
+    pub(crate) fn timestamp(&self) -> Timestamp {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().header().timestamp(),
             MetaTransaction::V1(v1) => v1.timestamp(),
@@ -46,7 +46,7 @@ impl MetaTransaction {
     }
 
     /// Time to live.
-    pub fn ttl(&self) -> TimeDiff {
+    pub(crate) fn ttl(&self) -> TimeDiff {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().header().ttl(),
             MetaTransaction::V1(v1) => v1.ttl(),
@@ -54,7 +54,7 @@ impl MetaTransaction {
     }
 
     /// Returns the `Approval`s for this transaction.
-    pub fn approvals(&self) -> BTreeSet<Approval> {
+    pub(crate) fn approvals(&self) -> BTreeSet<Approval> {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().approvals().clone(),
             MetaTransaction::V1(v1) => v1.approvals().clone(),
@@ -62,17 +62,15 @@ impl MetaTransaction {
     }
 
     /// Returns the address of the initiator of the transaction.
-    pub fn initiator_addr(&self) -> InitiatorAddr {
+    pub(crate) fn initiator_addr(&self) -> &InitiatorAddr {
         match self {
-            MetaTransaction::Deploy(meta_deploy) => {
-                InitiatorAddr::PublicKey(meta_deploy.deploy().account().clone())
-            }
-            MetaTransaction::V1(txn) => txn.initiator_addr().clone(),
+            MetaTransaction::Deploy(meta_deploy) => meta_deploy.initiator_addr(),
+            MetaTransaction::V1(txn) => txn.initiator_addr(),
         }
     }
 
     /// Returns the set of account hashes corresponding to the public keys of the approvals.
-    pub fn signers(&self) -> BTreeSet<AccountHash> {
+    pub(crate) fn signers(&self) -> BTreeSet<AccountHash> {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy
                 .deploy()
@@ -89,7 +87,7 @@ impl MetaTransaction {
     }
 
     /// Returns `true` if `self` represents a native transfer deploy or a native V1 transaction.
-    pub fn is_native(&self) -> bool {
+    pub(crate) fn is_native(&self) -> bool {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().is_transfer(),
             MetaTransaction::V1(v1_txn) => *v1_txn.target() == TransactionTarget::Native,
@@ -97,7 +95,7 @@ impl MetaTransaction {
     }
 
     /// Should this transaction use standard payment processing?
-    pub fn is_standard_payment(&self) -> bool {
+    pub(crate) fn is_standard_payment(&self) -> bool {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy
                 .deploy()
@@ -117,7 +115,7 @@ impl MetaTransaction {
     }
 
     /// Should this transaction use custom payment processing?
-    pub fn is_custom_payment(&self) -> bool {
+    pub(crate) fn is_custom_payment(&self) -> bool {
         match self {
             MetaTransaction::Deploy(meta_deploy) => !meta_deploy
                 .deploy()
@@ -137,7 +135,7 @@ impl MetaTransaction {
     }
 
     /// Authorization keys.
-    pub fn authorization_keys(&self) -> BTreeSet<AccountHash> {
+    pub(crate) fn authorization_keys(&self) -> BTreeSet<AccountHash> {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy
                 .deploy()
@@ -154,7 +152,7 @@ impl MetaTransaction {
     }
 
     /// The session args.
-    pub fn session_args(&self) -> Cow<TransactionArgs> {
+    pub(crate) fn session_args(&self) -> Cow<TransactionArgs> {
         match self {
             MetaTransaction::Deploy(meta_deploy) => Cow::Owned(TransactionArgs::Named(
                 meta_deploy.deploy().session().args().clone(),
@@ -164,7 +162,7 @@ impl MetaTransaction {
     }
 
     /// The entry point.
-    pub fn entry_point(&self) -> TransactionEntryPoint {
+    pub(crate) fn entry_point(&self) -> TransactionEntryPoint {
         match self {
             MetaTransaction::Deploy(meta_deploy) => {
                 meta_deploy.deploy().session().entry_point_name().into()
@@ -174,7 +172,7 @@ impl MetaTransaction {
     }
 
     /// The transaction lane.
-    pub fn transaction_lane(&self) -> u8 {
+    pub(crate) fn transaction_lane(&self) -> u8 {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy.lane_id(),
             MetaTransaction::V1(v1) => v1.lane_id(),
@@ -182,7 +180,7 @@ impl MetaTransaction {
     }
 
     /// Returns the gas price tolerance.
-    pub fn gas_price_tolerance(&self) -> Result<u8, InvalidTransaction> {
+    pub(crate) fn gas_price_tolerance(&self) -> Result<u8, InvalidTransaction> {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy
                 .deploy()
@@ -192,7 +190,7 @@ impl MetaTransaction {
         }
     }
 
-    pub fn gas_limit(&self, chainspec: &Chainspec) -> Result<Gas, InvalidTransaction> {
+    pub(crate) fn gas_limit(&self, chainspec: &Chainspec) -> Result<Gas, InvalidTransaction> {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy
                 .deploy()
@@ -203,7 +201,7 @@ impl MetaTransaction {
     }
 
     /// Is the transaction the original transaction variant.
-    pub fn is_deploy_transaction(&self) -> bool {
+    pub(crate) fn is_deploy_transaction(&self) -> bool {
         match self {
             MetaTransaction::Deploy(_) => true,
             MetaTransaction::V1(_) => false,
@@ -211,12 +209,12 @@ impl MetaTransaction {
     }
 
     /// Does this transaction provide the hash addr for a specific contract to invoke directly?
-    pub fn is_contract_by_hash_invocation(&self) -> bool {
+    pub(crate) fn is_contract_by_hash_invocation(&self) -> bool {
         self.contract_direct_address().is_some()
     }
 
     /// Returns a `hash_addr` for a targeted contract, if known.
-    pub fn contract_direct_address(&self) -> Option<(HashAddr, String)> {
+    pub(crate) fn contract_direct_address(&self) -> Option<(HashAddr, String)> {
         match self {
             MetaTransaction::Deploy(meta_deploy) => {
                 if let ExecutableDeployItem::StoredContractByHash {
@@ -234,7 +232,7 @@ impl MetaTransaction {
     }
 
     /// Create a new `MetaTransaction` from a `Transaction`.
-    pub fn from_transaction(
+    pub(crate) fn from_transaction(
         transaction: &Transaction,
         pricing_handling: PricingHandling,
         transaction_config: &TransactionConfig,
@@ -254,7 +252,7 @@ impl MetaTransaction {
         }
     }
 
-    pub fn is_config_compliant(
+    pub(crate) fn is_config_compliant(
         &self,
         chainspec: &Chainspec,
         timestamp_leeway: TimeDiff,
@@ -271,14 +269,14 @@ impl MetaTransaction {
         }
     }
 
-    pub fn payload_hash(&self) -> Digest {
+    pub(crate) fn payload_hash(&self) -> Digest {
         match self {
             MetaTransaction::Deploy(meta_deploy) => *meta_deploy.deploy().body_hash(),
             MetaTransaction::V1(v1) => *v1.payload_hash(),
         }
     }
 
-    pub fn to_session_input_data(&self) -> SessionInputData {
+    pub(crate) fn to_session_input_data(&self) -> SessionInputData {
         let initiator_addr = self.initiator_addr();
         let is_standard_payment = self.is_standard_payment();
         match self {
@@ -311,11 +309,10 @@ impl MetaTransaction {
     }
 
     /// Returns the `SessionInputData` for a payment code if present.
-    pub fn to_payment_input_data(&self) -> SessionInputData {
+    pub(crate) fn to_payment_input_data(&self) -> SessionInputData {
         match self {
             MetaTransaction::Deploy(meta_deploy) => {
-                let initiator_addr =
-                    InitiatorAddr::PublicKey(meta_deploy.deploy().account().clone());
+                let initiator_addr = meta_deploy.initiator_addr();
                 let is_standard_payment = matches!(meta_deploy.deploy().payment(), ExecutableDeployItem::ModuleBytes { module_bytes, .. } if module_bytes.is_empty());
                 let deploy = meta_deploy.deploy();
                 let data = SessionDataDeploy::new(
@@ -328,7 +325,7 @@ impl MetaTransaction {
                 SessionInputData::DeploySessionData { data }
             }
             MetaTransaction::V1(v1) => {
-                let initiator_addr = v1.initiator_addr().clone();
+                let initiator_addr = v1.initiator_addr();
 
                 let is_standard_payment = if let PricingMode::PaymentLimited {
                     standard_payment,
@@ -359,21 +356,21 @@ impl MetaTransaction {
     }
 
     /// Size estimate.
-    pub fn size_estimate(&self) -> usize {
+    pub(crate) fn size_estimate(&self) -> usize {
         match self {
             MetaTransaction::Deploy(meta_deploy) => meta_deploy.deploy().serialized_length(),
             MetaTransaction::V1(v1) => v1.serialized_length(),
         }
     }
 
-    pub fn is_v1_wasm(&self) -> bool {
+    pub(crate) fn is_v1_wasm(&self) -> bool {
         match self {
             MetaTransaction::Deploy(_) => true,
             MetaTransaction::V1(v1) => v1.is_v1_wasm(),
         }
     }
 
-    pub fn is_v2_wasm(&self) -> bool {
+    pub(crate) fn is_v2_wasm(&self) -> bool {
         match self {
             MetaTransaction::Deploy(_) => false,
             MetaTransaction::V1(v1) => v1.is_v2_wasm(),
