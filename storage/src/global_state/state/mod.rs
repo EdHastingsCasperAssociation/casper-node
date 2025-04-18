@@ -50,9 +50,6 @@ use crate::{
         auction::{AuctionMethodRet, BiddingRequest, BiddingResult},
         balance::BalanceHandling,
         era_validators::EraValidatorsResult,
-        forced_undelegate::{
-            ForcedUndelegateError, ForcedUndelegateRequest, ForcedUndelegateResult,
-        },
         handle_fee::{HandleFeeMode, HandleFeeRequest, HandleFeeResult},
         mint::{
             BurnRequest, BurnRequestArgs, BurnResult, TransferRequest, TransferRequestArgs,
@@ -556,81 +553,6 @@ pub trait CommitProvider: StateProvider {
             }
             Err(hpe) => FeeResult::Failure(FeeError::TrackingCopy(
                 TrackingCopyError::SystemContract(system::Error::HandlePayment(hpe)),
-            )),
-        }
-    }
-
-    /// Forcibly unbonds delegator bids which fall outside configured delegation limits.
-    fn forced_undelegate(&self, request: ForcedUndelegateRequest) -> ForcedUndelegateResult {
-        let state_hash = request.state_hash();
-
-        let tc = match self.tracking_copy(state_hash) {
-            Ok(Some(tc)) => Rc::new(RefCell::new(tc)),
-            Ok(None) => return ForcedUndelegateResult::RootNotFound,
-            Err(err) => {
-                return ForcedUndelegateResult::Failure(ForcedUndelegateError::TrackingCopy(
-                    TrackingCopyError::Storage(err),
-                ))
-            }
-        };
-
-        let config = request.config();
-        let protocol_version = request.protocol_version();
-        let seed = {
-            let mut bytes = match request.block_time().into_bytes() {
-                Ok(bytes) => bytes,
-                Err(bre) => {
-                    return ForcedUndelegateResult::Failure(ForcedUndelegateError::TrackingCopy(
-                        TrackingCopyError::BytesRepr(bre),
-                    ))
-                }
-            };
-            match &mut protocol_version.into_bytes() {
-                Ok(next) => bytes.append(next),
-                Err(bre) => {
-                    return ForcedUndelegateResult::Failure(ForcedUndelegateError::TrackingCopy(
-                        TrackingCopyError::BytesRepr(*bre),
-                    ))
-                }
-            };
-
-            Id::Seed(bytes)
-        };
-
-        // this runtime uses the system's context
-        let phase = Phase::Session;
-        let address_generator = Arc::new(RwLock::new(AddressGenerator::new(&seed.seed(), phase)));
-        let mut runtime = match RuntimeNative::new_system_runtime(
-            config.clone(),
-            protocol_version,
-            seed,
-            address_generator,
-            Rc::clone(&tc),
-            phase,
-        ) {
-            Ok(rt) => rt,
-            Err(tce) => {
-                return ForcedUndelegateResult::Failure(ForcedUndelegateError::TrackingCopy(tce));
-            }
-        };
-
-        if let Err(auction_error) = runtime.forced_undelegate() {
-            error!(
-                "forced undelegation failed due to auction error {:?}",
-                auction_error
-            );
-            return ForcedUndelegateResult::Failure(ForcedUndelegateError::Auction(auction_error));
-        }
-
-        let effects = tc.borrow().effects();
-
-        match self.commit_effects(state_hash, effects.clone()) {
-            Ok(post_state_hash) => ForcedUndelegateResult::Success {
-                post_state_hash,
-                effects,
-            },
-            Err(gse) => ForcedUndelegateResult::Failure(ForcedUndelegateError::TrackingCopy(
-                TrackingCopyError::Storage(gse),
             )),
         }
     }

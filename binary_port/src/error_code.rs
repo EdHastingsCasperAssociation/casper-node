@@ -354,6 +354,18 @@ pub enum ErrorCode {
     /// Cannot serialize transaction
     #[error("Transaction has malformed binary representation")]
     TransactionHasMalformedBinaryRepresentation = 111,
+    #[error("Transaction includes an argument named amount with a value below a relevant limit")]
+    InsufficientAmountArgValue = 112,
+    #[error(
+        "Transaction attempts to set a minimum delegation amount below the lowest allowed value"
+    )]
+    InvalidMinimumDelegationAmount = 113,
+    #[error(
+        "Transaction attempts to set a maximum delegation amount above the highest allowed value"
+    )]
+    InvalidMaximumDelegationAmount = 114,
+    #[error("Transaction attempts to set a reserved slots count above the highest allowed value")]
+    InvalidReservedSlots = 115,
 }
 
 impl TryFrom<u16> for ErrorCode {
@@ -539,6 +551,16 @@ impl From<InvalidTransactionV1> for ErrorCode {
             InvalidTransactionV1::CouldNotSerializeTransaction { .. } => {
                 ErrorCode::TransactionHasMalformedBinaryRepresentation
             }
+            InvalidTransactionV1::InsufficientAmount { .. } => {
+                ErrorCode::InsufficientAmountArgValue
+            }
+            InvalidTransactionV1::InvalidMinimumDelegationAmount { .. } => {
+                ErrorCode::InvalidMinimumDelegationAmount
+            }
+            InvalidTransactionV1::InvalidMaximumDelegationAmount { .. } => {
+                ErrorCode::InvalidMaximumDelegationAmount
+            }
+            InvalidTransactionV1::InvalidReservedSlots { .. } => ErrorCode::InvalidReservedSlots,
             _other => ErrorCode::InvalidTransactionUnspecified,
         }
     }

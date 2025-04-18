@@ -13,7 +13,6 @@ use casper_storage::{
     block_store::types::ApprovalsHashes,
     data_access_layer::{
         balance::BalanceHandling,
-        forced_undelegate::{ForcedUndelegateRequest, ForcedUndelegateResult},
         mint::{BalanceIdentifierTransferArgs, BurnRequest},
         AuctionMethod, BalanceHoldKind, BalanceHoldRequest, BalanceIdentifier,
         BalanceIdentifierPurseRequest, BalanceIdentifierPurseResult, BalanceRequest,
@@ -849,7 +848,7 @@ pub fn execute_finalized_block(
                     protocol_version,
                     transaction_hash,
                     HandleFeeMode::pay(
-                        Box::new(initiator_addr),
+                        Box::new(initiator_addr.clone()),
                         balance_identifier,
                         BalanceIdentifier::Public(*(proposer.clone())),
                         amount,
@@ -867,7 +866,7 @@ pub fn execute_finalized_block(
                     protocol_version,
                     transaction_hash,
                     HandleFeeMode::pay(
-                        Box::new(initiator_addr),
+                        Box::new(initiator_addr.clone()),
                         balance_identifier,
                         BalanceIdentifier::Accumulate,
                         amount,
@@ -1030,29 +1029,6 @@ pub fn execute_finalized_block(
     let step_outcome = if let Some(era_report) = &executable_block.era_report {
         // step processing starts now
         let step_processing_start = Instant::now();
-
-        // force undelegate delegators outside delegation limits before the auction runs
-        debug!("starting forced undelegation");
-        let forced_undelegate_req = ForcedUndelegateRequest::new(
-            native_runtime_config.clone(),
-            state_root_hash,
-            protocol_version,
-            block_time,
-        );
-        match scratch_state.forced_undelegate(forced_undelegate_req) {
-            ForcedUndelegateResult::RootNotFound => {
-                return Err(BlockExecutionError::RootNotFound(state_root_hash))
-            }
-            ForcedUndelegateResult::Failure(err) => {
-                return Err(BlockExecutionError::ForcedUndelegate(err))
-            }
-            ForcedUndelegateResult::Success {
-                post_state_hash, ..
-            } => {
-                state_root_hash = post_state_hash;
-            }
-        }
-        debug!("forced undelegation success");
 
         debug!("committing step");
         let step_effects = match commit_step(
@@ -1370,7 +1346,7 @@ where
                 *state_root_hash,
                 protocol_version,
                 transaction_hash,
-                initiator_addr,
+                initiator_addr.clone(),
                 authorization_keys,
                 runtime_args,
             ));

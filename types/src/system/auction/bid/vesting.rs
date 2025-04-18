@@ -154,7 +154,6 @@ impl VestingSchedule {
                     .saturating_add(vesting_schedule_period_millis)
             }
         };
-
         timestamp_millis < vested_period
     }
 }
