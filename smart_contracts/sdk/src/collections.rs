@@ -11,5 +11,5 @@ pub use map::Map;
 pub use set::Set;
 pub use vector::Vector;
 
-pub use iterable_map::{IterableMap, IterableMapIter, IterableMapHash, IterableMapPtr};
+pub use iterable_map::{IterableMap, IterableMapHash, IterableMapIter, IterableMapPtr};
 pub use iterable_set::IterableSet;
