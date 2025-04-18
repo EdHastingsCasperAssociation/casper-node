@@ -1,13 +1,13 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use super::{IterableMap, IterableMapKey};
+use super::{IterableMap, IterableMapHash};
 
 /// An iterable set backed by a map.
 pub struct IterableSet<V> {
     pub(crate) map: IterableMap<V, ()>,
 }
 
-impl<V: IterableMapKey + BorshSerialize + BorshDeserialize + Clone> IterableSet<V> {
+impl<V: IterableMapHash + BorshSerialize + BorshDeserialize + Clone> IterableSet<V> {
     /// Creates an empty [IterableMap] with the given prefix.
     pub fn new<S: Into<String>>(prefix: S) -> Self {
         Self {
@@ -141,7 +141,7 @@ mod tests {
         field2: String,
     }
 
-    impl IterableMapKey for TestStruct {}
+    impl IterableMapHash for TestStruct {}
 
     #[test]
     fn struct_values() {

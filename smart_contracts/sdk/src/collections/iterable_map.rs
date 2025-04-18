@@ -18,36 +18,33 @@ pub struct IterableMapPtr {
 }
 
 /// Trait for types that can be used as keys in [IterableMap].
-/// Must produce a deterministic [IterableMapPtr] prefix via hashing.
+/// Must produce a deterministic hash that will be supplied to [IterableMapPtr::hash].
 ///
 /// A blanket implementation is provided for all types that implement
 /// [BorshSerialize].
-pub trait IterableMapKey: PartialEq + BorshSerialize + BorshDeserialize {
-    fn compute_root_ptr(&self) -> IterableMapPtr {
+pub trait IterableMapHash: PartialEq + BorshSerialize + BorshDeserialize {
+    fn compute_hash(&self) -> u64 {
         let mut bytes = Vec::new();
         self.serialize(&mut bytes).unwrap();
-        IterableMapPtr {
-            hash: fnv1a_hash_64(&bytes, None),
-            index: 0,
-        }
+        fnv1a_hash_64(&bytes, None)
     }
 }
 
 // No blanket IterableMapKey implementation. Explicit impls prevent conflicts with
 // user‑provided implementations; a blanket impl would forbid custom hashes.
-impl IterableMapKey for u8 {}
-impl IterableMapKey for u16 {}
-impl IterableMapKey for u32 {}
-impl IterableMapKey for u64 {}
-impl IterableMapKey for u128 {}
-impl IterableMapKey for i8 {}
-impl IterableMapKey for i16 {}
-impl IterableMapKey for i32 {}
-impl IterableMapKey for i64 {}
-impl IterableMapKey for i128 {}
-impl IterableMapKey for String {}
+impl IterableMapHash for u8 {}
+impl IterableMapHash for u16 {}
+impl IterableMapHash for u32 {}
+impl IterableMapHash for u64 {}
+impl IterableMapHash for u128 {}
+impl IterableMapHash for i8 {}
+impl IterableMapHash for i16 {}
+impl IterableMapHash for i32 {}
+impl IterableMapHash for i64 {}
+impl IterableMapHash for i128 {}
+impl IterableMapHash for String {}
 
-/// A singly-linked map. Each entry at key `K_n` stores `(V, K_{n-1})`,
+/// A singly-linked HashMap. Each entry at key `K_n` stores `(V, K_{n-1})`,
 /// where `V` is the value and `K_{n-1}` is the key hash of the previous entry.
 ///
 /// This creates a constant spatial overhead; every entry stores a pointer
@@ -80,7 +77,7 @@ pub struct IterableMapEntry<K, V> {
 
 impl<K, V> IterableMap<K, V>
 where
-    K: IterableMapKey,
+    K: IterableMapHash,
     V: BorshSerialize + BorshDeserialize,
 {
     /// Creates an empty [IterableMap] with the given prefix.
@@ -278,7 +275,7 @@ where
 
     /// Find the slot containing key, if any.
     fn find_slot(&self, key: &K) -> Option<(IterableMapPtr, IterableMapEntry<K, V>)> {
-        let mut bucket_ptr = key.compute_root_ptr();
+        let mut bucket_ptr = self.create_root_ptr_from_key(key);
 
         // Probe until we find either an existing slot, a tombstone or empty space.
         // This should rarely iterate more than once assuming a solid hashing algorithm.
@@ -307,7 +304,7 @@ where
     /// Find the next slot we can safely write to. This is either a slot already owned and
     /// assigned to the key, a vacant tombstone, or empty memory.
     fn get_writable_slot(&self, key: &K) -> (IterableMapPtr, Option<IterableMapEntry<K, V>>) {
-        let mut bucket_ptr = key.compute_root_ptr();
+        let mut bucket_ptr = self.create_root_ptr_from_key(key);
 
         // Probe until we find either an existing slot, a tombstone or empty space.
         // This should rarely iterate more than once assuming a solid hashing algorithm.
@@ -343,8 +340,15 @@ where
     }
 
     fn create_prefix_from_key(&self, key: &K) -> Vec<u8> {
-        let hash = key.compute_root_ptr();
-        self.create_prefix_from_ptr(&hash)
+        let ptr = self.create_root_ptr_from_key(key);
+        self.create_prefix_from_ptr(&ptr)
+    }
+
+    fn create_root_ptr_from_key(&self, key: &K) -> IterableMapPtr {
+        IterableMapPtr {
+            hash: key.compute_hash(),
+            index: 0,
+        }
     }
 
     fn create_prefix_from_ptr(&self, hash: &IterableMapPtr) -> Vec<u8> {
@@ -661,7 +665,7 @@ mod tests {
             name: String,
         }
 
-        impl IterableMapKey for TestKey {}
+        impl IterableMapHash for TestKey {}
 
         dispatch(|| {
             let key1 = TestKey {
@@ -700,10 +704,10 @@ mod tests {
             assert_eq!(values, vec!["e", "d", "b", "a"]);
 
             // Check that entry 4's previous is now 2's hash
-            let hash4 = 4u64.compute_root_ptr();
-            let prefix = map.create_prefix_from_ptr(&hash4);
+            let ptr4 = map.create_root_ptr_from_key(&4u64);
+            let prefix = map.create_prefix_from_ptr(&ptr4);
             let entry = map.get_entry(Keyspace::Context(&prefix)).unwrap();
-            assert_eq!(entry.previous, Some(2u64.compute_root_ptr()));
+            assert_eq!(entry.previous, Some(map.create_root_ptr_from_key(&2u64)));
         })
         .unwrap();
     }
@@ -759,7 +763,7 @@ mod tests {
         #[derive(BorshSerialize, BorshDeserialize, PartialEq)]
         struct UnitKey;
 
-        impl IterableMapKey for UnitKey {}
+        impl IterableMapHash for UnitKey {}
 
         dispatch(|| {
             let mut map = IterableMap::<UnitKey, String>::new("test_map");
@@ -772,15 +776,12 @@ mod tests {
     #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
     struct CollidingKey(u64, u64);
 
-    impl IterableMapKey for CollidingKey {
-        fn compute_root_ptr(&self) -> IterableMapPtr {
+    impl IterableMapHash for CollidingKey {
+        fn compute_hash(&self) -> u64 {
             let mut bytes = Vec::new();
             // Only serialize first field for hash computation
             self.0.serialize(&mut bytes).unwrap();
-            IterableMapPtr {
-                hash: fnv1a_hash_64(&bytes, None),
-                index: 0,
-            }
+            fnv1a_hash_64(&bytes, None)
         }
     }
 
