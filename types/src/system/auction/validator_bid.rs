@@ -265,15 +265,13 @@ impl ValidatorBid {
     }
 
     /// Sets given bid's `inactive` field to `false`
-    pub fn activate(&mut self) -> bool {
+    pub fn activate(&mut self) {
         self.inactive = false;
-        false
     }
 
     /// Sets given bid's `inactive` field to `true`
-    pub fn deactivate(&mut self) -> bool {
+    pub fn deactivate(&mut self) {
         self.inactive = true;
-        true
     }
 
     /// Sets validator public key

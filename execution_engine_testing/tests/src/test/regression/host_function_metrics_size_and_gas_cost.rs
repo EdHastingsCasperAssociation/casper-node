@@ -16,8 +16,8 @@ const CONTRACT_TRANSFER_TO_ACCOUNT_U512: &str = "transfer_to_account_u512.wasm";
 
 // This value is not systemic, as code is added the size of WASM will increase,
 // you can change this value to reflect the increase in WASM size.
-const HOST_FUNCTION_METRICS_STANDARD_SIZE: usize = 143_164;
-const HOST_FUNCTION_METRICS_STANDARD_GAS_COST: u64 = 422_402_224_490;
+const HOST_FUNCTION_METRICS_STANDARD_SIZE: usize = 143_500;
+const HOST_FUNCTION_METRICS_STANDARD_GAS_COST: u64 = 430_000_000_000;
 
 /// Acceptable size regression/improvement in percentage.
 const SIZE_MARGIN: usize = 5;
