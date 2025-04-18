@@ -237,6 +237,36 @@ pub enum InvalidTransaction {
     },
     /// Could not serialize transaction
     CouldNotSerializeTransaction,
+
+    /// Insufficient value for amount argument.
+    InsufficientAmount {
+        /// The attempted amount.
+        attempted: U512,
+    },
+
+    /// Invalid minimum delegation amount.
+    InvalidMinimumDelegationAmount {
+        /// The lowest allowed amount.
+        floor: u64,
+        /// The attempted amount.
+        attempted: u64,
+    },
+
+    /// Invalid maximum delegation amount.
+    InvalidMaximumDelegationAmount {
+        /// The highest allowed amount.
+        ceiling: u64,
+        /// The attempted amount.
+        attempted: u64,
+    },
+
+    /// Invalid reserved slots.
+    InvalidReservedSlots {
+        /// The highest allowed amount.
+        ceiling: u32,
+        /// The attempted amount.
+        attempted: u32,
+    },
 }
 
 impl Display for InvalidTransaction {
@@ -444,6 +474,29 @@ impl Display for InvalidTransaction {
                         write!(formatter, "insufficient burn amount: {minimum} {attempted}")
                     }
             InvalidTransaction::CouldNotSerializeTransaction => write!(formatter, "Could not serialize transaction."),
+
+
+            InvalidTransaction::InsufficientAmount { attempted } => {
+                write!(
+                    formatter,
+                    "the value provided for the argument ({attempted}) named amount is too low.",
+                )
+            }
+            InvalidTransaction::InvalidMinimumDelegationAmount { floor, attempted } => {
+                write!(
+                    formatter,
+                    "the value provided for the minimum delegation amount ({attempted}) cannot be lower than {floor}.",
+                )}
+            InvalidTransaction::InvalidMaximumDelegationAmount { ceiling, attempted } => {
+                write!(
+                    formatter,
+                    "the value provided for the maximum delegation amount ({ceiling}) cannot be higher than {attempted}.",
+                )}
+            InvalidTransaction::InvalidReservedSlots { ceiling, attempted } => {
+                write!(
+                    formatter,
+                    "the value provided for reserved slots ({ceiling}) cannot be higher than {attempted}.",
+                )}
         }
     }
 }
@@ -500,7 +553,11 @@ impl StdError for InvalidTransaction {
             | InvalidTransaction::InvalidPaymentAmount
             | InvalidTransaction::InsufficientBurnAmount { .. }
             | InvalidTransaction::UnexpectedEntryPoint { .. }
-            | InvalidTransaction::CouldNotSerializeTransaction => None,
+            | InvalidTransaction::CouldNotSerializeTransaction
+            | InvalidTransaction::InsufficientAmount { .. }
+            | InvalidTransaction::InvalidMinimumDelegationAmount { .. }
+            | InvalidTransaction::InvalidMaximumDelegationAmount { .. }
+            | InvalidTransaction::InvalidReservedSlots { .. } => None,
         }
     }
 }

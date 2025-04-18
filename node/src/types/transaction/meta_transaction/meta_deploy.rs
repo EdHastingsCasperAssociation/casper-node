@@ -1,17 +1,21 @@
 use datasize::DataSize;
+use once_cell::sync::OnceCell;
 use serde::Serialize;
 
 #[cfg(test)]
 use casper_types::TransactionLaneDefinition;
 use casper_types::{
-    calculate_lane_id_for_deploy, Deploy, ExecutableDeployItem, InvalidTransaction,
+    calculate_lane_id_for_deploy, Deploy, ExecutableDeployItem, InitiatorAddr, InvalidTransaction,
     PricingHandling, TransactionV1Config,
 };
 #[derive(Clone, Debug, Serialize, DataSize)]
 pub(crate) struct MetaDeploy {
     deploy: Deploy,
-    //We need to keep that id here since we can fetch it only from chainspec.
+    //We need to keep this id here since we can fetch it only from chainspec.
     lane_id: u8,
+    #[data_size(skip)]
+    #[serde(skip)]
+    initiator_addr: OnceCell<InitiatorAddr>,
 }
 
 impl MetaDeploy {
@@ -22,7 +26,17 @@ impl MetaDeploy {
     ) -> Result<Self, InvalidTransaction> {
         let lane_id = calculate_lane_id_for_deploy(&deploy, pricing_handling, config)
             .map_err(InvalidTransaction::Deploy)?;
-        Ok(MetaDeploy { deploy, lane_id })
+        let initiator_addr = OnceCell::new();
+        Ok(MetaDeploy {
+            deploy,
+            lane_id,
+            initiator_addr,
+        })
+    }
+
+    pub(crate) fn initiator_addr(&self) -> &InitiatorAddr {
+        self.initiator_addr
+            .get_or_init(|| InitiatorAddr::PublicKey(self.deploy.account().clone()))
     }
 
     pub(crate) fn lane_id(&self) -> u8 {

@@ -31,7 +31,7 @@ pub struct ExecuteRequest {
     /// Input data.
     pub input: Bytes,
     /// Value transferred to the contract.
-    pub transferred_value: u128,
+    pub transferred_value: u64,
     /// Transaction hash.
     pub transaction_hash: TransactionHash,
     /// Address generator.
@@ -61,7 +61,7 @@ pub struct ExecuteRequestBuilder {
     gas_limit: Option<u64>,
     target: Option<ExecutionKind>,
     input: Option<Bytes>,
-    value: Option<u128>,
+    value: Option<u64>,
     transaction_hash: Option<TransactionHash>,
     address_generator: Option<Arc<RwLock<AddressGenerator>>>,
     chain_name: Option<Arc<str>>,
@@ -118,7 +118,7 @@ impl ExecuteRequestBuilder {
 
     /// Pass value to be sent to the contract.
     #[must_use]
-    pub fn with_transferred_value(mut self, value: u128) -> Self {
+    pub fn with_transferred_value(mut self, value: u64) -> Self {
         self.value = Some(value);
         self
     }
@@ -195,7 +195,7 @@ impl ExecuteRequestBuilder {
         let gas_limit = self.gas_limit.ok_or("Gas limit is not set")?;
         let execution_kind = self.target.ok_or("Target is not set")?;
         let input = self.input.ok_or("Input is not set")?;
-        let value = self.value.ok_or("Value is not set")?;
+        let transferred_value = self.value.ok_or("Value is not set")?;
         let transaction_hash = self.transaction_hash.ok_or("Transaction hash is not set")?;
         let address_generator = self
             .address_generator
@@ -213,7 +213,7 @@ impl ExecuteRequestBuilder {
             gas_limit,
             execution_kind,
             input,
-            transferred_value: value,
+            transferred_value,
             transaction_hash,
             address_generator,
             chain_name,

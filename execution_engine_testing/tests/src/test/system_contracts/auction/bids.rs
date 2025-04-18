@@ -1,22 +1,20 @@
+use assert_matches::assert_matches;
+use num_traits::{One, Zero};
+use once_cell::sync::Lazy;
 use std::{
     collections::{BTreeMap, BTreeSet},
     iter::FromIterator,
 };
-
-use assert_matches::assert_matches;
-use num_traits::{One, Zero};
-use once_cell::sync::Lazy;
 use tempfile::TempDir;
 
 use casper_engine_test_support::{
     genesis_config_builder::GenesisConfigBuilder, utils, ChainspecConfig, ExecuteRequestBuilder,
     LmdbWasmTestBuilder, StepRequestBuilder, UpgradeRequestBuilder, DEFAULT_ACCOUNTS,
     DEFAULT_ACCOUNT_ADDR, DEFAULT_ACCOUNT_INITIAL_BALANCE, DEFAULT_AUCTION_DELAY,
-    DEFAULT_BLOCK_TIME, DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_EXEC_CONFIG,
-    DEFAULT_GENESIS_CONFIG_HASH, DEFAULT_GENESIS_TIMESTAMP_MILLIS,
-    DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS, DEFAULT_MAXIMUM_DELEGATION_AMOUNT,
-    DEFAULT_PROTOCOL_VERSION, DEFAULT_ROUND_SEIGNIORAGE_RATE, DEFAULT_UNBONDING_DELAY,
-    LOCAL_GENESIS_REQUEST, MINIMUM_ACCOUNT_CREATION_BALANCE, SYSTEM_ADDR,
+    DEFAULT_CHAINSPEC_REGISTRY, DEFAULT_EXEC_CONFIG, DEFAULT_GENESIS_CONFIG_HASH,
+    DEFAULT_GENESIS_TIMESTAMP_MILLIS, DEFAULT_LOCKED_FUNDS_PERIOD_MILLIS,
+    DEFAULT_MAXIMUM_DELEGATION_AMOUNT, DEFAULT_PROTOCOL_VERSION, DEFAULT_ROUND_SEIGNIORAGE_RATE,
+    DEFAULT_UNBONDING_DELAY, LOCAL_GENESIS_REQUEST, MINIMUM_ACCOUNT_CREATION_BALANCE, SYSTEM_ADDR,
     TIMESTAMP_MILLIS_INCREMENT,
 };
 use casper_execution_engine::{
@@ -116,6 +114,7 @@ static BID_ACCOUNT_1_PK: Lazy<PublicKey> = Lazy::new(|| {
 });
 static BID_ACCOUNT_1_ADDR: Lazy<AccountHash> = Lazy::new(|| AccountHash::from(&*BID_ACCOUNT_1_PK));
 const BID_ACCOUNT_1_BALANCE: u64 = MINIMUM_ACCOUNT_CREATION_BALANCE;
+const BID_ACCOUNT_1_BOND: u64 = 200_000;
 
 static BID_ACCOUNT_2_PK: Lazy<PublicKey> = Lazy::new(|| {
     let secret_key = SecretKey::ed25519_from_bytes([206; SecretKey::ED25519_LENGTH]).unwrap();
@@ -853,9 +852,7 @@ fn should_forcibly_undelegate_after_setting_validator_limits() {
         .into_iter()
         .filter(|bid| !bid.is_unbond())
         .collect();
-    assert_eq!(bids.len(), 3);
-
-    builder.forced_undelegate(None, DEFAULT_PROTOCOL_VERSION, DEFAULT_BLOCK_TIME);
+    assert_eq!(bids.len(), 2);
 
     let bids: Vec<_> = builder
         .get_bids()
@@ -925,53 +922,104 @@ fn should_forcibly_undelegate_after_setting_validator_limits() {
 
 #[ignore]
 #[test]
-fn should_force_undelegate_with_genesis_delegators() {
-    assert_ne!(*ACCOUNT_1_ADDR, *ACCOUNT_2_ADDR,);
-    assert_ne!(*ACCOUNT_2_ADDR, *BID_ACCOUNT_1_ADDR,);
-    assert_ne!(*ACCOUNT_2_ADDR, *DEFAULT_ACCOUNT_ADDR,);
+fn should_not_allow_delegator_stake_range_during_vesting() {
     let accounts = {
-        let mut tmp = DEFAULT_ACCOUNTS.clone();
-        let genesis_validator = GenesisAccount::account(
-            ACCOUNT_1_PK.clone(),
-            Motes::new(ACCOUNT_1_BALANCE),
+        let mut tmp: Vec<GenesisAccount> = DEFAULT_ACCOUNTS.clone();
+        let account_1 = GenesisAccount::account(
+            BID_ACCOUNT_1_PK.clone(),
+            Motes::new(BID_ACCOUNT_1_BALANCE),
             Some(GenesisValidator::new(
-                Motes::new(ACCOUNT_1_BOND),
+                Motes::new(BID_ACCOUNT_1_BOND),
                 DelegationRate::zero(),
             )),
         );
-        let genesis_delegator = GenesisAccount::delegator(
-            ACCOUNT_1_PK.clone(),
-            ACCOUNT_2_PK.clone(),
-            Motes::new(U512::zero()),
-            Motes::new(U512::from(DEFAULT_MAXIMUM_DELEGATION_AMOUNT - 1)),
-        );
-
-        tmp.push(genesis_validator);
-        tmp.push(genesis_delegator);
+        tmp.push(account_1);
         tmp
     };
 
-    let exec_config = GenesisConfigBuilder::new()
+    let genesis_config = GenesisConfigBuilder::new()
         .with_accounts(accounts)
-        .with_locked_funds_period_millis(CASPER_LOCKED_FUNDS_PERIOD_MILLIS)
+        .with_locked_funds_period_millis(1)
         .build();
+
     let run_genesis_request = GenesisRequest::new(
         DEFAULT_GENESIS_CONFIG_HASH,
         DEFAULT_PROTOCOL_VERSION,
-        exec_config,
+        genesis_config,
         DEFAULT_CHAINSPEC_REGISTRY.clone(),
     );
 
     let mut builder = LmdbWasmTestBuilder::default();
 
     builder.run_genesis(run_genesis_request);
+    // need to step past genesis era
+    builder.advance_era();
 
-    // set delegation limits
+    // attempt to change delegation limits
     let validator_1_add_bid_request = ExecuteRequestBuilder::standard(
-        *ACCOUNT_1_ADDR,
+        *BID_ACCOUNT_1_ADDR,
         CONTRACT_ADD_BID,
         runtime_args! {
-            ARG_PUBLIC_KEY => ACCOUNT_1_PK.clone(),
+            ARG_PUBLIC_KEY => BID_ACCOUNT_1_PK.clone(),
+            ARG_AMOUNT => U512::from(ACCOUNT_1_BOND),
+            ARG_DELEGATION_RATE => ADD_BID_DELEGATION_RATE_1,
+            ARG_MINIMUM_DELEGATION_AMOUNT => DEFAULT_MINIMUM_DELEGATION_AMOUNT,
+            ARG_MAXIMUM_DELEGATION_AMOUNT => DEFAULT_MAXIMUM_DELEGATION_AMOUNT - 2,
+        },
+    )
+    .build();
+
+    builder.exec(validator_1_add_bid_request).expect_failure();
+
+    let error = builder.get_error().expect("must have error");
+    let err_str = format!("{}", error);
+    assert!(
+        err_str.starts_with("ApiError::AuctionError(VestingLockout)"),
+        "should get vesting lockout error"
+    );
+}
+
+#[ignore]
+#[test]
+fn should_allow_delegator_stake_range_change_if_no_vesting() {
+    let accounts = {
+        let mut tmp: Vec<GenesisAccount> = DEFAULT_ACCOUNTS.clone();
+        let account_1 = GenesisAccount::account(
+            BID_ACCOUNT_1_PK.clone(),
+            Motes::new(BID_ACCOUNT_1_BALANCE),
+            Some(GenesisValidator::new(
+                Motes::new(BID_ACCOUNT_1_BOND),
+                DelegationRate::zero(),
+            )),
+        );
+        tmp.push(account_1);
+        tmp
+    };
+
+    let genesis_config = GenesisConfigBuilder::new()
+        .with_accounts(accounts)
+        .with_locked_funds_period_millis(0)
+        .build();
+
+    let run_genesis_request = GenesisRequest::new(
+        DEFAULT_GENESIS_CONFIG_HASH,
+        DEFAULT_PROTOCOL_VERSION,
+        genesis_config,
+        DEFAULT_CHAINSPEC_REGISTRY.clone(),
+    );
+
+    let mut builder = LmdbWasmTestBuilder::default();
+
+    builder.run_genesis(run_genesis_request);
+    // need to step past genesis era
+    builder.advance_era();
+
+    // attempt to change delegation limits
+    let validator_1_add_bid_request = ExecuteRequestBuilder::standard(
+        *BID_ACCOUNT_1_ADDR,
+        CONTRACT_ADD_BID,
+        runtime_args! {
+            ARG_PUBLIC_KEY => BID_ACCOUNT_1_PK.clone(),
             ARG_AMOUNT => U512::from(ACCOUNT_1_BOND),
             ARG_DELEGATION_RATE => ADD_BID_DELEGATION_RATE_1,
             ARG_MINIMUM_DELEGATION_AMOUNT => DEFAULT_MINIMUM_DELEGATION_AMOUNT,
@@ -984,9 +1032,6 @@ fn should_force_undelegate_with_genesis_delegators() {
         .exec(validator_1_add_bid_request)
         .expect_success()
         .commit();
-
-    let result = builder.forced_undelegate(None, DEFAULT_PROTOCOL_VERSION, DEFAULT_BLOCK_TIME);
-    assert!(result.is_success(), "expected success but got {:?}", result);
 }
 
 #[ignore]
@@ -3998,22 +4043,12 @@ fn should_delegate_and_redelegate() {
     );
 
     let bids = builder.get_bids();
-    assert_eq!(bids.len(), 4);
+    assert_eq!(bids.len(), 3);
 
-    let delegators = bids
-        .delegators_by_validator_public_key(&NON_FOUNDER_VALIDATOR_1_PK)
-        .expect("should have delegators");
-    assert_eq!(delegators.len(), 1);
-    let delegator = bids
-        .delegator_by_kind(
-            &NON_FOUNDER_VALIDATOR_1_PK,
-            &DelegatorKind::PublicKey(BID_ACCOUNT_1_PK.clone()),
-        )
-        .expect("should have delegator");
-    let delegated_amount_1 = delegator.staked_amount();
-    assert_eq!(
-        delegated_amount_1,
-        U512::from(DELEGATE_AMOUNT_1 - UNDELEGATE_AMOUNT_1 - DEFAULT_MINIMUM_DELEGATION_AMOUNT)
+    assert!(
+        bids.delegators_by_validator_public_key(&NON_FOUNDER_VALIDATOR_1_PK)
+            .is_none(),
+        "fully unbonded"
     );
 
     let delegators = bids
@@ -4029,7 +4064,8 @@ fn should_delegate_and_redelegate() {
     let redelegated_amount_1 = delegator.staked_amount();
     assert_eq!(
         redelegated_amount_1,
-        U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT)
+        U512::from(DELEGATE_AMOUNT_1),
+        "expected full unbond"
     );
 }
 
@@ -4141,16 +4177,6 @@ fn should_handle_redelegation_to_inactive_validator() {
 
     builder.advance_eras_by_default_auction_delay();
 
-    let delegator_1_main_purse = builder
-        .get_entity_by_account_hash(*DELEGATOR_1_ADDR)
-        .expect("should have default account")
-        .main_purse();
-
-    let delegator_2_main_purse = builder
-        .get_entity_by_account_hash(*DELEGATOR_2_ADDR)
-        .expect("should have default account")
-        .main_purse();
-
     let invalid_redelegate_request = ExecuteRequestBuilder::standard(
         *DELEGATOR_1_ADDR,
         CONTRACT_REDELEGATE,
@@ -4163,55 +4189,14 @@ fn should_handle_redelegation_to_inactive_validator() {
     )
     .build();
 
-    builder
-        .exec(invalid_redelegate_request)
-        .expect_success()
-        .commit();
+    builder.exec(invalid_redelegate_request).expect_failure();
 
-    builder.advance_era();
-
-    let valid_redelegate_request = ExecuteRequestBuilder::standard(
-        *DELEGATOR_2_ADDR,
-        CONTRACT_REDELEGATE,
-        runtime_args! {
-            ARG_AMOUNT => U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT),
-            ARG_VALIDATOR => NON_FOUNDER_VALIDATOR_1_PK.clone(),
-            ARG_DELEGATOR => DELEGATOR_2.clone(),
-            ARG_NEW_VALIDATOR => NON_FOUNDER_VALIDATOR_2_PK.clone()
-        },
+    let error = builder.get_error().expect("expected error");
+    let str = format!("{}", error);
+    assert!(
+        str.starts_with("ApiError::AuctionError(RedelegationValidatorNotFound)"),
+        "expected RedelegationValidatorNotFound"
     )
-    .build();
-
-    builder
-        .exec(valid_redelegate_request)
-        .expect_success()
-        .commit();
-
-    let delegator_1_purse_balance_before = builder.get_purse_balance(delegator_1_main_purse);
-    let delegator_2_purse_balance_before = builder.get_purse_balance(delegator_2_main_purse);
-
-    for _ in 0..=DEFAULT_UNBONDING_DELAY {
-        let delegator_2_purse_balance = builder.get_purse_balance(delegator_2_main_purse);
-        assert_eq!(delegator_2_purse_balance, delegator_2_purse_balance_before);
-
-        builder.advance_era();
-    }
-
-    // The invalid redelegation will force an unbond which will transfer funds to
-    // back to the main purse.
-    let delegator_1_purse_balance_after = builder.get_purse_balance(delegator_1_main_purse);
-    assert_eq!(
-        delegator_1_purse_balance_before
-            + U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT),
-        delegator_1_purse_balance_after
-    );
-
-    // The valid redelegation will not transfer funds back to the main purse.
-    let delegator_2_purse_balance_after = builder.get_purse_balance(delegator_2_main_purse);
-    assert_eq!(
-        delegator_2_purse_balance_before,
-        delegator_2_purse_balance_after
-    );
 }
 
 #[ignore]
@@ -5291,11 +5276,27 @@ fn should_change_validator_bid_public_key() {
     builder.advance_eras_by_default_auction_delay();
 
     // redelegate funds to validator 3
+    // NOTE: previously, this would leave a remaining delegation to the original delegator behind
+    // with less than that min delegation bid. Under the new logic if the remaining del bid amount
+    // would be less than the min, it gets converted to a full unbond instead of a partial unbond
+    let attempted_partial_unbond_redlegate_amount =
+        U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT);
+    let actual_delegated_amount = U512::from(DELEGATE_AMOUNT_1);
+    assert!(
+        attempted_partial_unbond_redlegate_amount < actual_delegated_amount,
+        "attempted partial amount should be less than actual delegated amount"
+    );
+    let attempted_remaining_delegation_amount =
+        actual_delegated_amount - attempted_partial_unbond_redlegate_amount;
+    assert!(
+        attempted_remaining_delegation_amount < DEFAULT_MINIMUM_DELEGATION_AMOUNT.into(),
+        "attempted remainder should be less than minimum in this case"
+    );
     let delegator_1_redelegate_request = ExecuteRequestBuilder::standard(
         *BID_ACCOUNT_1_ADDR,
         CONTRACT_REDELEGATE,
         runtime_args! {
-            ARG_AMOUNT => U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT),
+            ARG_AMOUNT => attempted_partial_unbond_redlegate_amount,
             ARG_VALIDATOR => NON_FOUNDER_VALIDATOR_1_PK.clone(),
             ARG_DELEGATOR => BID_ACCOUNT_1_PK.clone(),
             ARG_NEW_VALIDATOR => NON_FOUNDER_VALIDATOR_3_PK.clone()
@@ -5314,12 +5315,16 @@ fn should_change_validator_bid_public_key() {
         .filter(|bid| !bid.is_unbond())
         .collect();
 
-    assert_eq!(bids.len(), 4);
+    assert_eq!(
+        bids.len(),
+        3,
+        "with unbonds filtered out there should be 3 bids"
+    );
     assert!(bids
         .validator_bid(&NON_FOUNDER_VALIDATOR_2_PK.clone())
         .is_none());
 
-    // change validator 1 bid public key
+    // change validator 1 bid public key to validator 2 public key
     let change_bid_public_key_request = ExecuteRequestBuilder::standard(
         *NON_FOUNDER_VALIDATOR_1_ADDR,
         CONTRACT_CHANGE_BID_PUBLIC_KEY,
@@ -5342,7 +5347,11 @@ fn should_change_validator_bid_public_key() {
         .into_iter()
         .filter(|bid| !bid.is_unbond())
         .collect();
-    assert_eq!(bids.len(), 5);
+    assert_eq!(
+        bids.len(),
+        4,
+        "with unbonds filtered out, there should be 4 bids"
+    );
     let new_validator_bid = bids
         .validator_bid(&NON_FOUNDER_VALIDATOR_2_PK.clone())
         .unwrap();
@@ -5374,17 +5383,25 @@ fn should_change_validator_bid_public_key() {
     let delegators = bids
         .delegators_by_validator_public_key(&NON_FOUNDER_VALIDATOR_2_PK)
         .expect("should have delegators");
-    assert_eq!(delegators.len(), 2);
-    let delegator = bids
-        .delegator_by_kind(
+    // NOTE: previously in this test the partial redelegate would have been allowed, and thus this
+    // delegator would have had delegations to the original validator (below min)
+    // and the redelegated target (the redelegated amount)
+    // The new logic converted it into a full unbond to avoid the remainder below min being
+    // left behind.
+    assert_eq!(
+        delegators.len(),
+        1,
+        "the remaining delegator should have bridged over"
+    );
+    assert!(
+        bids.delegator_by_kind(
             &NON_FOUNDER_VALIDATOR_2_PK,
             &DelegatorKind::PublicKey(BID_ACCOUNT_1_PK.clone()),
         )
-        .expect("should have account1 delegation");
-    assert_eq!(
-        delegator.staked_amount(),
-        U512::from(DELEGATE_AMOUNT_1 - UNDELEGATE_AMOUNT_1 - DEFAULT_MINIMUM_DELEGATION_AMOUNT)
+        .is_none(),
+        "the redelegated unbond should not have bridged over"
     );
+
     let delegator = bids
         .delegator_by_kind(
             &NON_FOUNDER_VALIDATOR_2_PK,
@@ -5410,25 +5427,24 @@ fn should_change_validator_bid_public_key() {
     .build();
 
     builder.exec(distribute_request).commit().expect_success();
-
     let bids: Vec<BidKind> = builder
         .get_bids()
         .into_iter()
         .filter(|bid| !bid.is_unbond())
         .collect();
-    assert_eq!(bids.len(), 5);
+    assert_eq!(
+        bids.len(),
+        4,
+        "excluding unbonds there should now be 4 bids"
+    );
 
-    let delegator = bids
-        .delegator_by_kind(
+    assert!(
+        bids.delegator_by_kind(
             &NON_FOUNDER_VALIDATOR_2_PK,
             &DelegatorKind::PublicKey(BID_ACCOUNT_1_PK.clone()),
         )
-        .expect("should have account1 delegation");
-    assert!(
-        delegator.staked_amount()
-            > U512::from(
-                DELEGATE_AMOUNT_1 - UNDELEGATE_AMOUNT_1 - DEFAULT_MINIMUM_DELEGATION_AMOUNT
-            )
+        .is_none(),
+        "should not have undelegated delegator"
     );
     let delegator = bids
         .delegator_by_kind(
@@ -5437,21 +5453,28 @@ fn should_change_validator_bid_public_key() {
         )
         .expect("should have account2 delegation");
     assert!(delegator.staked_amount() > U512::from(DELEGATE_AMOUNT_2));
+    let expected_reward = 12;
+    assert_eq!(
+        delegator.staked_amount(),
+        U512::from(DELEGATE_AMOUNT_2 + expected_reward)
+    );
 
     // advance eras until unbonds are processed
     builder.advance_eras_by(DEFAULT_UNBONDING_DELAY + 1);
 
     let bids = builder.get_bids();
-    assert_eq!(bids.len(), 6);
+    assert_eq!(bids.len(), 5, "with unbonds filtered there should be 5");
     let delegator = bids
         .delegator_by_kind(
             &NON_FOUNDER_VALIDATOR_3_PK,
             &DelegatorKind::PublicKey(BID_ACCOUNT_1_PK.clone()),
         )
         .expect("should have account1 delegation");
+
     assert_eq!(
         delegator.staked_amount(),
-        U512::from(UNDELEGATE_AMOUNT_1 + DEFAULT_MINIMUM_DELEGATION_AMOUNT)
+        U512::from(DELEGATE_AMOUNT_1 + expected_reward),
+        "the fully redelegated amount plus the earned rewards"
     );
 }
 
@@ -5612,7 +5635,7 @@ fn should_handle_excessively_long_bridge_record_chains() {
         *BID_ACCOUNT_2_ADDR,
         CONTRACT_REDELEGATE,
         runtime_args! {
-            ARG_AMOUNT => U512::from(UNDELEGATE_AMOUNT_2 + DEFAULT_MINIMUM_DELEGATION_AMOUNT),
+            ARG_AMOUNT => U512::from(UNDELEGATE_AMOUNT_2),
             ARG_VALIDATOR => NON_FOUNDER_VALIDATOR_2_PK.clone(),
             ARG_DELEGATOR => BID_ACCOUNT_2_PK.clone(),
             ARG_NEW_VALIDATOR => NON_FOUNDER_VALIDATOR_1_PK.clone()
@@ -5700,7 +5723,7 @@ fn should_handle_excessively_long_bridge_record_chains() {
         .expect("should have account2 delegation");
     assert_eq!(
         delegator.staked_amount(),
-        U512::from(DELEGATE_AMOUNT_2 - UNDELEGATE_AMOUNT_2 - DEFAULT_MINIMUM_DELEGATION_AMOUNT)
+        U512::from(DELEGATE_AMOUNT_2 - UNDELEGATE_AMOUNT_2)
     );
 
     // distribute rewards
@@ -5754,11 +5777,7 @@ fn should_handle_excessively_long_bridge_record_chains() {
     // verify that unbond was returned to main purse instead of being redelegated
     assert_eq!(
         builder.get_purse_balance(delegator_2_main_purse),
-        U512::from(
-            TRANSFER_AMOUNT - DELEGATE_AMOUNT_2
-                + UNDELEGATE_AMOUNT_2
-                + DEFAULT_MINIMUM_DELEGATION_AMOUNT
-        )
+        U512::from(TRANSFER_AMOUNT - DELEGATE_AMOUNT_2 + UNDELEGATE_AMOUNT_2)
     );
 }
 

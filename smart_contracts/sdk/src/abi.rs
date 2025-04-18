@@ -199,7 +199,7 @@ where
     T: CasperABI,
 {
     fn populate_definitions(definitions: &mut Definitions) {
-        T::populate_definitions(definitions)
+        T::populate_definitions(definitions);
     }
 
     fn declaration() -> Declaration {
@@ -216,7 +216,7 @@ where
     T: CasperABI,
 {
     fn populate_definitions(definitions: &mut Definitions) {
-        T::populate_definitions(definitions)
+        T::populate_definitions(definitions);
     }
 
     fn declaration() -> Declaration {

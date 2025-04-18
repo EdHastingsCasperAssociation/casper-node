@@ -23,7 +23,7 @@ const DEFAULT_ENTRY_POINT: &str = "call";
 pub struct SessionDataDeploy<'a> {
     deploy_hash: &'a DeployHash,
     session: &'a ExecutableDeployItem,
-    initiator_addr: InitiatorAddr,
+    initiator_addr: &'a InitiatorAddr,
     signers: BTreeSet<AccountHash>,
     is_standard_payment: bool,
 }
@@ -33,7 +33,7 @@ impl<'a> SessionDataDeploy<'a> {
     pub fn new(
         deploy_hash: &'a DeployHash,
         session: &'a ExecutableDeployItem,
-        initiator_addr: InitiatorAddr,
+        initiator_addr: &'a InitiatorAddr,
         signers: BTreeSet<AccountHash>,
         is_standard_payment: bool,
     ) -> Self {
@@ -58,7 +58,7 @@ impl<'a> SessionDataDeploy<'a> {
 
     /// initiator address of the deploy
     pub fn initiator_addr(&self) -> &InitiatorAddr {
-        &self.initiator_addr
+        self.initiator_addr
     }
 
     /// signers of the deploy
@@ -75,7 +75,7 @@ pub struct SessionDataV1<'a> {
     is_install_upgrade: bool,
     hash: &'a TransactionV1Hash,
     pricing_mode: &'a PricingMode,
-    initiator_addr: InitiatorAddr,
+    initiator_addr: &'a InitiatorAddr,
     signers: BTreeSet<AccountHash>,
     is_standard_payment: bool,
 }
@@ -90,7 +90,7 @@ impl<'a> SessionDataV1<'a> {
         is_install_upgrade: bool,
         hash: &'a TransactionV1Hash,
         pricing_mode: &'a PricingMode,
-        initiator_addr: InitiatorAddr,
+        initiator_addr: &'a InitiatorAddr,
         signers: BTreeSet<AccountHash>,
         is_standard_payment: bool,
     ) -> Self {
@@ -134,7 +134,7 @@ impl<'a> SessionDataV1<'a> {
 
     /// initiator address of the transaction
     pub fn initiator_addr(&self) -> &InitiatorAddr {
-        &self.initiator_addr
+        self.initiator_addr
     }
 
     /// signers of the transaction

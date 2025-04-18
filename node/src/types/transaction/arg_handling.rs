@@ -5,8 +5,8 @@ use casper_types::{
     account::AccountHash,
     bytesrepr::FromBytes,
     system::auction::{DelegatorKind, Reservation, ARG_VALIDATOR},
-    CLType, CLTyped, CLValue, CLValueError, InvalidTransactionV1, PublicKey, RuntimeArgs,
-    TransactionArgs, URef, U512,
+    CLType, CLTyped, CLValue, CLValueError, Chainspec, InvalidTransactionV1, PublicKey,
+    RuntimeArgs, TransactionArgs, URef, U512,
 };
 #[cfg(test)]
 use casper_types::{bytesrepr::ToBytes, TransferTarget};
@@ -299,16 +299,43 @@ pub fn new_add_bid_args<A: Into<U512>>(
 }
 
 /// Checks the given `RuntimeArgs` are suitable for use in an add_bid transaction.
-pub fn has_valid_add_bid_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
+pub fn has_valid_add_bid_args(
+    chainspec: &Chainspec,
+    args: &TransactionArgs,
+) -> Result<(), InvalidTransactionV1> {
     let args = args
         .as_named()
         .ok_or(InvalidTransactionV1::ExpectedNamedArguments)?;
     let _public_key = ADD_BID_ARG_PUBLIC_KEY.get(args)?;
     let _delegation_rate = ADD_BID_ARG_DELEGATION_RATE.get(args)?;
-    let _amount = ADD_BID_ARG_AMOUNT.get(args)?;
-    let _minimum_delegation_amount = ADD_BID_ARG_MINIMUM_DELEGATION_AMOUNT.get(args)?;
-    let _maximum_delegation_amount = ADD_BID_ARG_MAXIMUM_DELEGATION_AMOUNT.get(args)?;
-    let _reserved_slots = ADD_BID_ARG_RESERVED_SLOTS.get(args)?;
+    let amount = ADD_BID_ARG_AMOUNT.get(args)?;
+    if amount.is_zero() {
+        return Err(InvalidTransactionV1::InsufficientAmount { attempted: amount });
+    }
+    let minimum_delegation_amount = ADD_BID_ARG_MINIMUM_DELEGATION_AMOUNT.get(args)?;
+    if let Some(attempted) = minimum_delegation_amount {
+        let floor = chainspec.core_config.minimum_delegation_amount;
+        if attempted < floor {
+            return Err(InvalidTransactionV1::InvalidMinimumDelegationAmount { floor, attempted });
+        }
+    }
+    let maximum_delegation_amount = ADD_BID_ARG_MAXIMUM_DELEGATION_AMOUNT.get(args)?;
+    if let Some(attempted) = maximum_delegation_amount {
+        let ceiling = chainspec.core_config.maximum_delegation_amount;
+        if attempted > ceiling {
+            return Err(InvalidTransactionV1::InvalidMaximumDelegationAmount {
+                ceiling,
+                attempted,
+            });
+        }
+    }
+    let reserved_slots = ADD_BID_ARG_RESERVED_SLOTS.get(args)?;
+    if let Some(attempted) = reserved_slots {
+        let ceiling = chainspec.core_config.max_delegators_per_validator;
+        if ceiling != 0 && attempted > ceiling {
+            return Err(InvalidTransactionV1::InvalidReservedSlots { ceiling, attempted });
+        }
+    }
     Ok(())
 }
 
@@ -324,7 +351,7 @@ pub fn new_withdraw_bid_args<A: Into<U512>>(
     Ok(args)
 }
 
-/// Checks the given `RuntimeArgs` are suitable for use in an withdraw_bid transaction.
+/// Checks the given `RuntimeArgs` are suitable for use in a withdraw_bid transaction.
 pub fn has_valid_withdraw_bid_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
     let args = args
         .as_named()
@@ -453,7 +480,7 @@ pub fn has_valid_change_bid_public_key_args(
     Ok(())
 }
 
-/// Creates a `RuntimeArgs` suitable for use in a add resrvations transaction.
+/// Creates a `RuntimeArgs` suitable for use in an add reservations transaction.
 #[cfg(test)]
 pub fn new_add_reservations_args(
     reservations: Vec<Reservation>,
@@ -463,7 +490,7 @@ pub fn new_add_reservations_args(
     Ok(args)
 }
 
-/// Checks the given `TransactionArgs` are suitable for use in a add reservations transaction.
+/// Checks the given `TransactionArgs` are suitable for use in an add reservations transaction.
 pub fn has_valid_add_reservations_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
     let args = args
         .as_named()
@@ -484,7 +511,7 @@ pub fn new_cancel_reservations_args(
     Ok(args)
 }
 
-/// Checks the given `TransactionArgs` are suitable for use in a add reservations transaction.
+/// Checks the given `TransactionArgs` are suitable for use in an add reservations transaction.
 pub fn has_valid_cancel_reservations_args(
     args: &TransactionArgs,
 ) -> Result<(), InvalidTransactionV1> {
@@ -500,10 +527,12 @@ pub fn has_valid_cancel_reservations_args(
 mod tests {
     use core::ops::Range;
 
-    use rand::Rng;
-
     use super::*;
+    use casper_execution_engine::engine_state::engine_config::{
+        DEFAULT_MAXIMUM_DELEGATION_AMOUNT, DEFAULT_MINIMUM_DELEGATION_AMOUNT,
+    };
     use casper_types::{runtime_args, testing::TestRng, CLType, TransactionArgs};
+    use rand::Rng;
 
     #[test]
     fn should_validate_transfer_args() {
@@ -648,15 +677,20 @@ mod tests {
             Err(expected_error)
         );
     }
+    #[cfg(test)]
+    fn check_add_bid_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
+        has_valid_add_bid_args(&Chainspec::default(), args)
+    }
 
     #[test]
     fn should_validate_add_bid_args() {
         let rng = &mut TestRng::new();
-
-        let minimum_delegation_amount = rng.gen::<bool>().then(|| rng.gen());
-        let maximum_delegation_amount = minimum_delegation_amount
-            .map(|minimum_delegation_amount| minimum_delegation_amount + rng.gen::<u32>() as u64);
-        let reserved_slots = rng.gen::<bool>().then(|| rng.gen::<u32>());
+        let floor = DEFAULT_MINIMUM_DELEGATION_AMOUNT;
+        let ceiling = DEFAULT_MAXIMUM_DELEGATION_AMOUNT;
+        let reserved_max = 1200; // there doesn't seem to be a const for this?
+        let minimum_delegation_amount = rng.gen::<bool>().then(|| rng.gen_range(floor..floor * 2));
+        let maximum_delegation_amount = rng.gen::<bool>().then(|| rng.gen_range(floor..ceiling));
+        let reserved_slots = rng.gen::<bool>().then(|| rng.gen_range(0..reserved_max));
 
         // Check random args.
         let mut args = new_add_bid_args(
@@ -668,11 +702,11 @@ mod tests {
             reserved_slots,
         )
         .unwrap();
-        has_valid_add_bid_args(&TransactionArgs::Named(args.clone())).unwrap();
+        check_add_bid_args(&TransactionArgs::Named(args.clone())).unwrap();
 
         // Check with extra arg.
         args.insert("a", 1).unwrap();
-        has_valid_add_bid_args(&TransactionArgs::Named(args)).unwrap();
+        check_add_bid_args(&TransactionArgs::Named(args)).unwrap();
     }
 
     #[test]
@@ -688,7 +722,7 @@ mod tests {
             arg_name: ADD_BID_ARG_PUBLIC_KEY.name.to_string(),
         };
         assert_eq!(
-            has_valid_add_bid_args(&TransactionArgs::Named(args)),
+            check_add_bid_args(&TransactionArgs::Named(args)),
             Err(expected_error)
         );
 
@@ -701,7 +735,7 @@ mod tests {
             arg_name: ADD_BID_ARG_DELEGATION_RATE.name.to_string(),
         };
         assert_eq!(
-            has_valid_add_bid_args(&TransactionArgs::Named(args)),
+            check_add_bid_args(&TransactionArgs::Named(args)),
             Err(expected_error)
         );
 
@@ -714,7 +748,7 @@ mod tests {
             arg_name: ADD_BID_ARG_AMOUNT.name.to_string(),
         };
         assert_eq!(
-            has_valid_add_bid_args(&TransactionArgs::Named(args)),
+            check_add_bid_args(&TransactionArgs::Named(args)),
             Err(expected_error)
         );
     }
@@ -735,7 +769,7 @@ mod tests {
             CLType::U64,
         );
         assert_eq!(
-            has_valid_add_bid_args(&TransactionArgs::Named(args)),
+            check_add_bid_args(&TransactionArgs::Named(args)),
             Err(expected_error)
         );
     }
@@ -1283,7 +1317,7 @@ mod tests {
             has_valid_transfer_args(&args, 0).as_ref(),
             Err(&expected_error)
         );
-        assert_eq!(has_valid_add_bid_args(&args).as_ref(), Err(&expected_error));
+        assert_eq!(check_add_bid_args(&args).as_ref(), Err(&expected_error));
         assert_eq!(
             has_valid_withdraw_bid_args(&args).as_ref(),
             Err(&expected_error)

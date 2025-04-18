@@ -7,7 +7,7 @@ use std::{
     panic::{self, UnwindSafe},
     ptr::{self, NonNull},
     slice,
-    sync::{Arc, RwLock},
+    sync::{Arc, LazyLock, RwLock},
 };
 
 use bytes::Bytes;
@@ -18,7 +18,6 @@ use casper_executor_wasm_common::{
     },
     flags::ReturnFlags,
 };
-use once_cell::sync::Lazy;
 use rand::Rng;
 
 use super::Entity;
@@ -69,7 +68,7 @@ pub mod private_exports {
 }
 
 /// List of sorted exports gathered from the contracts code.
-pub static EXPORTS: Lazy<Vec<&'static Export>> = Lazy::new(|| {
+pub static EXPORTS: LazyLock<Vec<&'static Export>> = LazyLock::new(|| {
     let mut exports = private_exports::EXPORTS.into_iter().collect::<Vec<_>>();
     exports.sort_by_key(|export| export.kind);
     exports
@@ -184,7 +183,7 @@ impl Environment {
         let value = 0u128;
         let src_ptr = NonNull::from(&value);
         unsafe {
-            ptr::copy_nonoverlapping(src_ptr.as_ptr() as *const c_void, dest_ptr.as_ptr(), 16)
+            ptr::copy_nonoverlapping(src_ptr.as_ptr() as *const c_void, dest_ptr.as_ptr(), 16);
         }
         Ok(())
     }
@@ -192,10 +191,7 @@ impl Environment {
 
 impl Environment {
     fn key_prefix(&self, key: &[u8]) -> Vec<u8> {
-        let entity = self
-            .contract_address
-            .map(Entity::Contract)
-            .unwrap_or(self.caller);
+        let entity = self.contract_address.map_or(self.caller, Entity::Contract);
 
         let mut bytes = Vec::new();
         bytes.extend(entity.tag().to_le_bytes());
@@ -375,9 +371,8 @@ impl Environment {
             Some(unsafe { slice::from_raw_parts(input_ptr, input_size) })
         };
 
-        let transferred_value: u128 = {
-            let value_ptr =
-                NonNull::new(transferred_value_ptr as *mut u128).expect("Valid pointer");
+        let transferred_value = {
+            let value_ptr = NonNull::new(transferred_value_ptr as *mut u64).expect("Valid pointer");
             unsafe { *value_ptr.as_ptr() }
         };
 
@@ -411,7 +406,7 @@ impl Environment {
             // Call constructor, expect a trap
             let result = dispatch_with(stub, || {
                 // TODO: Handle panic inside constructor
-                (entry_point.fptr)()
+                (entry_point.fptr)();
             });
 
             match result {
@@ -448,7 +443,7 @@ impl Environment {
         let address = unsafe { slice::from_raw_parts(address_ptr, address_size) };
         let input_data = unsafe { slice::from_raw_parts(input_ptr, input_size) };
         let entry_point = {
-            let entry_point_ptr = NonNull::new(entry_point_ptr as _).expect("Valid pointer");
+            let entry_point_ptr = NonNull::new(entry_point_ptr.cast_mut()).expect("Valid pointer");
             let entry_point =
                 unsafe { slice::from_raw_parts(entry_point_ptr.as_ptr(), entry_point_size) };
             let entry_point = std::str::from_utf8(entry_point).expect("Valid UTF-8 string");
@@ -493,7 +488,7 @@ impl Environment {
         match unfolded {
             Ok(()) => Ok(CALLEE_SUCCEEDED),
             Err(NativeTrap::Return(flags, bytes)) => {
-                let ptr = NonNull::new(alloc(bytes.len(), alloc_ctx as _));
+                let ptr = NonNull::new(alloc(bytes.len(), alloc_ctx.cast_mut()));
                 if let Some(output_ptr) = ptr {
                     unsafe {
                         ptr::copy_nonoverlapping(bytes.as_ptr(), output_ptr.as_ptr(), bytes.len());
@@ -710,7 +705,7 @@ mod symbols {
         let _name = "casper_print";
         let _args = (&msg_ptr, &msg_size);
         let _call_result = with_current_environment(|stub| stub.casper_print(msg_ptr, msg_size));
-        crate::casper::native::handle_ret(_call_result)
+        crate::casper::native::handle_ret(_call_result);
     }
 
     use crate::casper::native::LAST_TRAP;

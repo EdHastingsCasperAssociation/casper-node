@@ -16,7 +16,7 @@ pub fn build_schema_impl<W: Write>(
 ) -> Result<(), anyhow::Error> {
     // Compile contract package to a native library with extra code that will
     // produce ABI information including entrypoints, types, etc.
-    eprintln!("Building contract schema...");
+    eprintln!("🔨 Step 1: Building contract schema...");
 
     let rustflags = {
         let current = std::env::var("RUSTFLAGS").unwrap_or_default();
