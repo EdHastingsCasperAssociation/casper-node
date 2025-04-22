@@ -5,7 +5,6 @@ use crate::{
     serializers::borsh::{BorshDeserialize, BorshSerialize},
 };
 
-// use casper_macros::casper;
 use casper_executor_wasm_common::keyspace::Keyspace;
 use const_fnv1a_hash::fnv1a_hash_str_64;
 
@@ -53,6 +52,10 @@ impl<T> Vector<T>
 where
     T: BorshSerialize + BorshDeserialize,
 {
+    /// Constructs a new, empty Vector<T>.
+    ///
+    /// The vector header will not write itself to the GS, even if
+    /// values are pushed onto it later.
     pub fn new<S: Into<String>>(prefix: S) -> Self {
         Self {
             prefix: prefix.into(),
@@ -61,6 +64,7 @@ where
         }
     }
 
+    /// Appends an element to the back of a collection.
     pub fn push(&mut self, value: T) {
         let mut prefix_bytes = self.prefix.as_bytes().to_owned();
         prefix_bytes.extend(&self.length.to_le_bytes());
@@ -69,6 +73,14 @@ where
         self.length += 1;
     }
 
+    /// Removes the last element from a vector and returns it, or None if it is empty.
+    pub fn pop(&mut self) -> Option<T> {
+        self.swap_remove(self.len() - 1)
+    }
+
+    /// Returns true if the slice contains an element with the given value.
+    ///
+    /// This operation is O(n).
     pub fn contains(&self, value: &T) -> bool
     where
         T: PartialEq,
@@ -76,6 +88,7 @@ where
         self.iter().any(|v| v == *value)
     }
 
+    /// Returns an element at index, deserialized.
     pub fn get(&self, index: u64) -> Option<T> {
         let mut prefix_bytes = self.prefix.as_bytes().to_owned();
         prefix_bytes.extend(&index.to_le_bytes());
@@ -85,10 +98,13 @@ where
             .map(|vec| borsh::from_slice(&vec).unwrap())
     }
 
+    /// Returns an iterator over self, with elements deserialized.
     pub fn iter(&self) -> impl Iterator<Item = T> + '_ {
         (0..self.length).map(move |i| self.get(i).unwrap())
     }
 
+    /// Inserts an element at position `index` within the vector, shifting all elements after it to
+    /// the right.
     pub fn insert(&mut self, index: u64, value: T) {
         assert!(index <= self.length, "index out of bounds");
 
@@ -105,16 +121,26 @@ where
         self.length += 1;
     }
 
+    /// Clears the vector, removing all values.
+    pub fn clear(&mut self) {
+        self.length = 0;
+        // TODO: Remove all elements from global state
+    }
+
+    /// Returns the number of elements in the vector, also referred to as its ‘length’.
     #[inline(always)]
     pub fn len(&self) -> u64 {
         self.length
     }
 
+    /// Returns `true` if the vector contains no elements.
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.length == 0
     }
 
+    /// Binary searches this vector for a given element. If the vector is not sorted, the returned
+    /// result is unspecified and meaningless.
     pub fn binary_search(&self, value: &T) -> Result<u64, u64>
     where
         T: Ord,
@@ -122,6 +148,12 @@ where
         self.binary_search_by(|v| v.cmp(value))
     }
 
+    /// Binary searches this slice with a comparator function.
+    ///
+    /// The comparator function should return an [Ordering] that indicates whether its argument is
+    /// `Less`, `Equal` or `Greater` the desired target. If the slice is not sorted or if the
+    /// comparator function does not implement an order consistent with the sort order of the
+    /// underlying slice, the returned result is unspecified and meaningless.
     pub fn binary_search_by<F>(&self, mut f: F) -> Result<u64, u64>
     where
         F: FnMut(&T) -> Ordering,
@@ -164,6 +196,10 @@ where
     }
 
     /// Removes the element at the specified index and returns it.
+    ///
+    /// Note: Because this shifts over the remaining elements, it has a
+    /// worst-case performance of O(n). If you don’t need the order of
+    /// elements to be preserved, use `swap_remove` instead.
     pub fn remove(&mut self, index: u64) -> Option<T> {
         if index >= self.length {
             return None;
@@ -192,6 +228,29 @@ where
         Some(value)
     }
 
+    /// Removes the element at the specified index and returns it.
+    ///
+    /// The removed element is replaced by the last element of the vector.
+    /// This does not preserve ordering of the remaining elements, but is O(1).
+    pub fn swap_remove(&mut self, index: u64) -> Option<T> {
+        if index >= self.length {
+            return None;
+        }
+
+        let value_to_remove = self.get(index).unwrap();
+        let last_value = self.get(self.len() - 1).unwrap();
+
+        if index != self.len() - 1 {
+            self.write(index, last_value);
+        }
+
+        self.length -= 1;
+        // TODO: remove self.len() - 1 from global state
+
+        Some(value_to_remove)
+    }
+
+    /// Retains only the elements specified by the predicate.
     pub fn retain<F>(&mut self, mut f: F)
     where
         F: FnMut(&T) -> bool,
@@ -299,6 +358,157 @@ pub(crate) mod tests {
 
             let vec2 = Vector::<u64>::new("test1");
             assert_eq!(vec2.get(0), None);
+        })
+        .unwrap();
+    }
+
+    #[test]
+    #[ignore]
+    // TODO: This should work when we allow purging GS entries
+    fn test_pop() {
+        dispatch(|| {
+            let mut vec = Vector::<u64>::new("test");
+            assert_eq!(vec.pop(), None);
+            vec.push(1);
+            vec.push(2);
+            assert_eq!(vec.pop(), Some(2));
+            assert_eq!(vec.len(), 1);
+            assert_eq!(vec.pop(), Some(1));
+            assert!(vec.is_empty());
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_contains() {
+        dispatch(|| {
+            let mut vec = Vector::<u64>::new("test");
+            vec.push(1);
+            vec.push(2);
+            assert!(vec.contains(&1));
+            assert!(vec.contains(&2));
+            assert!(!vec.contains(&3));
+            vec.remove(0);
+            assert!(!vec.contains(&1));
+        })
+        .unwrap();
+    }
+
+    #[test]
+    #[ignore]
+    // TODO: This should work when we allow purging GS entries
+    fn test_clear() {
+        dispatch(|| {
+            let mut vec = Vector::<u64>::new("test");
+            vec.push(1);
+            vec.push(2);
+            vec.clear();
+            assert_eq!(vec.len(), 0);
+            assert!(vec.is_empty());
+            assert_eq!(vec.get(0), None);
+            vec.push(3);
+            assert_eq!(vec.get(0), Some(3));
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_binary_search() {
+        dispatch(|| {
+            let mut vec = Vector::<u64>::new("test");
+            vec.push(1);
+            vec.push(2);
+            vec.push(3);
+            vec.push(4);
+            vec.push(5);
+            assert_eq!(vec.binary_search(&3), Ok(2));
+            assert_eq!(vec.binary_search(&0), Err(0));
+            assert_eq!(vec.binary_search(&6), Err(5));
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_swap_remove() {
+        dispatch(|| {
+            let mut vec = Vector::<u64>::new("test");
+            vec.push(1);
+            vec.push(2);
+            vec.push(3);
+            vec.push(4);
+            assert_eq!(vec.swap_remove(1), Some(2));
+            assert_eq!(vec.iter().collect::<Vec<_>>(), vec![1, 4, 3]);
+            assert_eq!(vec.swap_remove(2), Some(3));
+            assert_eq!(vec.iter().collect::<Vec<_>>(), vec![1, 4]);
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_insert_at_len() {
+        dispatch(|| {
+            let mut vec = Vector::<u64>::new("test");
+            vec.push(1);
+            vec.insert(1, 2);
+            assert_eq!(vec.iter().collect::<Vec<_>>(), vec![1, 2]);
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_struct_elements() {
+        #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug)]
+        struct TestStruct {
+            field: u64,
+        }
+
+        dispatch(|| {
+            let mut vec = Vector::<TestStruct>::new("test");
+            vec.push(TestStruct { field: 1 });
+            vec.push(TestStruct { field: 2 });
+            assert_eq!(vec.get(1), Some(TestStruct { field: 2 }));
+        })
+        .unwrap();
+    }
+
+    #[test]
+    #[ignore]
+    // TODO: This should work when we allow purging GS entries
+    fn test_multiple_operations() {
+        dispatch(|| {
+            let mut vec = Vector::<u64>::new("test");
+            assert!(vec.is_empty());
+            vec.push(1);
+            vec.insert(0, 2);
+            vec.push(3);
+            assert_eq!(vec.iter().collect::<Vec<_>>(), vec![2, 1, 3]);
+            assert_eq!(vec.swap_remove(0), Some(2));
+            assert_eq!(vec.pop(), Some(3));
+            assert_eq!(vec.get(0), Some(1));
+            vec.clear();
+            assert!(vec.is_empty());
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn test_remove_invalid_index() {
+        dispatch(|| {
+            let mut vec = Vector::<u64>::new("test");
+            vec.push(1);
+            assert_eq!(vec.remove(1), None);
+            assert_eq!(vec.remove(0), Some(1));
+            assert_eq!(vec.remove(0), None);
+        })
+        .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds")]
+    fn test_insert_out_of_bounds() {
+        dispatch(|| {
+            let mut vec = Vector::<u64>::new("test");
+            vec.insert(1, 1);
         })
         .unwrap();
     }
