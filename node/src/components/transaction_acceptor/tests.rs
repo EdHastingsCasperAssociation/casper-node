@@ -47,6 +47,7 @@ use crate::{
         network::Identity as NetworkIdentity,
         storage::{self, Storage},
     },
+    consensus::tests::utils::{ALICE_PUBLIC_KEY, BOB_PUBLIC_KEY, CAROL_PUBLIC_KEY},
     effect::{
         announcements::{ControlAnnouncement, TransactionAcceptorAnnouncement},
         requests::{
@@ -223,6 +224,8 @@ enum TestScenario {
     InvalidArgumentsKind,
     WasmTransactionWithTooBigPayment,
     WasmDeployWithTooBigPayment,
+    RedelegateExceedingMaximumDelegation,
+    DelegateExceedingMaximumDelegation,
 }
 
 impl TestScenario {
@@ -274,7 +277,9 @@ impl TestScenario {
             | TestScenario::InvalidFields
             | TestScenario::InvalidArgumentsKind
             | TestScenario::WasmTransactionWithTooBigPayment
-            | TestScenario::WasmDeployWithTooBigPayment => Source::Client,
+            | TestScenario::WasmDeployWithTooBigPayment
+            | TestScenario::RedelegateExceedingMaximumDelegation
+            | TestScenario::DelegateExceedingMaximumDelegation => Source::Client,
         }
     }
 
@@ -726,9 +731,6 @@ impl TestScenario {
                 Transaction::from(txn)
             }
             TestScenario::WasmTransactionWithTooBigPayment => {
-                let timestamp = Timestamp::now()
-                    + Config::default().timestamp_leeway
-                    + TimeDiff::from_millis(100);
                 let ttl = TimeDiff::from_seconds(300);
                 let txn = TransactionV1Builder::new_session(
                     false,
@@ -742,7 +744,7 @@ impl TestScenario {
                     standard_payment: true,
                 })
                 .with_chain_name("casper-example")
-                .with_timestamp(timestamp)
+                .with_timestamp(Timestamp::now())
                 .with_ttl(ttl)
                 .with_secret_key(&secret_key)
                 .build()
@@ -751,6 +753,41 @@ impl TestScenario {
             }
             TestScenario::WasmDeployWithTooBigPayment => {
                 Transaction::from(Deploy::random_with_oversized_payment_amount(rng))
+            }
+            TestScenario::RedelegateExceedingMaximumDelegation => {
+                let txn = TransactionV1Builder::new_redelegate(
+                    ALICE_PUBLIC_KEY.clone(),
+                    BOB_PUBLIC_KEY.clone(),
+                    1_000_000_000_000_000_001_u64, /* This is 1 mote more than the
+                                                    * maximum_delegation_amount in local
+                                                    * chainspec */
+                    CAROL_PUBLIC_KEY.clone(),
+                )
+                .unwrap()
+                .with_chain_name("casper-example")
+                .with_timestamp(Timestamp::now())
+                .with_secret_key(&secret_key)
+                .build()
+                .unwrap();
+                Transaction::from(txn)
+            }
+            TestScenario::DelegateExceedingMaximumDelegation => {
+                let ttl = TimeDiff::from_seconds(300);
+                let txn = TransactionV1Builder::new_delegate(
+                    ALICE_PUBLIC_KEY.clone(),
+                    BOB_PUBLIC_KEY.clone(),
+                    1_000_000_000_000_000_001_u64, /* This is 1 mote more than the
+                                                    * maximum_delegation_amount in local
+                                                    * chainspec */
+                )
+                .unwrap()
+                .with_chain_name("casper-example")
+                .with_timestamp(Timestamp::now())
+                .with_ttl(ttl)
+                .with_secret_key(&secret_key)
+                .build()
+                .unwrap();
+                Transaction::from(txn)
             }
         }
     }
@@ -816,7 +853,9 @@ impl TestScenario {
             | TestScenario::InvalidFieldsFromPeer
             | TestScenario::InvalidArgumentsKind
             | TestScenario::WasmTransactionWithTooBigPayment
-            | TestScenario::WasmDeployWithTooBigPayment => false,
+            | TestScenario::WasmDeployWithTooBigPayment
+            | TestScenario::RedelegateExceedingMaximumDelegation {.. }
+            | TestScenario::DelegateExceedingMaximumDelegation {..} => false,
         }
     }
 
@@ -1389,7 +1428,9 @@ async fn run_transaction_acceptor_without_timeout(
             | TestScenario::InvalidFields
             | TestScenario::InvalidArgumentsKind
             | TestScenario::WasmTransactionWithTooBigPayment
-            | TestScenario::WasmDeployWithTooBigPayment => {
+            | TestScenario::WasmDeployWithTooBigPayment
+            | TestScenario::RedelegateExceedingMaximumDelegation { .. }
+            | TestScenario::DelegateExceedingMaximumDelegation { .. } => {
                 matches!(
                     event,
                     Event::TransactionAcceptorAnnouncement(
@@ -2745,5 +2786,27 @@ async fn should_reject_deploy_with_payment_amount_larger_than_max_wasm_lane_limi
         Err(super::Error::InvalidTransaction(
             InvalidTransaction::Deploy(InvalidDeploy::NoLaneMatch)
         ))
+    ));
+}
+
+#[tokio::test]
+async fn should_reject_native_delegate_with_exceeding_amount() {
+    let result = run_transaction_acceptor(TestScenario::DelegateExceedingMaximumDelegation).await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
+            InvalidTransactionV1::InvalidDelegationAmount { .. }
+        )))
+    ));
+}
+
+#[tokio::test]
+async fn should_reject_native_redelegate_with_exceeding_amount() {
+    let result = run_transaction_acceptor(TestScenario::RedelegateExceedingMaximumDelegation).await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
+            InvalidTransactionV1::InvalidDelegationAmount { .. }
+        )))
     ));
 }

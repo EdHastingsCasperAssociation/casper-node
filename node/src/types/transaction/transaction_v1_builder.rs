@@ -9,11 +9,9 @@ use casper_types::{
     TransactionTarget, TransactionV1, TransactionV1Payload,
 };
 #[cfg(test)]
-use casper_types::{testing::TestRng, Approval, TransactionConfig};
-#[cfg(test)]
 use casper_types::{
-    AddressableEntityHash, CLValueError, EntityVersion, PackageHash, PublicKey,
-    TransactionInvocationTarget, TransferTarget, URef, U512,
+    testing::TestRng, AddressableEntityHash, Approval, CLValueError, EntityVersion, PackageHash,
+    PublicKey, TransactionConfig, TransactionInvocationTarget, TransferTarget, URef, U512,
 };
 use core::marker::PhantomData;
 #[cfg(test)]
@@ -275,6 +273,23 @@ impl<'a> TransactionV1Builder<'a> {
         builder.args = TransactionArgs::Named(args);
         builder.target = TransactionTarget::Native;
         builder.entry_point = TransactionEntryPoint::Undelegate;
+        builder.scheduling = Self::DEFAULT_SCHEDULING;
+        Ok(builder)
+    }
+
+    /// Returns a new `TransactionV1Builder` suitable for building a native redelegate transaction.
+    #[cfg(test)]
+    pub(crate) fn new_redelegate<A: Into<U512>>(
+        delegator: PublicKey,
+        validator: PublicKey,
+        amount: A,
+        new_validator: PublicKey,
+    ) -> Result<Self, CLValueError> {
+        let args = arg_handling::new_redelegate_args(delegator, validator, amount, new_validator)?;
+        let mut builder = TransactionV1Builder::new();
+        builder.args = TransactionArgs::Named(args);
+        builder.target = TransactionTarget::Native;
+        builder.entry_point = TransactionEntryPoint::Redelegate;
         builder.scheduling = Self::DEFAULT_SCHEDULING;
         Ok(builder)
     }

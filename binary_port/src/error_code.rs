@@ -366,6 +366,8 @@ pub enum ErrorCode {
     InvalidMaximumDelegationAmount = 114,
     #[error("Transaction attempts to set a reserved slots count above the highest allowed value")]
     InvalidReservedSlots = 115,
+    #[error("Transaction attempts to set a delegation amount above the highest allowed value")]
+    InvalidDelegationAmount = 116,
 }
 
 impl TryFrom<u16> for ErrorCode {
@@ -561,6 +563,9 @@ impl From<InvalidTransactionV1> for ErrorCode {
                 ErrorCode::InvalidMaximumDelegationAmount
             }
             InvalidTransactionV1::InvalidReservedSlots { .. } => ErrorCode::InvalidReservedSlots,
+            InvalidTransactionV1::InvalidDelegationAmount { .. } => {
+                ErrorCode::InvalidDelegationAmount
+            }
             _other => ErrorCode::InvalidTransactionUnspecified,
         }
     }

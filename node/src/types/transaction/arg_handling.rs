@@ -332,8 +332,11 @@ pub fn has_valid_add_bid_args(
     let reserved_slots = ADD_BID_ARG_RESERVED_SLOTS.get(args)?;
     if let Some(attempted) = reserved_slots {
         let ceiling = chainspec.core_config.max_delegators_per_validator;
-        if ceiling != 0 && attempted > ceiling {
-            return Err(InvalidTransactionV1::InvalidReservedSlots { ceiling, attempted });
+        if attempted > ceiling {
+            return Err(InvalidTransactionV1::InvalidReservedSlots {
+                ceiling,
+                attempted: attempted as u64,
+            });
         }
     }
     Ok(())
@@ -376,13 +379,24 @@ pub fn new_delegate_args<A: Into<U512>>(
 }
 
 /// Checks the given `RuntimeArgs` are suitable for use in a delegate transaction.
-pub fn has_valid_delegate_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
+pub fn has_valid_delegate_args(
+    chainspec: &Chainspec,
+    args: &TransactionArgs,
+) -> Result<(), InvalidTransactionV1> {
     let args = args
         .as_named()
         .ok_or(InvalidTransactionV1::ExpectedNamedArguments)?;
     let _delegator = DELEGATE_ARG_DELEGATOR.get(args)?;
     let _validator = DELEGATE_ARG_VALIDATOR.get(args)?;
-    let _amount = DELEGATE_ARG_AMOUNT.get(args)?;
+    let amount = DELEGATE_ARG_AMOUNT.get(args)?;
+    // We don't check for minimum since this could be a second delegation
+    let maximum_delegation_amount = chainspec.core_config.maximum_delegation_amount;
+    if amount > maximum_delegation_amount.into() {
+        return Err(InvalidTransactionV1::InvalidDelegationAmount {
+            ceiling: maximum_delegation_amount,
+            attempted: amount,
+        });
+    }
     Ok(())
 }
 
@@ -428,14 +442,25 @@ pub fn new_redelegate_args<A: Into<U512>>(
 }
 
 /// Checks the given `RuntimeArgs` are suitable for use in a redelegate transaction.
-pub fn has_valid_redelegate_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
+pub fn has_valid_redelegate_args(
+    chainspec: &Chainspec,
+    args: &TransactionArgs,
+) -> Result<(), InvalidTransactionV1> {
     let args = args
         .as_named()
         .ok_or(InvalidTransactionV1::ExpectedNamedArguments)?;
     let _delegator = REDELEGATE_ARG_DELEGATOR.get(args)?;
     let _validator = REDELEGATE_ARG_VALIDATOR.get(args)?;
-    let _amount = REDELEGATE_ARG_AMOUNT.get(args)?;
     let _new_validator = REDELEGATE_ARG_NEW_VALIDATOR.get(args)?;
+    let amount = REDELEGATE_ARG_AMOUNT.get(args)?;
+    // We don't check for minimum since this could be a second delegation
+    let maximum_delegation_amount = chainspec.core_config.maximum_delegation_amount;
+    if amount > maximum_delegation_amount.into() {
+        return Err(InvalidTransactionV1::InvalidDelegationAmount {
+            attempted: amount,
+            ceiling: maximum_delegation_amount,
+        });
+    }
     Ok(())
 }
 
@@ -491,11 +516,28 @@ pub fn new_add_reservations_args(
 }
 
 /// Checks the given `TransactionArgs` are suitable for use in an add reservations transaction.
-pub fn has_valid_add_reservations_args(args: &TransactionArgs) -> Result<(), InvalidTransactionV1> {
+pub fn has_valid_add_reservations_args(
+    chainspec: &Chainspec,
+    args: &TransactionArgs,
+) -> Result<(), InvalidTransactionV1> {
     let args = args
         .as_named()
         .ok_or(InvalidTransactionV1::ExpectedNamedArguments)?;
-    let _reservations = ADD_RESERVATIONS_ARG_RESERVATIONS.get(args)?;
+    let reservations = ADD_RESERVATIONS_ARG_RESERVATIONS.get(args)?;
+    let ceiling = chainspec.core_config.max_delegators_per_validator;
+    let attempted: u32 = reservations.len().try_into().map_err(|_| {
+        //This will only happen if reservations.len is bigger than u32
+        InvalidTransactionV1::InvalidReservedSlots {
+            ceiling,
+            attempted: reservations.len() as u64,
+        }
+    })?;
+    if attempted > ceiling {
+        return Err(InvalidTransactionV1::InvalidReservedSlots {
+            ceiling,
+            attempted: attempted as u64,
+        });
+    }
     Ok(())
 }
 
@@ -838,24 +880,48 @@ mod tests {
 
     #[test]
     fn should_validate_delegate_args() {
+        let chainspec = Chainspec::default();
         let rng = &mut TestRng::new();
 
         // Check random args.
         let mut args = new_delegate_args(
             PublicKey::random(rng),
             PublicKey::random(rng),
-            rng.gen::<u64>(),
+            rng.gen_range(0_u64..1_000_000_000_000_000_000_u64),
         )
         .unwrap();
-        has_valid_delegate_args(&TransactionArgs::Named(args.clone())).unwrap();
+        has_valid_delegate_args(&chainspec, &TransactionArgs::Named(args.clone())).unwrap();
 
         // Check with extra arg.
         args.insert("a", 1).unwrap();
-        has_valid_delegate_args(&TransactionArgs::Named(args)).unwrap();
+        has_valid_delegate_args(&chainspec, &TransactionArgs::Named(args)).unwrap();
+    }
+
+    #[test]
+    fn delegate_args_with_too_big_amount_should_fail() {
+        let chainspec = Chainspec::default();
+        let rng = &mut TestRng::new();
+
+        // Check random args.
+        let args = new_delegate_args(
+            PublicKey::random(rng),
+            PublicKey::random(rng),
+            1_000_000_000_000_000_001_u64,
+        )
+        .unwrap();
+        let expected_error = InvalidTransactionV1::InvalidDelegationAmount {
+            ceiling: 1_000_000_000_000_000_000_u64,
+            attempted: 1_000_000_000_000_000_001_u64.into(),
+        };
+        assert_eq!(
+            has_valid_delegate_args(&chainspec, &TransactionArgs::Named(args)),
+            Err(expected_error)
+        );
     }
 
     #[test]
     fn delegate_args_with_missing_required_should_be_invalid() {
+        let chainspec = Chainspec::default();
         let rng = &mut TestRng::new();
 
         // Missing "delegator".
@@ -867,7 +933,7 @@ mod tests {
             arg_name: DELEGATE_ARG_DELEGATOR.name.to_string(),
         };
         assert_eq!(
-            has_valid_delegate_args(&TransactionArgs::Named(args)),
+            has_valid_delegate_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
 
@@ -880,7 +946,7 @@ mod tests {
             arg_name: DELEGATE_ARG_VALIDATOR.name.to_string(),
         };
         assert_eq!(
-            has_valid_delegate_args(&TransactionArgs::Named(args)),
+            has_valid_delegate_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
 
@@ -893,13 +959,14 @@ mod tests {
             arg_name: DELEGATE_ARG_AMOUNT.name.to_string(),
         };
         assert_eq!(
-            has_valid_delegate_args(&TransactionArgs::Named(args)),
+            has_valid_delegate_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
     }
 
     #[test]
     fn delegate_args_with_wrong_type_should_be_invalid() {
+        let chainspec = Chainspec::default();
         let rng = &mut TestRng::new();
 
         // Wrong "amount" type.
@@ -914,7 +981,7 @@ mod tests {
             CLType::U64,
         );
         assert_eq!(
-            has_valid_delegate_args(&TransactionArgs::Named(args)),
+            has_valid_delegate_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
     }
@@ -1004,52 +1071,75 @@ mod tests {
 
     #[test]
     fn should_validate_redelegate_args() {
+        let chainspec = Chainspec::default();
         let rng = &mut TestRng::new();
 
         // Check random args.
         let mut args = new_redelegate_args(
             PublicKey::random(rng),
             PublicKey::random(rng),
-            rng.gen::<u64>(),
+            rng.gen_range(0_u64..1_000_000_000_000_000_000_u64),
             PublicKey::random(rng),
         )
         .unwrap();
-        has_valid_redelegate_args(&TransactionArgs::Named(args.clone())).unwrap();
+        has_valid_redelegate_args(&chainspec, &TransactionArgs::Named(args.clone())).unwrap();
 
         // Check with extra arg.
         args.insert("a", 1).unwrap();
-        has_valid_redelegate_args(&TransactionArgs::Named(args)).unwrap();
+        has_valid_redelegate_args(&chainspec, &TransactionArgs::Named(args)).unwrap();
+    }
+
+    #[test]
+    fn redelegate_args_with_too_much_amount_should_be_invalid() {
+        let chainspec = Chainspec::default();
+        let rng = &mut TestRng::new();
+        let args = new_redelegate_args(
+            PublicKey::random(rng),
+            PublicKey::random(rng),
+            1_000_000_000_000_000_001_u64,
+            PublicKey::random(rng),
+        )
+        .unwrap();
+        let expected_error = InvalidTransactionV1::InvalidDelegationAmount {
+            ceiling: 1_000_000_000_000_000_000_u64,
+            attempted: 1_000_000_000_000_000_001_u64.into(),
+        };
+        assert_eq!(
+            has_valid_redelegate_args(&chainspec, &TransactionArgs::Named(args)),
+            Err(expected_error)
+        );
     }
 
     #[test]
     fn redelegate_args_with_missing_required_should_be_invalid() {
+        let chainspec = Chainspec::default();
         let rng = &mut TestRng::new();
 
         // Missing "delegator".
         let args = runtime_args! {
             REDELEGATE_ARG_VALIDATOR.name => PublicKey::random(rng),
-            REDELEGATE_ARG_AMOUNT.name => U512::from(rng.gen::<u64>()),
+            REDELEGATE_ARG_AMOUNT.name => U512::from(rng.gen_range(0_u64..1_000_000_000_000_000_000_u64)),
             REDELEGATE_ARG_NEW_VALIDATOR.name => PublicKey::random(rng),
         };
         let expected_error = InvalidTransactionV1::MissingArg {
             arg_name: REDELEGATE_ARG_DELEGATOR.name.to_string(),
         };
         assert_eq!(
-            has_valid_redelegate_args(&TransactionArgs::Named(args)),
+            has_valid_redelegate_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
 
         // Missing "validator".
         let args = runtime_args! {
             REDELEGATE_ARG_DELEGATOR.name => PublicKey::random(rng),
-            REDELEGATE_ARG_AMOUNT.name => U512::from(rng.gen::<u64>()),
+            REDELEGATE_ARG_AMOUNT.name => U512::from(rng.gen_range(0_u64..1_000_000_000_000_000_000_u64),),
             REDELEGATE_ARG_NEW_VALIDATOR.name => PublicKey::random(rng),
         };
         let expected_error = InvalidTransactionV1::MissingArg {
             arg_name: REDELEGATE_ARG_VALIDATOR.name.to_string(),
         };
         assert_eq!(
-            has_valid_redelegate_args(&TransactionArgs::Named(args)),
+            has_valid_redelegate_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
 
@@ -1063,7 +1153,7 @@ mod tests {
             arg_name: REDELEGATE_ARG_AMOUNT.name.to_string(),
         };
         assert_eq!(
-            has_valid_redelegate_args(&TransactionArgs::Named(args)),
+            has_valid_redelegate_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
 
@@ -1077,20 +1167,21 @@ mod tests {
             arg_name: REDELEGATE_ARG_NEW_VALIDATOR.name.to_string(),
         };
         assert_eq!(
-            has_valid_redelegate_args(&TransactionArgs::Named(args)),
+            has_valid_redelegate_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
     }
 
     #[test]
     fn redelegate_args_with_wrong_type_should_be_invalid() {
+        let chainspec = Chainspec::default();
         let rng = &mut TestRng::new();
 
         // Wrong "amount" type.
         let args = runtime_args! {
             REDELEGATE_ARG_DELEGATOR.name => PublicKey::random(rng),
             REDELEGATE_ARG_VALIDATOR.name => PublicKey::random(rng),
-            REDELEGATE_ARG_AMOUNT.name => rng.gen::<u64>(),
+            REDELEGATE_ARG_AMOUNT.name => rng.gen_range(0_u64..1_000_000_000_000_000_000_u64),
             REDELEGATE_ARG_NEW_VALIDATOR.name => PublicKey::random(rng),
         };
         let expected_error = InvalidTransactionV1::unexpected_arg_type(
@@ -1099,7 +1190,7 @@ mod tests {
             CLType::U64,
         );
         assert_eq!(
-            has_valid_redelegate_args(&TransactionArgs::Named(args)),
+            has_valid_redelegate_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
     }
@@ -1184,34 +1275,55 @@ mod tests {
 
     #[test]
     fn should_validate_add_reservations_args() {
+        let chainspec = Chainspec::default();
         let rng = &mut TestRng::new();
 
         let reservations = rng.random_vec(1..100);
 
         // Check random args.
         let mut args = new_add_reservations_args(reservations).unwrap();
-        has_valid_add_reservations_args(&TransactionArgs::Named(args.clone())).unwrap();
+        has_valid_add_reservations_args(&chainspec, &TransactionArgs::Named(args.clone())).unwrap();
 
         // Check with extra arg.
         args.insert("a", 1).unwrap();
-        has_valid_add_reservations_args(&TransactionArgs::Named(args)).unwrap();
+        has_valid_add_reservations_args(&chainspec, &TransactionArgs::Named(args)).unwrap();
+    }
+
+    #[test]
+    fn add_reservations_args_with_too_many_reservations_should_be_invalid() {
+        let chainspec = Chainspec::default();
+        let rng = &mut TestRng::new();
+        // local chainspec allows 1200 delegators to a validator
+        let reservations = rng.random_vec(1201..=1201);
+        let args = new_add_reservations_args(reservations).unwrap();
+
+        let expected_error = InvalidTransactionV1::InvalidReservedSlots {
+            ceiling: 1200,
+            attempted: 1201,
+        };
+        assert_eq!(
+            has_valid_add_reservations_args(&chainspec, &TransactionArgs::Named(args)),
+            Err(expected_error)
+        );
     }
 
     #[test]
     fn add_reservations_args_with_missing_required_should_be_invalid() {
+        let chainspec = Chainspec::default();
         // Missing "reservations".
         let args = runtime_args! {};
         let expected_error = InvalidTransactionV1::MissingArg {
             arg_name: ADD_RESERVATIONS_ARG_RESERVATIONS.name.to_string(),
         };
         assert_eq!(
-            has_valid_add_reservations_args(&TransactionArgs::Named(args)),
+            has_valid_add_reservations_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
     }
 
     #[test]
     fn add_reservations_args_with_wrong_type_should_be_invalid() {
+        let chainspec = Chainspec::default();
         let rng = &mut TestRng::new();
 
         // Wrong "reservations" type.
@@ -1224,7 +1336,7 @@ mod tests {
             CLType::PublicKey,
         );
         assert_eq!(
-            has_valid_add_reservations_args(&TransactionArgs::Named(args)),
+            has_valid_add_reservations_args(&chainspec, &TransactionArgs::Named(args)),
             Err(expected_error)
         );
     }
@@ -1311,6 +1423,7 @@ mod tests {
 
     #[test]
     fn native_calls_require_named_args() {
+        let chainspec = Chainspec::default();
         let args = TransactionArgs::Bytesrepr(vec![b'a'; 100].into());
         let expected_error = InvalidTransactionV1::ExpectedNamedArguments;
         assert_eq!(
@@ -1323,7 +1436,7 @@ mod tests {
             Err(&expected_error)
         );
         assert_eq!(
-            has_valid_delegate_args(&args).as_ref(),
+            has_valid_delegate_args(&chainspec, &args).as_ref(),
             Err(&expected_error)
         );
         assert_eq!(
@@ -1331,11 +1444,11 @@ mod tests {
             Err(&expected_error)
         );
         assert_eq!(
-            has_valid_redelegate_args(&args).as_ref(),
+            has_valid_redelegate_args(&chainspec, &args).as_ref(),
             Err(&expected_error)
         );
         assert_eq!(
-            has_valid_add_reservations_args(&args).as_ref(),
+            has_valid_add_reservations_args(&chainspec, &args).as_ref(),
             Err(&expected_error)
         );
         assert_eq!(
