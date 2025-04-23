@@ -184,7 +184,7 @@ where
             casper::write(to_remove_context_key, &entry_bytes).unwrap();
         } else {
             // There is no child, so we can safely purge this entry entirely.
-            purge_at_key(to_remove_context_key);
+            casper::remove(to_remove_context_key).unwrap();
         }
 
         // Edge case when removing tail
@@ -234,7 +234,10 @@ where
     pub fn clear(&mut self) {
         for key in self.keys() {
             let prefix = self.create_prefix_from_key(&key);
-            purge_at_key(Keyspace::Context(&prefix));
+            {
+                let key = Keyspace::Context(&prefix);
+                casper::remove(key).unwrap()
+            };
         }
 
         self.tail_key_hash = None;
@@ -270,6 +273,13 @@ where
             current: self.tail_key_hash,
             _marker: PhantomData,
         }
+    }
+
+    /// Returns the number of entries in the map.
+    ///
+    /// This is an O(n) operation.
+    pub fn len(&self) -> usize {
+        self.iter().count()
     }
 
     /// Find the slot containing key, if any.
@@ -335,7 +345,14 @@ where
     }
 
     fn get_entry(&self, keyspace: Keyspace) -> Option<IterableMapEntry<K, V>> {
-        read_into_vec(keyspace).and_then(|vec| borsh::from_slice(&vec).ok())
+        match read_into_vec(keyspace) {
+            Ok(Some(vec)) => {
+                let entry: IterableMapEntry<K, V> = borsh::from_slice(&vec).unwrap();
+                Some(entry)
+            }
+            Ok(None) => None,
+            Err(_) => None,
+        }
     }
 
     fn create_prefix_from_key(&self, key: &K) -> Vec<u8> {
@@ -359,12 +376,6 @@ where
         context_key.put_u64_le(hash.index);
         context_key
     }
-}
-
-// TODO: Rn we just overwrite with empty arr ¯\_(ツ)_/¯
-// This is placeholder, and is to be removed when the appropriate functionality merges.
-fn purge_at_key(key: Keyspace) {
-    casper::write(key, &[]).unwrap();
 }
 
 /// Iterator over entries in an [`IterableMap`].
@@ -420,16 +431,22 @@ where
 
         let context_key = Keyspace::Context(&key_bytes);
 
-        let entry = read_into_vec(context_key)
-            .map(|vec| borsh::from_slice::<IterableMapEntry<K, V>>(&vec).unwrap())?;
-
-        self.current = entry.previous;
-        Some((
-            entry.key,
-            entry
-                .value
-                .expect("Tombstone values should be unlinked on removal"),
-        ))
+        match read_into_vec(context_key) {
+            Ok(Some(vec)) => {
+                let entry: IterableMapEntry<K, V> = borsh::from_slice(&vec).unwrap();
+                self.current = entry.previous;
+                return Some((
+                    entry.key,
+                    entry
+                        .value
+                        .expect("Tombstone values should be unlinked on removal"),
+                ));
+            }
+            Ok(None) => {
+                return None;
+            }
+            Err(_) => return None,
+        }
     }
 }
 
@@ -438,17 +455,24 @@ mod tests {
     use super::*;
     use crate::casper::native::dispatch;
 
+    const TEST_MAP_PREFIX: &str = "test_map";
+
     #[test]
     fn insert_and_get() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
+            assert_eq!(map.len(), 0);
 
             assert_eq!(map.get(&1), None);
 
             map.insert(1, "a".to_string());
+            assert_eq!(map.len(), 1);
+
             assert_eq!(map.get(&1), Some("a".to_string()));
 
             map.insert(2, "b".to_string());
+            assert_eq!(map.len(), 2);
+
             assert_eq!(map.get(&2), Some("b".to_string()));
         })
         .unwrap();
@@ -457,7 +481,7 @@ mod tests {
     #[test]
     fn overwrite_existing_key() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
 
             assert_eq!(map.insert(1, "a".to_string()), None);
             assert_eq!(map.insert(1, "b".to_string()), Some("a".to_string()));
@@ -469,12 +493,14 @@ mod tests {
     #[test]
     fn remove_tail_entry() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
-
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
+            assert_eq!(map.len(), 0);
             map.insert(1, "a".to_string());
+            assert_eq!(map.len(), 1);
             map.insert(2, "b".to_string());
-
+            assert_eq!(map.len(), 2);
             assert_eq!(map.remove(&2), Some("b".to_string()));
+            assert_eq!(map.len(), 1);
             assert_eq!(map.get(&2), None);
             assert_eq!(map.get(&1), Some("a".to_string()));
         })
@@ -484,16 +510,26 @@ mod tests {
     #[test]
     fn remove_middle_entry() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
+            assert_eq!(map.len(), 0);
 
             map.insert(1, "a".to_string());
+            assert_eq!(map.len(), 1);
+
             map.insert(2, "b".to_string());
+            assert_eq!(map.len(), 2);
+
             map.insert(3, "c".to_string());
+            assert_eq!(map.len(), 3);
 
             assert_eq!(map.remove(&2), Some("b".to_string()));
+            assert_eq!(map.len(), 2);
+
             assert_eq!(map.get(&2), None);
             assert_eq!(map.get(&1), Some("a".to_string()));
             assert_eq!(map.get(&3), Some("c".to_string()));
+
+            assert_eq!(map.len(), 2);
         })
         .unwrap();
     }
@@ -501,7 +537,7 @@ mod tests {
     #[test]
     fn remove_nonexistent_key_does_nothing() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
 
             map.insert(1, "a".to_string());
 
@@ -514,13 +550,13 @@ mod tests {
     #[test]
     fn iterates_all_entries_in_reverse_insertion_order() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
 
             map.insert(1, "a".to_string());
             map.insert(2, "b".to_string());
             map.insert(3, "c".to_string());
 
-            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            let values: Vec<_> = map.values().collect();
             assert_eq!(
                 values,
                 vec!["c".to_string(), "b".to_string(), "a".to_string(),]
@@ -532,7 +568,7 @@ mod tests {
     #[test]
     fn iteration_skips_deleted_entries() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
 
             map.insert(1, "a".to_string());
             map.insert(2, "b".to_string());
@@ -540,7 +576,7 @@ mod tests {
 
             map.remove(&2);
 
-            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            let values: Vec<_> = map.values().collect();
             assert_eq!(values, vec!["c".to_string(), "a".to_string(),]);
         })
         .unwrap();
@@ -549,7 +585,7 @@ mod tests {
     #[test]
     fn empty_map_behaves_sanely() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
 
             assert_eq!(map.get(&1), None);
             assert_eq!(map.remove(&1), None);
@@ -576,7 +612,7 @@ mod tests {
     #[test]
     fn insert_same_value_under_different_keys() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
 
             map.insert(1, "shared".to_string());
             map.insert(2, "shared".to_string());
@@ -590,7 +626,7 @@ mod tests {
     #[test]
     fn clear_removes_all_entries() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
             map.insert(1, "a".to_string());
             map.insert(2, "b".to_string());
             map.clear();
@@ -603,7 +639,7 @@ mod tests {
     #[test]
     fn keys_returns_reverse_insertion_order() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
             map.insert(1, "a".to_string());
             map.insert(2, "b".to_string());
             let hashes: Vec<_> = map.keys().collect();
@@ -615,7 +651,7 @@ mod tests {
     #[test]
     fn values_returns_values_in_reverse_insertion_order() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
             map.insert(1, "a".to_string());
             map.insert(2, "b".to_string());
             let values: Vec<_> = map.values().collect();
@@ -627,7 +663,7 @@ mod tests {
     #[test]
     fn contains_key_returns_correctly() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
             assert!(!map.contains_key(&1));
             map.insert(1, "a".to_string());
             assert!(map.contains_key(&1));
@@ -640,7 +676,7 @@ mod tests {
     #[test]
     fn multiple_removals_and_insertions() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
             map.insert(1, "a".to_string());
             map.insert(2, "b".to_string());
             map.insert(3, "c".to_string());
@@ -650,7 +686,7 @@ mod tests {
             assert_eq!(map.get(&3), Some("c".to_string()));
 
             map.insert(4, "d".to_string());
-            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            let values: Vec<_> = map.values().collect();
             assert_eq!(values, vec!["d", "c", "a"]);
         })
         .unwrap();
@@ -675,7 +711,7 @@ mod tests {
                 id: 2,
                 name: "Key2".to_string(),
             };
-            let mut map = IterableMap::<TestKey, String>::new("test_map");
+            let mut map = IterableMap::<TestKey, String>::new(TEST_MAP_PREFIX);
 
             map.insert(key1.clone(), "a".to_string());
             map.insert(key2.clone(), "b".to_string());
@@ -689,7 +725,7 @@ mod tests {
     #[test]
     fn remove_middle_of_long_chain() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
             map.insert(1, "a".to_string());
             map.insert(2, "b".to_string());
             map.insert(3, "c".to_string());
@@ -699,7 +735,7 @@ mod tests {
             // The order is 5,4,3,2,1
             map.remove(&3); // Remove the middle entry
 
-            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            let values: Vec<_> = map.values().collect();
             assert_eq!(values, vec!["e", "d", "b", "a"]);
 
             // Check that entry 4's previous is now 2's hash
@@ -714,13 +750,13 @@ mod tests {
     #[test]
     fn insert_after_remove_updates_head() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
             map.insert(1, "a".to_string());
             map.insert(2, "b".to_string());
             map.remove(&2);
             map.insert(3, "c".to_string());
 
-            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            let values: Vec<_> = map.values().collect();
             assert_eq!(values, vec!["c", "a"]);
         })
         .unwrap();
@@ -729,7 +765,7 @@ mod tests {
     #[test]
     fn reinsert_removed_key() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
             map.insert(1, "a".to_string());
             map.remove(&1);
             map.insert(1, "b".to_string());
@@ -743,7 +779,7 @@ mod tests {
     #[test]
     fn iteration_reflects_modifications() {
         dispatch(|| {
-            let mut map = IterableMap::<u64, String>::new("test_map");
+            let mut map = IterableMap::<u64, String>::new(TEST_MAP_PREFIX);
             map.insert(1, "a".to_string());
             map.insert(2, "b".to_string());
             let mut iter = map.iter();
@@ -751,7 +787,7 @@ mod tests {
 
             map.remove(&2);
             map.insert(3, "c".to_string());
-            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            let values: Vec<_> = map.values().collect();
             assert_eq!(values, vec!["c", "a"]);
         })
         .unwrap();
@@ -765,7 +801,7 @@ mod tests {
         impl IterableMapHash for UnitKey {}
 
         dispatch(|| {
-            let mut map = IterableMap::<UnitKey, String>::new("test_map");
+            let mut map = IterableMap::<UnitKey, String>::new(TEST_MAP_PREFIX);
             map.insert(UnitKey, "value".to_string());
             assert_eq!(map.get(&UnitKey), Some("value".to_string()));
         })
@@ -787,7 +823,7 @@ mod tests {
     #[test]
     fn basic_collision_handling() {
         dispatch(|| {
-            let mut map = IterableMap::<CollidingKey, String>::new("test_map");
+            let mut map = IterableMap::<CollidingKey, String>::new(TEST_MAP_PREFIX);
 
             // Both keys will have same hash but different actual keys
             let k1 = CollidingKey(42, 1);
@@ -805,7 +841,7 @@ mod tests {
     #[test]
     fn tombstone_handling() {
         dispatch(|| {
-            let mut map = IterableMap::<CollidingKey, String>::new("test_map");
+            let mut map = IterableMap::<CollidingKey, String>::new(TEST_MAP_PREFIX);
 
             let k1 = CollidingKey(42, 1);
             let k2 = CollidingKey(42, 2);
@@ -823,7 +859,7 @@ mod tests {
             assert!(entry.unwrap().value.is_none());
 
             // Verify chain integrity
-            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            let values: Vec<_> = map.values().collect();
             assert_eq!(values, vec!["third", "first"]);
         })
         .unwrap();
@@ -832,7 +868,7 @@ mod tests {
     #[test]
     fn tombstone_reuse() {
         dispatch(|| {
-            let mut map = IterableMap::<CollidingKey, String>::new("test_map");
+            let mut map = IterableMap::<CollidingKey, String>::new(TEST_MAP_PREFIX);
 
             let k1 = CollidingKey(42, 1);
             let k2 = CollidingKey(42, 2);
@@ -856,7 +892,7 @@ mod tests {
     #[test]
     fn full_deletion_handling() {
         dispatch(|| {
-            let mut map = IterableMap::<CollidingKey, String>::new("test_map");
+            let mut map = IterableMap::<CollidingKey, String>::new(TEST_MAP_PREFIX);
 
             let k1 = CollidingKey(42, 1);
             map.insert(k1.clone(), "lonely".to_string());
@@ -873,7 +909,7 @@ mod tests {
     #[test]
     fn collision_chain_iteration() {
         dispatch(|| {
-            let mut map = IterableMap::<CollidingKey, String>::new("test_map");
+            let mut map = IterableMap::<CollidingKey, String>::new(TEST_MAP_PREFIX);
 
             let keys = [
                 CollidingKey(42, 1),
@@ -888,7 +924,7 @@ mod tests {
             // Remove middle entry
             map.remove(&keys[1]);
 
-            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            let values: Vec<_> = map.values().collect();
             assert_eq!(values, vec!["value-2", "value-0"]);
         })
         .unwrap();
@@ -897,7 +933,7 @@ mod tests {
     #[test]
     fn complex_collision_chain() {
         dispatch(|| {
-            let mut map = IterableMap::<CollidingKey, String>::new("test_map");
+            let mut map = IterableMap::<CollidingKey, String>::new(TEST_MAP_PREFIX);
 
             // Create 5 colliding keys
             let keys: Vec<_> = (0..5).map(|i| CollidingKey(42, i)).collect();
@@ -934,7 +970,7 @@ mod tests {
     #[test]
     fn cross_bucket_reference() {
         dispatch(|| {
-            let mut map = IterableMap::<CollidingKey, String>::new("test_map");
+            let mut map = IterableMap::<CollidingKey, String>::new(TEST_MAP_PREFIX);
 
             // Create keys with different hashes but chained references
             let k1 = CollidingKey(1, 0);
@@ -949,7 +985,7 @@ mod tests {
             map.remove(&k2);
 
             // Verify iteration skips removed entry
-            let values: Vec<_> = map.iter().map(|(_, v)| v).collect();
+            let values: Vec<_> = map.values().collect();
             assert_eq!(values, vec!["third", "first"]);
         })
         .unwrap();

@@ -6,7 +6,6 @@ use crate::{
 };
 
 use casper_executor_wasm_common::keyspace::Keyspace;
-use const_fnv1a_hash::fnv1a_hash_str_64;
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
 #[borsh(crate = "crate::serializers::borsh")]
@@ -17,9 +16,7 @@ pub struct Vector<T> {
 }
 
 impl<T: CasperABI> CasperABI for Vector<T> {
-    fn populate_definitions(_definitions: &mut Definitions) {
-        // definitions.insert(T::declaration(), T::definition());
-    }
+    fn populate_definitions(_definitions: &mut Definitions) {}
 
     fn declaration() -> Declaration {
         format!("Vector<{}>", T::declaration())
@@ -41,13 +38,6 @@ impl<T: CasperABI> CasperABI for Vector<T> {
     }
 }
 
-/// Computes the prefix for a given key.
-#[allow(dead_code)]
-pub(crate) const fn compute_prefix(input: &str) -> [u8; 8] {
-    let hash = fnv1a_hash_str_64(input);
-    hash.to_le_bytes()
-}
-
 impl<T> Vector<T>
 where
     T: BorshSerialize + BorshDeserialize,
@@ -66,8 +56,7 @@ where
 
     /// Appends an element to the back of a collection.
     pub fn push(&mut self, value: T) {
-        let mut prefix_bytes = self.prefix.as_bytes().to_owned();
-        prefix_bytes.extend(&self.length.to_le_bytes());
+        let prefix_bytes = self.compute_prefix_bytes_for_index(self.length);
         let prefix = Keyspace::Context(&prefix_bytes);
         casper::write(prefix, &borsh::to_vec(&value).unwrap()).unwrap();
         self.length += 1;
@@ -75,6 +64,9 @@ where
 
     /// Removes the last element from a vector and returns it, or None if it is empty.
     pub fn pop(&mut self) -> Option<T> {
+        if self.is_empty() {
+            return None;
+        }
         self.swap_remove(self.len() - 1)
     }
 
@@ -90,10 +82,9 @@ where
 
     /// Returns an element at index, deserialized.
     pub fn get(&self, index: u64) -> Option<T> {
-        let mut prefix_bytes = self.prefix.as_bytes().to_owned();
-        prefix_bytes.extend(&index.to_le_bytes());
-        let prefix = Keyspace::Context(&prefix_bytes);
-        read_into_vec(prefix)
+        let prefix = self.compute_prefix_bytes_for_index(index);
+        let item_keyspace = Keyspace::Context(&prefix);
+        read_into_vec(item_keyspace)
             .unwrap()
             .map(|vec| borsh::from_slice(&vec).unwrap())
     }
@@ -121,10 +112,16 @@ where
         self.length += 1;
     }
 
-    /// Clears the vector, removing all values.
+    /// Clears the vector, removing all values from the global state.
+    /// This is potentially expensive, as it requires an iteration over all elements to remove them
+    /// from the global state.
     pub fn clear(&mut self) {
+        for i in 0..self.length {
+            let prefix_bytes = self.compute_prefix_bytes_for_index(i);
+            let item_keyspace = Keyspace::Context(&prefix_bytes);
+            casper::remove(item_keyspace).unwrap();
+        }
         self.length = 0;
-        // TODO: Remove all elements from global state
     }
 
     /// Returns the number of elements in the vector, also referred to as its ‘length’.
@@ -205,27 +202,23 @@ where
             return None;
         }
 
-        let value = {
-            let prefix_bytes = self.compute_prefix_bytes_for_index(index);
-            let item_keyspace = Keyspace::Context(&prefix_bytes);
-
-            let value_bytes = read_into_vec(item_keyspace).unwrap()?;
-
-            // SAFETY: If the read above worked, then this won't panic.
-            casper::remove(item_keyspace).unwrap();
-
-            borsh::from_slice(&value_bytes).unwrap()
-        };
+        let value_to_remove = self.get(index).unwrap();
 
         // Shift elements to the left
-        for i in index..self.length - 1 {
-            let src_value = self.get(i + 1).unwrap();
-            self.write(i, src_value);
+        for i in index..(self.length - 1) {
+            if let Some(next_value) = self.get(i + 1) {
+                self.write(i, next_value);
+            }
         }
 
+        // Remove the last element from storage
         self.length -= 1;
+        casper::remove(Keyspace::Context(
+            &self.compute_prefix_bytes_for_index(self.length),
+        ))
+        .unwrap();
 
-        Some(value)
+        Some(value_to_remove)
     }
 
     /// Removes the element at the specified index and returns it.
@@ -245,7 +238,10 @@ where
         }
 
         self.length -= 1;
-        // TODO: remove self.len() - 1 from global state
+        casper::remove(Keyspace::Context(
+            &self.compute_prefix_bytes_for_index(self.length),
+        ))
+        .unwrap();
 
         Some(value_to_remove)
     }
@@ -258,17 +254,16 @@ where
         let mut i = 0;
         while i < self.length {
             if !f(&self.get(i).unwrap()) {
-                self.remove(i);
+                self.remove(i).unwrap();
             } else {
                 i += 1;
             }
         }
     }
 
+    #[inline(always)]
     fn compute_prefix_bytes_for_index(&self, index: u64) -> Vec<u8> {
-        let mut prefix_bytes = self.prefix.as_bytes().to_owned();
-        prefix_bytes.extend(&index.to_le_bytes());
-        prefix_bytes
+        compute_prefix_bytes_for_index(&self.prefix, index)
     }
 
     fn write(&self, index: u64, value: T) {
@@ -278,20 +273,50 @@ where
     }
 }
 
+fn compute_prefix_bytes_for_index(prefix: &str, index: u64) -> Vec<u8> {
+    let mut prefix_bytes = prefix.as_bytes().to_owned();
+    prefix_bytes.extend(&index.to_le_bytes());
+    prefix_bytes
+}
+
 #[cfg(all(test, feature = "std"))]
 pub(crate) mod tests {
+    use core::ptr::NonNull;
+
     use self::casper::native::dispatch;
 
     use super::*;
 
+    const TEST_VEC_PREFIX: &str = "test_vector";
+    type VecU64 = Vector<u64>;
+
+    fn get_vec_elements_from_storage(prefix: &str) -> Vec<u64> {
+        let mut values = Vec::new();
+        for idx in 0..64 {
+            let prefix = compute_prefix_bytes_for_index(prefix, idx);
+            let mut value: [u8; 8] = [0; 8];
+            let result = casper::read(Keyspace::Context(&prefix), |size| {
+                assert_eq!(size, 8);
+                NonNull::new(value.as_mut_ptr())
+            })
+            .unwrap();
+
+            if result.is_some() {
+                values.push(u64::from_le_bytes(value));
+            }
+        }
+        values
+    }
+
     #[test]
     fn should_not_panic_with_empty_vec() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
             assert_eq!(vec.len(), 0);
             assert_eq!(vec.remove(0), None);
             vec.retain(|_| false);
             let _ = vec.binary_search(&123);
+            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), Vec::new());
         })
         .unwrap();
     }
@@ -299,7 +324,7 @@ pub(crate) mod tests {
     #[test]
     fn should_retain() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
 
             vec.push(1);
             vec.push(2);
@@ -311,6 +336,8 @@ pub(crate) mod tests {
 
             let vec: Vec<_> = vec.iter().collect();
             assert_eq!(vec, vec![2, 4]);
+
+            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), vec![2, 4]);
         })
         .unwrap();
     }
@@ -318,7 +345,7 @@ pub(crate) mod tests {
     #[test]
     fn test_vec() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
 
             assert!(vec.get(0).is_none());
             vec.push(111);
@@ -356,18 +383,23 @@ pub(crate) mod tests {
                 assert_eq!(iter.next(), None);
             }
 
-            let vec2 = Vector::<u64>::new("test1");
+            assert_eq!(
+                get_vec_elements_from_storage(TEST_VEC_PREFIX),
+                vec![41, 43, 42, 111, 222, 333]
+            );
+
+            let vec2 = VecU64::new("test1");
             assert_eq!(vec2.get(0), None);
+
+            assert_eq!(get_vec_elements_from_storage("test1"), vec![]);
         })
         .unwrap();
     }
 
     #[test]
-    #[ignore]
-    // TODO: This should work when we allow purging GS entries
     fn test_pop() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
             assert_eq!(vec.pop(), None);
             vec.push(1);
             vec.push(2);
@@ -375,6 +407,8 @@ pub(crate) mod tests {
             assert_eq!(vec.len(), 1);
             assert_eq!(vec.pop(), Some(1));
             assert!(vec.is_empty());
+
+            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), Vec::new());
         })
         .unwrap();
     }
@@ -382,7 +416,7 @@ pub(crate) mod tests {
     #[test]
     fn test_contains() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
             vec.push(1);
             vec.push(2);
             assert!(vec.contains(&1));
@@ -390,16 +424,15 @@ pub(crate) mod tests {
             assert!(!vec.contains(&3));
             vec.remove(0);
             assert!(!vec.contains(&1));
+            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), vec![2]);
         })
         .unwrap();
     }
 
     #[test]
-    #[ignore]
-    // TODO: This should work when we allow purging GS entries
     fn test_clear() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
             vec.push(1);
             vec.push(2);
             vec.clear();
@@ -408,6 +441,8 @@ pub(crate) mod tests {
             assert_eq!(vec.get(0), None);
             vec.push(3);
             assert_eq!(vec.get(0), Some(3));
+
+            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), vec![3]);
         })
         .unwrap();
     }
@@ -415,7 +450,7 @@ pub(crate) mod tests {
     #[test]
     fn test_binary_search() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
             vec.push(1);
             vec.push(2);
             vec.push(3);
@@ -431,7 +466,7 @@ pub(crate) mod tests {
     #[test]
     fn test_swap_remove() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
             vec.push(1);
             vec.push(2);
             vec.push(3);
@@ -440,6 +475,8 @@ pub(crate) mod tests {
             assert_eq!(vec.iter().collect::<Vec<_>>(), vec![1, 4, 3]);
             assert_eq!(vec.swap_remove(2), Some(3));
             assert_eq!(vec.iter().collect::<Vec<_>>(), vec![1, 4]);
+
+            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), vec![1, 4]);
         })
         .unwrap();
     }
@@ -447,10 +484,11 @@ pub(crate) mod tests {
     #[test]
     fn test_insert_at_len() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
             vec.push(1);
             vec.insert(1, 2);
             assert_eq!(vec.iter().collect::<Vec<_>>(), vec![1, 2]);
+            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), vec![1, 2]);
         })
         .unwrap();
     }
@@ -463,7 +501,7 @@ pub(crate) mod tests {
         }
 
         dispatch(|| {
-            let mut vec = Vector::<TestStruct>::new("test");
+            let mut vec = Vector::new(TEST_VEC_PREFIX);
             vec.push(TestStruct { field: 1 });
             vec.push(TestStruct { field: 2 });
             assert_eq!(vec.get(1), Some(TestStruct { field: 2 }));
@@ -472,21 +510,22 @@ pub(crate) mod tests {
     }
 
     #[test]
-    #[ignore]
-    // TODO: This should work when we allow purging GS entries
     fn test_multiple_operations() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
             assert!(vec.is_empty());
             vec.push(1);
             vec.insert(0, 2);
             vec.push(3);
             assert_eq!(vec.iter().collect::<Vec<_>>(), vec![2, 1, 3]);
             assert_eq!(vec.swap_remove(0), Some(2));
-            assert_eq!(vec.pop(), Some(3));
-            assert_eq!(vec.get(0), Some(1));
+            assert_eq!(vec.iter().collect::<Vec<_>>(), vec![3, 1]);
+            assert_eq!(vec.pop(), Some(1));
+            assert_eq!(vec.get(0), Some(3));
             vec.clear();
             assert!(vec.is_empty());
+
+            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), Vec::new());
         })
         .unwrap();
     }
@@ -494,7 +533,7 @@ pub(crate) mod tests {
     #[test]
     fn test_remove_invalid_index() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
             vec.push(1);
             assert_eq!(vec.remove(1), None);
             assert_eq!(vec.remove(0), Some(1));
@@ -507,7 +546,7 @@ pub(crate) mod tests {
     #[should_panic(expected = "index out of bounds")]
     fn test_insert_out_of_bounds() {
         dispatch(|| {
-            let mut vec = Vector::<u64>::new("test");
+            let mut vec = VecU64::new(TEST_VEC_PREFIX);
             vec.insert(1, 1);
         })
         .unwrap();
