@@ -435,17 +435,15 @@ where
             Ok(Some(vec)) => {
                 let entry: IterableMapEntry<K, V> = borsh::from_slice(&vec).unwrap();
                 self.current = entry.previous;
-                return Some((
+                Some((
                     entry.key,
                     entry
                         .value
                         .expect("Tombstone values should be unlinked on removal"),
-                ));
+                ))
             }
-            Ok(None) => {
-                return None;
-            }
-            Err(_) => return None,
+            Ok(None) => None,
+            Err(_) => None,
         }
     }
 }
