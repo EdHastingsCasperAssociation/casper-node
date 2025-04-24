@@ -316,7 +316,10 @@ pub(crate) mod tests {
             assert_eq!(vec.remove(0), None);
             vec.retain(|_| false);
             let _ = vec.binary_search(&123);
-            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), Vec::new());
+            assert_eq!(
+                get_vec_elements_from_storage(TEST_VEC_PREFIX),
+                Vec::<u64>::new()
+            );
         })
         .unwrap();
     }
@@ -391,7 +394,7 @@ pub(crate) mod tests {
             let vec2 = VecU64::new("test1");
             assert_eq!(vec2.get(0), None);
 
-            assert_eq!(get_vec_elements_from_storage("test1"), vec![]);
+            assert_eq!(get_vec_elements_from_storage("test1"), Vec::<u64>::new());
         })
         .unwrap();
     }
@@ -408,7 +411,10 @@ pub(crate) mod tests {
             assert_eq!(vec.pop(), Some(1));
             assert!(vec.is_empty());
 
-            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), Vec::new());
+            assert_eq!(
+                get_vec_elements_from_storage(TEST_VEC_PREFIX),
+                Vec::<u64>::new()
+            );
         })
         .unwrap();
     }
@@ -525,7 +531,10 @@ pub(crate) mod tests {
             vec.clear();
             assert!(vec.is_empty());
 
-            assert_eq!(get_vec_elements_from_storage(TEST_VEC_PREFIX), Vec::new());
+            assert_eq!(
+                get_vec_elements_from_storage(TEST_VEC_PREFIX),
+                Vec::<u64>::new()
+            );
         })
         .unwrap();
     }
