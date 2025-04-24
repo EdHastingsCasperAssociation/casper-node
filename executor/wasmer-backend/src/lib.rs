@@ -380,6 +380,7 @@ where
                     },
                 ),
             );
+
             imports.define(
                 "env",
                 "casper_print",
@@ -650,6 +651,19 @@ where
                             payload_ptr,
                             payload_size,
                         )
+                    },
+                ),
+            );
+
+            imports.define(
+                "env",
+                "env_info",
+                Function::new_typed_with_env(
+                    &mut store,
+                    &function_env,
+                    |env: FunctionEnvMut<WasmerEnv<S, E>>, info_ptr| {
+                        let wasmer_caller = WasmerCaller { env };
+                        host::env_info(wasmer_caller, info_ptr)
                     },
                 ),
             );

@@ -38,6 +38,7 @@ use casper_types::{
 use either::Either;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
+use safe_transmute::TriviallyTransmutable;
 use tracing::{error, info, warn};
 
 use crate::{
@@ -1389,32 +1390,42 @@ pub fn casper_env_block_time<S: GlobalStateReader, E: Executor>(
     Ok(block_time.value())
 }
 
+#[derive(Clone, Copy)]
 pub struct EnvInfo {
-    caller_id: u32,
+    block_time: u64,
     transferred_value: u64,
     balance: u32,
-    block_time: u64,
+    caller_id: u32,
 }
+
+unsafe impl TriviallyTransmutable for EnvInfo {}
 
 pub fn env_info<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
-) -> VMResult<EnvInfo> {
+    info_ptr: u32,
+) -> VMResult<u32> {
     let block_time_cost = caller.context().config.host_function_costs().env_info;
     charge_host_function_call(&mut caller, &block_time_cost, [])?;
 
-    let caller_id = 0; // TODO
+    let caller_id: u32 = 0; // TODO
 
     let transferred_value = caller.context().transferred_value;
 
-    let balance = 0; // TODO
+    let balance: u32 = 0; // TODO
 
     let block_time = caller.context().block_time.value();
-    Ok(EnvInfo {
-        caller_id,
-        transferred_value,
-        balance,
-        block_time,
-    })
+
+    // `EnvInfo` in little-endian representation.
+    let env_info_le = EnvInfo {
+        caller_id: caller_id.to_le(),
+        transferred_value: transferred_value.to_le(),
+        balance: balance.to_le(),
+        block_time: block_time.to_le(),
+    };
+    let env_info_bytes = safe_transmute::transmute_one_to_bytes(&env_info_le);
+    caller.memory_write(info_ptr, env_info_bytes)?;
+
+    Ok(HOST_ERROR_SUCCESS)
 }
 
 pub fn casper_emit<S: GlobalStateReader, E: Executor>(
