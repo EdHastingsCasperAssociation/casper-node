@@ -9,7 +9,7 @@ extern crate alloc;
 use casper_macros::casper;
 use casper_sdk::{
     casper::{self, emit, emit_raw, Entity},
-    casper_executor_wasm_common::error::CommonResult,
+    casper_executor_wasm_common::{error::CommonResult, keyspace::Keyspace},
     log,
     types::{Address, CallError},
 };
@@ -627,6 +627,38 @@ fn perform_test(seed: &mut Seed, flipper_address: Address) {
             Err(CommonResult::TooManyTopics),
             "Emitting message with small payload failed"
         );
+    }
+
+    {
+        next_test(&mut counter, "Removing from global state");
+        let key = [0, 1, 2, 3];
+        let value_1 = [4, 5, 6, 7];
+        let value_2 = [8, 9, 10, 11, 12, 13, 14, 15];
+        let keyspace = Keyspace::Context(&key);
+        // No value exists
+        assert_eq!(casper::read(keyspace, |_size| None), Ok(None));
+
+        // Write a value
+        casper::write(keyspace, &value_1).unwrap();
+        // Value exists
+        assert_eq!(casper::read_into_vec(keyspace), Ok(Some(value_1.to_vec())));
+        // Remove the value
+        casper::remove(keyspace).unwrap();
+        // No value exists
+        assert_eq!(casper::read_into_vec(keyspace), Ok(None));
+        // Removing again (aka removing non-existent key) should raise an error
+        assert_eq!(casper::remove(keyspace), Err(CommonResult::NotFound));
+        // Re-reading already purged value wouldn't be an issue
+        assert_eq!(casper::read_into_vec(keyspace), Ok(None));
+        // Write a new value under same key
+        casper::write(keyspace, &value_2).unwrap();
+        // New value exists
+        assert_eq!(casper::read_into_vec(keyspace), Ok(Some(value_2.to_vec())));
+
+        // Attempting to remove a definetely non-existent key should be an error
+        let keyspace = Keyspace::Context(b"this key definetely does not exists");
+        let result = casper::remove(keyspace);
+        assert_eq!(result, Err(CommonResult::NotFound));
     }
 
     log!("👋 Goodbye");

@@ -1,6 +1,6 @@
-use casper_executor_wasm_common::error::TrapCode;
-use casper_executor_wasm_interface::{executor::Executor, VMError, VMResult};
+use casper_executor_wasm_interface::{executor::Executor, VMResult};
 use casper_storage::global_state::GlobalStateReader;
+use tracing::warn;
 use wasmer::{FunctionEnv, FunctionEnvMut, Imports, Store};
 
 use casper_sdk_sys::for_each_host_function;
@@ -43,14 +43,15 @@ impl<Arg1: WasmerConvert, Arg2: WasmerConvert, Ret: WasmerConvert> WasmerConvert
     type Output = u32; // Function pointers are 32-bit addressable
 }
 
+const DEFAULT_ENV_NAME: &str = "env";
+
 /// This function will populate imports object with all host functions that are defined.
-#[allow(dead_code)]
-pub(crate) fn populate_imports<S: GlobalStateReader + 'static, E: Executor + 'static>(
-    imports: &mut Imports,
-    env_name: &str,
+pub(crate) fn generate_casper_imports<S: GlobalStateReader + 'static, E: Executor + 'static>(
     store: &mut Store,
-    function_env: &FunctionEnv<WasmerEnv<S, E>>,
-) {
+    env: &FunctionEnv<WasmerEnv<S, E>>,
+) -> Imports {
+    let mut imports = Imports::new();
+
     macro_rules! visit_host_function {
         (@convert_ret $ret:ty) => {
             <$ret as $crate::imports::WasmerConvert>::Output
@@ -58,32 +59,36 @@ pub(crate) fn populate_imports<S: GlobalStateReader + 'static, E: Executor + 'st
         (@convert_ret) => { () };
         ( $( $(#[$cfg:meta])? $vis:vis fn $name:ident $(( $($arg:ident: $argty:ty,)* ))? $(-> $ret:ty)?;)+) => {
             $(
-                imports.define(env_name, stringify!($name), wasmer::Function::new_typed_with_env(
+                imports.define($crate::imports::DEFAULT_ENV_NAME, stringify!($name), wasmer::Function::new_typed_with_env(
                     store,
-                    &function_env,
+                    env,
                     |
                         env: FunctionEnvMut<WasmerEnv<S, E>>,
                         // List all types and statically mapped C types into wasm types
                         $($($arg: <$argty as $crate::imports::WasmerConvert>::Output,)*)?
-                    | {
+                    | -> VMResult<visit_host_function!(@convert_ret $($ret)?)> {
                         let wasmer_caller = $crate::WasmerCaller { env };
 
-                        // Dispatch to the actual host function
-                        let _res = casper_executor_wasm_host::host::$name(wasmer_caller, $($($arg,)*)?);
+                        // Dispatch to the actual host function. This also ensures that the return type of host function impl has expected type.
+                        let result: VMResult< visit_host_function!(@convert_ret $($ret)?) > = casper_executor_wasm_host::host::$name(wasmer_caller, $($($arg,)*)?);
 
-                        // TODO: Unify results in the `host` module and create a VMResult out of it
-                        let result: VMResult< visit_host_function!(@convert_ret $($ret)?) > =  Err(VMError::Trap(TrapCode::UnreachableCodeReached));
-                        result
+                        match result {
+                            Ok(ret) => Ok(ret),
+                            Err(error) => {
+                                warn!(
+                                    "Host function {} failed with error: {:?}",
+                                    stringify!($name),
+                                    error
+                                );
+                                return Err(error);
+                            }
+                        }
                     }
                 ));
             )*
         }
     }
     for_each_host_function!(visit_host_function);
-}
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn smoke_test() {}
+    imports
 }

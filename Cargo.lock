@@ -940,6 +940,7 @@ dependencies = [
  "casper-storage",
  "casper-types",
  "regex",
+ "tracing",
  "wasmer",
  "wasmer-compiler-singlepass",
  "wasmer-middlewares",

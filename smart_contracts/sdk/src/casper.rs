@@ -168,6 +168,19 @@ pub fn write(key: Keyspace, value: &[u8]) -> Result<(), CommonResult> {
     result_from_code(ret)
 }
 
+/// Remove from the global state.
+pub fn remove(key: Keyspace) -> Result<(), CommonResult> {
+    let (key_space, key_bytes) = match key {
+        Keyspace::State => (KeyspaceTag::State as u64, &[][..]),
+        Keyspace::Context(key_bytes) => (KeyspaceTag::Context as u64, key_bytes),
+        Keyspace::NamedKey(key_bytes) => (KeyspaceTag::NamedKey as u64, key_bytes.as_bytes()),
+        Keyspace::PaymentInfo(payload) => (KeyspaceTag::PaymentInfo as u64, payload.as_bytes()),
+    };
+    let ret =
+        unsafe { casper_sdk_sys::casper_remove(key_space, key_bytes.as_ptr(), key_bytes.len()) };
+    result_from_code(ret)
+}
+
 /// Create a new contract instance.
 pub fn create(
     code: Option<&[u8]>,
@@ -294,10 +307,10 @@ pub fn upgrade(
 }
 
 /// Read from the global state into a vector.
-pub fn read_into_vec(key: Keyspace) -> Option<Vec<u8>> {
+pub fn read_into_vec(key: Keyspace) -> Result<Option<Vec<u8>>, CommonResult> {
     let mut vec = Vec::new();
-    let out = read(key, |size| reserve_vec_space(&mut vec, size)).unwrap();
-    out.map(|_input| vec)
+    let out = read(key, |size| reserve_vec_space(&mut vec, size))?.map(|()| vec);
+    Ok(out)
 }
 
 /// Read from the global state into a vector.

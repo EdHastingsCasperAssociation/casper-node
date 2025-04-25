@@ -309,6 +309,7 @@ mod tests {
         Lazy::new(|| HostFunctionCostsV2 {
             read: HostFunction::new(100, [0, 1, 2, 3, 4, 5]),
             write: HostFunction::new(101, [0, 1, 2, 3, 4]),
+            remove: HostFunction::new(114, [0, 1, 2]),
             copy_input: HostFunction::new(102, [0, 1]),
             ret: HostFunction::new(103, [0, 1]),
             create: HostFunction::new(104, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
