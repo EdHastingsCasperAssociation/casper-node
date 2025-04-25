@@ -649,8 +649,8 @@ dependencies = [
  "anyhow",
  "atty",
  "cargo_metadata 0.19.2",
- "casper-sdk 0.1.0",
- "casper-sdk-sys 0.1.0",
+ "casper-sdk",
+ "casper-sdk-sys",
  "clap 4.5.36",
  "clap-cargo",
  "crossterm",
@@ -848,7 +848,7 @@ dependencies = [
  "borsh",
  "bytes",
  "casper-execution-engine",
- "casper-executor-wasm-common 0.1.0",
+ "casper-executor-wasm-common",
  "casper-executor-wasm-host",
  "casper-executor-wasm-interface",
  "casper-executor-wasmer-backend",
@@ -873,23 +873,8 @@ dependencies = [
  "bitflags 2.9.0",
  "blake2 0.10.6",
  "borsh",
- "casper-sdk-sys 0.1.0",
+ "casper-sdk-sys",
  "hex",
- "num-derive",
- "num-traits",
- "serde",
- "thiserror 2.0.12",
-]
-
-[[package]]
-name = "casper-executor-wasm-common"
-version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git?branch=dev#430c33ce946bc64fa0b04a7dcd0d447c535fe5ad"
-dependencies = [
- "bitflags 2.9.0",
- "blake2 0.10.6",
- "borsh",
- "casper-sdk-sys 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
  "num-derive",
  "num-traits",
  "serde",
@@ -902,7 +887,7 @@ version = "0.1.0"
 dependencies = [
  "base16",
  "bytes",
- "casper-executor-wasm-common 0.1.0",
+ "casper-executor-wasm-common",
  "casper-executor-wasm-interface",
  "casper-storage",
  "casper-types",
@@ -921,7 +906,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "bytes",
- "casper-executor-wasm-common 0.1.0",
+ "casper-executor-wasm-common",
  "casper-storage",
  "casper-types",
  "parking_lot",
@@ -933,10 +918,10 @@ name = "casper-executor-wasmer-backend"
 version = "0.1.0"
 dependencies = [
  "bytes",
- "casper-executor-wasm-common 0.1.0",
+ "casper-executor-wasm-common",
  "casper-executor-wasm-host",
  "casper-executor-wasm-interface",
- "casper-sdk-sys 0.1.0",
+ "casper-sdk-sys",
  "casper-storage",
  "casper-types",
  "regex",
@@ -952,24 +937,8 @@ name = "casper-macros"
 version = "0.1.0"
 dependencies = [
  "blake2-rfc",
- "casper-executor-wasm-common 0.1.0",
- "casper-sdk-sys 0.1.0",
- "darling",
- "paste",
- "proc-macro2",
- "quote",
- "static_assertions",
- "syn 2.0.100",
-]
-
-[[package]]
-name = "casper-macros"
-version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git?branch=dev#430c33ce946bc64fa0b04a7dcd0d447c535fe5ad"
-dependencies = [
- "blake2-rfc",
- "casper-executor-wasm-common 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
- "casper-sdk-sys 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
+ "casper-executor-wasm-common",
+ "casper-sdk-sys",
  "darling",
  "paste",
  "proc-macro2",
@@ -1081,9 +1050,9 @@ dependencies = [
  "bitflags 2.9.0",
  "borsh",
  "bytes",
- "casper-executor-wasm-common 0.1.0",
- "casper-macros 0.1.0",
- "casper-sdk-sys 0.1.0",
+ "casper-executor-wasm-common",
+ "casper-macros",
+ "casper-sdk-sys",
  "cfg-if 1.0.0",
  "clap 4.5.36",
  "const-fnv1a-hash",
@@ -1097,32 +1066,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "casper-sdk"
-version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git?branch=dev#430c33ce946bc64fa0b04a7dcd0d447c535fe5ad"
-dependencies = [
- "bitflags 2.9.0",
- "borsh",
- "bytes",
- "casper-executor-wasm-common 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
- "casper-macros 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
- "casper-sdk-sys 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
- "cfg-if 1.0.0",
- "const-fnv1a-hash",
- "impl-trait-for-tuples",
- "linkme",
- "once_cell",
- "rand",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "casper-sdk-codegen"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "casper-sdk 0.1.0",
+ "casper-sdk",
  "codegen",
  "indexmap 2.9.0",
  "serde",
@@ -1135,11 +1083,6 @@ dependencies = [
 [[package]]
 name = "casper-sdk-sys"
 version = "0.1.0"
-
-[[package]]
-name = "casper-sdk-sys"
-version = "0.1.0"
-source = "git+https://github.com/casper-network/casper-node.git?branch=dev#430c33ce946bc64fa0b04a7dcd0d447c535fe5ad"
 
 [[package]]
 name = "casper-storage"
@@ -3926,18 +3869,18 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 
 [[package]]
 name = "linkme"
-version = "0.3.29"
+version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70fe496a7af8c406f877635cbf3cd6a9fac9d6f443f58691cd8afe6ce0971af4"
+checksum = "22d227772b5999ddc0690e733f734f95ca05387e329c4084fe65678c51198ffe"
 dependencies = [
  "linkme-impl",
 ]
 
 [[package]]
 name = "linkme-impl"
-version = "0.3.29"
+version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b01f197a15988fb5b2ec0a5a9800c97e70771499c456ad757d63b3c5e9b96e75"
+checksum = "71a98813fa0073a317ed6a8055dcd4722a49d9b862af828ee68449adb799b6be"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4994,14 +4937,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "project-template"
-version = "0.1.0"
-dependencies = [
- "casper-macros 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
- "casper-sdk 0.1.0 (git+https://github.com/casper-network/casper-node.git?branch=dev)",
 ]
 
 [[package]]
@@ -7319,7 +7254,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "vm2-cep18"
 version = "0.1.0"
 dependencies = [
- "casper-sdk 0.1.0",
+ "casper-sdk",
  "casper-sdk-codegen",
  "serde_json",
 ]
@@ -7329,7 +7264,7 @@ name = "vm2-cep18-caller"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "casper-sdk 0.1.0",
+ "casper-sdk",
  "vm2-cep18",
 ]
 
@@ -7337,15 +7272,16 @@ dependencies = [
 name = "vm2-flipper"
 version = "0.1.0"
 dependencies = [
- "casper-sdk 0.1.0",
+ "casper-sdk",
 ]
 
 [[package]]
 name = "vm2-harness"
 version = "0.1.0"
 dependencies = [
- "casper-macros 0.1.0",
- "casper-sdk 0.1.0",
+ "casper-executor-wasm-common",
+ "casper-macros",
+ "casper-sdk",
  "impls",
  "serde_json",
  "thiserror 2.0.12",
@@ -7355,16 +7291,16 @@ dependencies = [
 name = "vm2-host"
 version = "0.1.0"
 dependencies = [
- "casper-macros 0.1.0",
- "casper-sdk 0.1.0",
+ "casper-macros",
+ "casper-sdk",
 ]
 
 [[package]]
 name = "vm2-legacy-counter-proxy"
 version = "0.1.0"
 dependencies = [
- "casper-macros 0.1.0",
- "casper-sdk 0.1.0",
+ "casper-macros",
+ "casper-sdk",
  "casper-sdk-codegen",
  "serde_json",
 ]
@@ -7374,8 +7310,8 @@ name = "vm2-trait"
 version = "0.1.0"
 dependencies = [
  "base16",
- "casper-macros 0.1.0",
- "casper-sdk 0.1.0",
+ "casper-macros",
+ "casper-sdk",
  "serde_json",
 ]
 
@@ -7383,16 +7319,16 @@ dependencies = [
 name = "vm2-upgradable"
 version = "0.1.0"
 dependencies = [
- "casper-macros 0.1.0",
- "casper-sdk 0.1.0",
+ "casper-macros",
+ "casper-sdk",
 ]
 
 [[package]]
 name = "vm2-upgradable-v2"
 version = "0.1.0"
 dependencies = [
- "casper-macros 0.1.0",
- "casper-sdk 0.1.0",
+ "casper-macros",
+ "casper-sdk",
 ]
 
 [[package]]

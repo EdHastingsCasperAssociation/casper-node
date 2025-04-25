@@ -18,6 +18,7 @@ use casper_executor_wasm_common::{
     },
     flags::ReturnFlags,
 };
+#[cfg(not(target_arch = "wasm32"))]
 use rand::Rng;
 
 use super::Entity;
