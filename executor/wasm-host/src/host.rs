@@ -912,7 +912,7 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
     let entity_key = match EntityKindTag::from_u32(entity_kind) {
         Some(EntityKindTag::Account) => {
             if entity_addr_len != 32 {
-                return Ok(0);
+                return Ok(HOST_ERROR_SUCCESS);
             }
             let entity_addr = caller.memory_read(entity_addr_ptr, entity_addr_len as usize)?;
             let account_hash: AccountHash = AccountHash::new(entity_addr.try_into().unwrap());
@@ -957,16 +957,16 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
                                 ?smart_contract_key,
                                 "Unable to find latest addressible entity hash for contract"
                             );
-                            return Ok(0);
+                            return Ok(HOST_ERROR_SUCCESS);
                         }
                     }
                 }
                 Ok(Some(_)) => {
-                    return Ok(0);
+                    return Ok(HOST_ERROR_SUCCESS);
                 }
                 Ok(None) => {
                     // Not found, balance is 0
-                    return Ok(0);
+                    return Ok(HOST_ERROR_SUCCESS);
                 }
                 Err(error) => {
                     error!(
@@ -978,7 +978,7 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
                 }
             }
         }
-        None => return Ok(0),
+        None => return Ok(HOST_ERROR_SUCCESS),
     };
 
     let purse = match entity_key {
@@ -1394,33 +1394,143 @@ pub fn casper_env_block_time<S: GlobalStateReader, E: Executor>(
 pub struct EnvInfo {
     block_time: u64,
     transferred_value: u64,
-    balance: u32,
-    caller_id: u32,
+    balance: u64,
+    caller_id: [u8; 32],
+    entity_kind: u32,
 }
 
 unsafe impl TriviallyTransmutable for EnvInfo {}
 
 pub fn env_info<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
+    entity_addr_ptr: u32,
+    entity_addr_len: u32,
     info_ptr: u32,
 ) -> VMResult<u32> {
     let block_time_cost = caller.context().config.host_function_costs().env_info;
     charge_host_function_call(&mut caller, &block_time_cost, [])?;
 
-    let caller_id: u32 = 0; // TODO
+    // TODO: Decide whether we want to return the full address and entity kind or just the 32 bytes
+    // "unified".
+    let (entity_kind, caller_id) = match &caller.context().caller {
+        Key::Account(account_hash) => (0u32, account_hash.value()),
+        Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
+        other => panic!("Unexpected caller: {other:?}"),
+    };
 
     let transferred_value = caller.context().transferred_value;
 
-    let balance: u32 = 0; // TODO
+    let entity_key = match EntityKindTag::from_u32(entity_kind) {
+        Some(EntityKindTag::Account) => {
+            if entity_addr_len != 32 {
+                return Ok(HOST_ERROR_SUCCESS);
+            }
+            let entity_addr = caller.memory_read(entity_addr_ptr, entity_addr_len as usize)?;
+            let account_hash: AccountHash = AccountHash::new(entity_addr.try_into().unwrap());
+
+            let account_key = Key::Account(account_hash);
+            match caller.context_mut().tracking_copy.read(&account_key) {
+                Ok(Some(StoredValue::CLValue(clvalue))) => {
+
+                    let addressible_entity_key = clvalue.into_t::<Key>().expect("should be a key");
+                    Either::Right(addressible_entity_key)
+                }
+                Ok(Some(StoredValue::Account(account))) => {
+                    Either::Left(account.main_purse())
+                }
+                Ok(Some(other_entity)) => {
+                    panic!("Unexpected entity type: {other_entity:?}")
+                }
+                Ok(None) => return Ok(HOST_ERROR_SUCCESS),
+                Err(error) => panic!("Error while reading from storage; aborting key={account_key:?} error={error:?}"),
+            }
+        }
+        Some(EntityKindTag::Contract) => {
+            if entity_addr_len != 32 {
+                return Ok(HOST_ERROR_SUCCESS);
+            }
+            let hash_bytes = caller.memory_read(entity_addr_ptr, entity_addr_len as usize)?;
+            let hash_bytes: [u8; 32] = hash_bytes.try_into().unwrap(); // SAFETY: We checked for length.
+
+            let smart_contract_key = Key::SmartContract(hash_bytes);
+            match caller.context_mut().tracking_copy.read(&smart_contract_key) {
+                Ok(Some(StoredValue::SmartContract(smart_contract_package))) => {
+                    match smart_contract_package.versions().latest() {
+                        Some(addressible_entity_hash) => {
+                            let key = Key::AddressableEntity(EntityAddr::SmartContract(
+                                addressible_entity_hash.value(),
+                            ));
+                            // Either::Right(Key::AddressableEntity(*addressible_entity_hash))
+                            Either::Right(key)
+                        }
+                        None => {
+                            warn!(
+                                ?smart_contract_key,
+                                "Unable to find latest addressible entity hash for contract"
+                            );
+                            return Ok(HOST_ERROR_SUCCESS);
+                        }
+                    }
+                }
+                Ok(Some(_)) => {
+                    return Ok(HOST_ERROR_SUCCESS);
+                }
+                Ok(None) => {
+                    // Not found, balance is 0
+                    return Ok(HOST_ERROR_SUCCESS);
+                }
+                Err(error) => {
+                    error!(
+                        hash_bytes = base16::encode_lower(&hash_bytes),
+                        ?error,
+                        "Error while reading from storage; aborting"
+                    );
+                    panic!("Error while reading from storage")
+                }
+            }
+        }
+        None => return Ok(HOST_ERROR_SUCCESS),
+    };
+
+    let purse = match entity_key {
+        Either::Left(main_purse) => main_purse,
+        Either::Right(indirect_entity_key) => {
+            match caller
+                .context_mut()
+                .tracking_copy
+                .read(&indirect_entity_key)
+            {
+                Ok(Some(StoredValue::AddressableEntity(addressable_entity))) => {
+                    addressable_entity.main_purse()
+                }
+                Ok(Some(other_entity)) => {
+                    panic!("Unexpected entity type: {other_entity:?}")
+                }
+                Ok(None) => panic!("Key not found while checking balance"), //return Ok(0),
+                Err(error) => {
+                    panic!("Error while reading from storage; aborting key={entity_key:?} error={error:?}")
+                }
+            }
+        }
+    };
+
+    let balance = caller
+        .context_mut()
+        .tracking_copy
+        .get_total_balance(Key::URef(purse))
+        .expect("Total balance");
+    assert!(balance.value() <= U512::from(u64::MAX));
+    let balance = balance.value().as_u64();
 
     let block_time = caller.context().block_time.value();
 
     // `EnvInfo` in little-endian representation.
     let env_info_le = EnvInfo {
-        caller_id: caller_id.to_le(),
+        caller_id,
         transferred_value: transferred_value.to_le(),
         balance: balance.to_le(),
         block_time: block_time.to_le(),
+        entity_kind: entity_kind.to_le(),
     };
     let env_info_bytes = safe_transmute::transmute_one_to_bytes(&env_info_le);
     caller.memory_write(info_ptr, env_info_bytes)?;

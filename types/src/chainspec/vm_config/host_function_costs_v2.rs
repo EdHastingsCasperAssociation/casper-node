@@ -355,7 +355,7 @@ pub mod gens {
             call in host_function_cost_v2_arb(),
             print in host_function_cost_v2_arb(),
             emit in host_function_cost_v2_arb(),
-            envinfo in host_function_cost_v2_arb(),
+            env_info in host_function_cost_v2_arb(),
         ) -> HostFunctionCostsV2 {
             HostFunctionCostsV2 {
                 read,

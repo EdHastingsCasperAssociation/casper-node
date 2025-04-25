@@ -661,9 +661,12 @@ where
                 Function::new_typed_with_env(
                     &mut store,
                     &function_env,
-                    |env: FunctionEnvMut<WasmerEnv<S, E>>, info_ptr| {
+                    |env: FunctionEnvMut<WasmerEnv<S, E>>,
+                     info_ptr,
+                     entity_addr_ptr,
+                     entity_addr_len| {
                         let wasmer_caller = WasmerCaller { env };
-                        host::env_info(wasmer_caller, info_ptr)
+                        host::env_info(wasmer_caller, info_ptr, entity_addr_ptr, entity_addr_len)
                     },
                 ),
             );
