@@ -1219,16 +1219,12 @@ fn process_casper_contract_state_for_struct(contract_struct: ItemStruct) -> Toke
     let maybe_casper_schema = {
         #[cfg(feature = "__embed_schema")]
         quote! {
+            const SCHEMA: &str = env!("__CARGO_CASPER_INJECT_SCHEMA_MARKER");
+
             #[no_mangle]
             pub extern "C" fn __casper_schema() {
                 use casper_sdk::casper::ret;
                 use casper_sdk::casper_executor_wasm_common::flags::ReturnFlags;
-
-                const SCHEMA: &str = match option_env!("__CARGO_CASPER_INJECT_SCHEMA_MARKER") {
-                    Some(schema) => schema,
-                    None => "{}",
-                };
-
                 let bytes = SCHEMA.as_bytes();
                 ret(ReturnFlags::empty(), Some(bytes));
             }

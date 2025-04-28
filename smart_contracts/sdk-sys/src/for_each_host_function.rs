@@ -32,7 +32,7 @@ macro_rules! for_each_host_function {
             pub fn casper_create(
                 code_ptr: *const u8,
                 code_size: usize,
-                value: *const core::ffi::c_void,
+                transferred_value: u64,
                 constructor_ptr: *const u8,
                 constructor_size: usize,
                 input_ptr: *const u8,
@@ -63,7 +63,7 @@ macro_rules! for_each_host_function {
                 input_size: usize,
             ) -> u32;
             pub fn casper_env_caller(dest: *mut u8, dest_len: usize, entity_kind: *mut u32,) -> *const u8;
-            pub fn casper_env_transferred_value(dest: *mut core::ffi::c_void,);
+            pub fn casper_env_transferred_value() -> u64;
             #[doc = r"Get balance of an entity by its address."]
             pub fn casper_env_balance(entity_kind: u32, entity_addr_ptr: *const u8, entity_addr_len: usize, output_ptr: *mut core::ffi::c_void,) -> u32;
             pub fn casper_env_block_time() -> u64;

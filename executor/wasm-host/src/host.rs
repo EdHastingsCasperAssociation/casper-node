@@ -32,7 +32,7 @@ use casper_types::{
     AddressableEntity, BlockGlobalAddr, BlockHash, BlockTime, ByteCode, ByteCodeAddr, ByteCodeHash,
     ByteCodeKind, CLType, CLValue, ContractRuntimeTag, Digest, EntityAddr, EntityEntryPoint,
     EntityKind, EntryPointAccess, EntryPointAddr, EntryPointPayment, EntryPointType,
-    EntryPointValue, HashAddr, HostFunction, HostFunctionCost, Key, Package, PackageHash,
+    EntryPointValue, HashAddr, HostFunctionV2, Key, Package, PackageHash,
     ProtocolVersion, StoredValue, URef, U512,
 };
 use either::Either;
@@ -65,15 +65,14 @@ fn charge_gas_storage<S: GlobalStateReader, E: Executor>(
 }
 
 /// Consumes a set amount of gas for the specified host function and weights
-fn charge_host_function_call<S, E, T>(
+fn charge_host_function_call<S, E, const N: usize>(
     caller: &mut impl Caller<Context = Context<S, E>>,
-    host_function: &HostFunction<T>,
-    weights: T,
+    host_function: &HostFunctionV2<[u64; N]>,
+    weights: [u64; N],
 ) -> VMResult<()>
 where
     S: GlobalStateReader,
     E: Executor,
-    T: AsRef<[HostFunctionCost]> + Copy,
 {
     let Some(cost) = host_function.calculate_gas_cost(weights) else {
         // Overflowing gas calculation means gas limit was exceeded
@@ -108,7 +107,13 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
     charge_host_function_call(
         &mut caller,
         &write_cost,
-        [key_space as u32, key_ptr, key_size, value_ptr, value_size],
+        [
+            key_space,
+            u64::from(key_ptr),
+            u64::from(key_size),
+            u64::from(value_ptr),
+            u64::from(value_size),
+        ],
     )?;
 
     let keyspace_tag = match KeyspaceTag::from_u64(key_space) {
@@ -215,7 +220,7 @@ pub fn casper_remove<S: GlobalStateReader, E: Executor>(
     charge_host_function_call(
         &mut caller,
         &write_cost,
-        [key_space as u32, key_ptr, key_size],
+        [key_space, u64::from(key_ptr), u64::from(key_size)],
     )?;
 
     let keyspace_tag = match KeyspaceTag::from_u64(key_space) {
@@ -301,7 +306,11 @@ pub fn casper_print<S: GlobalStateReader, E: Executor>(
     message_size: u32,
 ) -> VMResult<()> {
     let print_cost = caller.context().config.host_function_costs().print;
-    charge_host_function_call(&mut caller, &print_cost, [message_ptr, message_size])?;
+    charge_host_function_call(
+        &mut caller,
+        &print_cost,
+        [u64::from(message_ptr), u64::from(message_size)],
+    )?;
 
     let vec = caller.memory_read(message_ptr, message_size.try_into().unwrap())?;
     let msg = String::from_utf8_lossy(&vec);
@@ -324,12 +333,12 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
         &mut caller,
         &read_cost,
         [
-            key_tag as u32,
-            key_ptr,
-            key_size,
-            info_ptr,
-            cb_alloc,
-            alloc_ctx,
+            key_tag,
+            u64::from(key_ptr),
+            u64::from(key_size),
+            u64::from(info_ptr),
+            u64::from(cb_alloc),
+            u64::from(alloc_ctx),
         ],
     )?;
 
@@ -492,7 +501,17 @@ pub fn casper_copy_input<S: GlobalStateReader, E: Executor>(
     };
 
     let copy_input_cost = caller.context().config.host_function_costs().copy_input;
-    charge_host_function_call(&mut caller, &copy_input_cost, [out_ptr, input.len() as u32])?;
+    charge_host_function_call(
+        &mut caller,
+        &copy_input_cost,
+        [
+            u64::from(out_ptr),
+            input
+                .len()
+                .try_into()
+                .expect("usize is at least the same size as u64"),
+        ],
+    )?;
 
     if out_ptr == 0 {
         Ok(out_ptr)
@@ -510,7 +529,11 @@ pub fn casper_return<S: GlobalStateReader, E: Executor>(
     data_len: u32,
 ) -> VMResult<()> {
     let ret_cost = caller.context().config.host_function_costs().ret;
-    charge_host_function_call(&mut caller, &ret_cost, [data_ptr, data_len])?;
+    charge_host_function_call(
+        &mut caller,
+        &ret_cost,
+        [u64::from(data_ptr), u64::from(data_len)],
+    )?;
 
     let flags = ReturnFlags::from_bits_retain(flags);
     let data = if data_ptr == 0 {
@@ -529,7 +552,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
     mut caller: impl Caller<Context = Context<S, E>>,
     code_ptr: u32,
     code_len: u32,
-    value_ptr: u32,
+    transferred_value: u64,
     entry_point_ptr: u32,
     entry_point_len: u32,
     input_ptr: u32,
@@ -543,16 +566,16 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
         &mut caller,
         &create_cost,
         [
-            code_ptr,
-            code_len,
-            value_ptr,
-            entry_point_ptr,
-            entry_point_len,
-            input_ptr,
-            input_len,
-            seed_ptr,
-            seed_len,
-            result_ptr,
+            u64::from(code_ptr),
+            u64::from(code_len),
+            transferred_value,
+            u64::from(entry_point_ptr),
+            u64::from(entry_point_len),
+            u64::from(input_ptr),
+            u64::from(input_len),
+            u64::from(seed_ptr),
+            u64::from(seed_len),
+            u64::from(result_ptr),
         ],
     )?;
 
@@ -562,12 +585,6 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
             .map(Bytes::from)?
     } else {
         caller.bytecode()
-    };
-
-    let value = {
-        let mut value_bytes = [0u8; 8];
-        caller.memory_read_into(value_ptr, &mut value_bytes)?;
-        u64::from_le_bytes(value_bytes)
     };
 
     let seed = if seed_ptr != 0 {
@@ -724,7 +741,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
                     entry_point: entry_point_name,
                 })
                 .with_input(input_data.unwrap_or_default())
-                .with_transferred_value(value)
+                .with_transferred_value(transferred_value)
                 .with_transaction_hash(caller.context().transaction_hash)
                 // We're using shared address generator there as we need to preserve and advance the
                 // state of deterministic address generator across chain of calls.
@@ -811,15 +828,15 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
         &mut caller,
         &call_cost,
         [
-            address_ptr,
-            address_len,
-            value_ptr,
-            entry_point_ptr,
-            entry_point_len,
-            input_ptr,
-            input_len,
-            cb_alloc,
-            cb_ctx,
+            u64::from(address_ptr),
+            u64::from(address_len),
+            u64::from(value_ptr),
+            u64::from(entry_point_ptr),
+            u64::from(entry_point_len),
+            u64::from(input_ptr),
+            u64::from(input_len),
+            u64::from(cb_alloc),
+            u64::from(cb_ctx),
         ],
     )?;
 
@@ -951,7 +968,11 @@ pub fn casper_env_caller<S: GlobalStateReader, E: Executor>(
     charge_host_function_call(
         &mut caller,
         &caller_cost,
-        [dest_ptr, dest_len, entity_kind_ptr],
+        [
+            u64::from(dest_ptr),
+            u64::from(dest_len),
+            u64::from(entity_kind_ptr),
+        ],
     )?;
 
     // TODO: Decide whether we want to return the full address and entity kind or just the 32 bytes
@@ -976,18 +997,15 @@ pub fn casper_env_caller<S: GlobalStateReader, E: Executor>(
 
 pub fn casper_env_transferred_value<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
-    output: u32,
-) -> VMResult<()> {
+) -> VMResult<u64> {
     let transferred_value_cost = caller
         .context()
         .config
         .host_function_costs()
         .env_transferred_value;
-    charge_host_function_call(&mut caller, &transferred_value_cost, [output])?;
+    charge_host_function_call(&mut caller, &transferred_value_cost, [])?;
 
-    let result = caller.context().transferred_value;
-    caller.memory_write(output, &result.to_le_bytes())?;
-    Ok(())
+    Ok(caller.context().transferred_value)
 }
 
 pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
@@ -1001,7 +1019,12 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
     charge_host_function_call(
         &mut caller,
         &balance_cost,
-        [entity_kind, entity_addr_ptr, entity_addr_len, output_ptr],
+        [
+            u64::from(entity_kind),
+            u64::from(entity_addr_ptr),
+            u64::from(entity_addr_len),
+            u64::from(output_ptr),
+        ],
     )?;
 
     let entity_key = match EntityKindTag::from_u32(entity_kind) {
@@ -1104,10 +1127,8 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
         .get_total_balance(Key::URef(purse))
         .expect("Total balance");
     assert!(total_balance.value() <= U512::from(u64::MAX));
-    let total_balance = total_balance.value().as_u64();
-
+    let total_balance: u64 = total_balance.value().try_into().unwrap(); // SAFETY: We checked for overflow above.
     caller.memory_write(output_ptr, &total_balance.to_le_bytes())?;
-
     Ok(HOST_ERROR_NOT_FOUND)
 }
 
@@ -1121,7 +1142,11 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
     charge_host_function_call(
         &mut caller,
         &transfer_cost,
-        [entity_addr_ptr, entity_addr_len, amount_ptr],
+        [
+            u64::from(entity_addr_ptr),
+            u64::from(entity_addr_len),
+            u64::from(amount_ptr),
+        ],
     )?;
 
     if entity_addr_len != 32 {
@@ -1277,12 +1302,12 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
         &mut caller,
         &upgrade_cost,
         [
-            code_ptr,
-            code_size,
-            entry_point_ptr,
-            entry_point_size,
-            input_ptr,
-            input_size,
+            u64::from(code_ptr),
+            u64::from(code_size),
+            u64::from(entry_point_ptr),
+            u64::from(entry_point_size),
+            u64::from(input_ptr),
+            u64::from(input_size),
         ],
     )?;
 
@@ -1498,7 +1523,12 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
     charge_host_function_call(
         &mut caller,
         &emit_host_function,
-        [topic_name_ptr, topic_name_size, payload_ptr, payload_size],
+        [
+            u64::from(topic_name_ptr),
+            u64::from(topic_name_size),
+            u64::from(payload_ptr),
+            u64::from(payload_size),
+        ],
     )?;
 
     if topic_name_size > caller.context().message_limits.max_topic_name_size {

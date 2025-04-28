@@ -24,7 +24,7 @@ pub use host_function_costs::{
     Cost as HostFunctionCost, HostFunction, HostFunctionCostsV1,
     DEFAULT_HOST_FUNCTION_NEW_DICTIONARY,
 };
-pub use host_function_costs_v2::HostFunctionCostsV2;
+pub use host_function_costs_v2::{HostFunctionCostsV2, HostFunctionV2};
 pub use message_limits::MessageLimits;
 pub use mint_costs::MintCosts;
 #[cfg(any(feature = "testing", test))]

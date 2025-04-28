@@ -31,7 +31,7 @@ pub struct Harness {
     counter: u64,
     greeting: String,
     address_inside_constructor: Option<Entity>,
-    balances: Map<Entity, u128>,
+    balances: Map<Entity, u64>,
     block_time: u64,
 }
 
@@ -327,7 +327,7 @@ impl Harness {
     }
 
     #[casper(payable, revert_on_error)]
-    pub fn perform_token_deposit(&mut self, balance_before: u128) -> Result<(), CustomError> {
+    pub fn perform_token_deposit(&mut self, balance_before: u64) -> Result<(), CustomError> {
         let caller = casper::get_caller();
         let value = casper::transferred_value();
 
@@ -352,7 +352,7 @@ impl Harness {
     }
 
     #[casper(revert_on_error)]
-    pub fn withdraw(&mut self, balance_before: u128, amount: u128) -> Result<(), CustomError> {
+    pub fn withdraw(&mut self, balance_before: u64, amount: u64) -> Result<(), CustomError> {
         let caller = casper::get_caller();
         log!("Withdrawing {amount} into {caller:?}");
         let current_balance = self.balances.get(&caller).unwrap_or(0);
@@ -413,7 +413,7 @@ impl Harness {
         Ok(())
     }
 
-    pub fn balance(&self) -> u128 {
+    pub fn balance(&self) -> u64 {
         if casper::transferred_value() != 0 {
             panic!("This function is not payable");
         }
@@ -427,7 +427,7 @@ impl Harness {
         _arg2: i64,
         _arg3: u32,
         _arg4: u64,
-        _arg5: u128,
+        _arg5: u64,
         _arg6: Vec<u64>,
         _arg7: bool,
         _arg8: i8,
