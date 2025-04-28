@@ -44,11 +44,26 @@ where
         casper::write(prefix, &borsh::to_vec(value).unwrap()).unwrap();
     }
 
+    pub fn remove(&mut self, key: &K) {
+        let prefix_bytes = self.compute_prefix_for_key(key);
+        let prefix = Keyspace::Context(&prefix_bytes);
+        casper::remove(prefix).unwrap();
+    }
+
     pub fn get(&self, key: &K) -> Option<V> {
         let mut key_bytes = self.name.as_bytes().to_owned();
         key.serialize(&mut key_bytes).unwrap();
         let prefix = Keyspace::Context(&key_bytes);
-        read_into_vec(prefix).map(|vec| borsh::from_slice(&vec).unwrap())
+        read_into_vec(prefix)
+            .unwrap()
+            .map(|vec| borsh::from_slice(&vec).unwrap())
+    }
+
+    fn compute_prefix_for_key(&self, key: &K) -> Vec<u8> {
+        let mut context_key = Vec::new();
+        context_key.extend(self.name.as_bytes());
+        key.serialize(&mut context_key).unwrap();
+        context_key
     }
 }
 

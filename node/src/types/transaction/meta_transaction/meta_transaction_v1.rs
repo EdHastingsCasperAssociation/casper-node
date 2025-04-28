@@ -632,13 +632,13 @@ impl MetaTransactionV1 {
                     arg_handling::has_valid_withdraw_bid_args(&self.args)
                 }
                 TransactionEntryPoint::Delegate => {
-                    arg_handling::has_valid_delegate_args(&self.args)
+                    arg_handling::has_valid_delegate_args(chainspec, &self.args)
                 }
                 TransactionEntryPoint::Undelegate => {
                     arg_handling::has_valid_undelegate_args(&self.args)
                 }
                 TransactionEntryPoint::Redelegate => {
-                    arg_handling::has_valid_redelegate_args(&self.args)
+                    arg_handling::has_valid_redelegate_args(chainspec, &self.args)
                 }
                 TransactionEntryPoint::ActivateBid => {
                     arg_handling::has_valid_activate_bid_args(&self.args)
@@ -647,7 +647,7 @@ impl MetaTransactionV1 {
                     arg_handling::has_valid_change_bid_public_key_args(&self.args)
                 }
                 TransactionEntryPoint::AddReservations => {
-                    arg_handling::has_valid_add_reservations_args(&self.args)
+                    arg_handling::has_valid_add_reservations_args(chainspec, &self.args)
                 }
                 TransactionEntryPoint::CancelReservations => {
                     arg_handling::has_valid_cancel_reservations_args(&self.args)

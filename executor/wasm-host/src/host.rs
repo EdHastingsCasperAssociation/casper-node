@@ -8,17 +8,17 @@ use casper_executor_wasm_common::{
         ENTRY_POINT_PAYMENT_SELF_ONWARD,
     },
     error::{
-        CallError, TrapCode, HOST_ERROR_INVALID_DATA, HOST_ERROR_INVALID_INPUT,
-        HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED, HOST_ERROR_MESSAGE_TOPIC_FULL,
-        HOST_ERROR_NOT_FOUND, HOST_ERROR_PAYLOAD_TOO_LONG, HOST_ERROR_SUCCESS,
-        HOST_ERROR_TOO_MANY_TOPICS, HOST_ERROR_TOPIC_TOO_LONG,
+        CallError, CALLEE_NOT_CALLABLE, CALLEE_SUCCEEDED, CALLEE_TRAPPED, HOST_ERROR_INVALID_DATA,
+        HOST_ERROR_INVALID_INPUT, HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED,
+        HOST_ERROR_MESSAGE_TOPIC_FULL, HOST_ERROR_NOT_FOUND, HOST_ERROR_PAYLOAD_TOO_LONG,
+        HOST_ERROR_SUCCESS, HOST_ERROR_TOO_MANY_TOPICS, HOST_ERROR_TOPIC_TOO_LONG,
     },
     flags::ReturnFlags,
     keyspace::{Keyspace, KeyspaceTag},
 };
 use casper_executor_wasm_interface::{
     executor::{ExecuteError, ExecuteRequestBuilder, ExecuteResult, ExecutionKind, Executor},
-    u32_from_host_result, Caller, HostResult, VMError, VMResult,
+    u32_from_host_result, Caller, VMError, VMResult,
 };
 use casper_storage::{
     global_state::GlobalStateReader,
@@ -130,7 +130,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
                 Ok(key_name) => key_name,
                 Err(_) => {
                     // TODO: Invalid key name encoding
-                    return Ok(HOST_ERROR_NOT_FOUND);
+                    return Ok(HOST_ERROR_INVALID_DATA);
                 }
             };
 
@@ -140,7 +140,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
             let key_name = match std::str::from_utf8(&key_payload_bytes) {
                 Ok(key_name) => key_name,
                 Err(_) => {
-                    return Ok(1);
+                    return Ok(HOST_ERROR_INVALID_DATA);
                 }
             };
 
@@ -198,6 +198,104 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
     Ok(HOST_ERROR_SUCCESS)
 }
 
+/// Remove value under a key.
+///
+/// This produces a transformation of Prune to the global state. Keep in mind that technically the
+/// data is not removed from the global state as it still there, it's just not reachable anymore
+/// from the newly created tip.
+///
+/// The name for this host function is `remove` to keep it simple and consistent with read/write
+/// verbs, and also consistent with the rust stdlib vocabulary i.e. `V`
+pub fn casper_remove<S: GlobalStateReader, E: Executor>(
+    mut caller: impl Caller<Context = Context<S, E>>,
+    key_space: u64,
+    key_ptr: u32,
+    key_size: u32,
+) -> VMResult<u32> {
+    let write_cost = caller.context().config.host_function_costs().remove;
+    charge_host_function_call(
+        &mut caller,
+        &write_cost,
+        [key_space as u32, key_ptr, key_size],
+    )?;
+
+    let keyspace_tag = match KeyspaceTag::from_u64(key_space) {
+        Some(keyspace_tag) => keyspace_tag,
+        None => {
+            // Unknown keyspace received, return error
+            return Ok(HOST_ERROR_NOT_FOUND);
+        }
+    };
+
+    let key_payload_bytes = caller.memory_read(key_ptr, key_size.try_into().unwrap())?;
+
+    let keyspace = match keyspace_tag {
+        KeyspaceTag::State => Keyspace::State,
+        KeyspaceTag::Context => Keyspace::Context(&key_payload_bytes),
+        KeyspaceTag::NamedKey => {
+            let key_name = match std::str::from_utf8(&key_payload_bytes) {
+                Ok(key_name) => key_name,
+                Err(_) => {
+                    // TODO: Invalid key name encoding
+                    return Ok(HOST_ERROR_INVALID_DATA);
+                }
+            };
+
+            Keyspace::NamedKey(key_name)
+        }
+        KeyspaceTag::PaymentInfo => {
+            let key_name = match std::str::from_utf8(&key_payload_bytes) {
+                Ok(key_name) => key_name,
+                Err(_) => {
+                    return Ok(HOST_ERROR_INVALID_DATA);
+                }
+            };
+
+            if !caller.has_export(key_name) {
+                // Missing wasm export, unable to perform global state write
+                return Ok(HOST_ERROR_NOT_FOUND);
+            }
+
+            Keyspace::PaymentInfo(key_name)
+        }
+    };
+
+    let global_state_key = match keyspace_to_global_state_key(caller.context(), keyspace) {
+        Some(global_state_key) => global_state_key,
+        None => {
+            // Unknown keyspace received, return error
+            return Ok(HOST_ERROR_NOT_FOUND);
+        }
+    };
+
+    let global_state_read_result = caller.context_mut().tracking_copy.read(&global_state_key);
+    match global_state_read_result {
+        Ok(Some(_stored_value)) => {
+            // Produce a prune transform only if value under a given key exists in the global state
+            caller.context_mut().tracking_copy.prune(global_state_key);
+        }
+        Ok(None) => {
+            // Entry does not exists, and we can't proceed with the prune operation
+            return Ok(HOST_ERROR_NOT_FOUND);
+        }
+        Err(error) => {
+            // To protect the network against potential non-determinism (i.e. one validator runs out
+            // of space or just faces I/O issues that other validators may not have) we're simply
+            // aborting the process, hoping that once the node goes back online issues are resolved
+            // on the validator side. TODO: We should signal this to the contract
+            // runtime somehow, and let validator nodes skip execution.
+            error!(
+                ?error,
+                ?global_state_key,
+                "Error while attempting a read before removing value; aborting"
+            );
+            panic!("Error while attempting a read before removing value; aborting key={global_state_key:?} error={error:?}")
+        }
+    }
+
+    Ok(HOST_ERROR_SUCCESS)
+}
+
 pub fn casper_print<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
     message_ptr: u32,
@@ -221,7 +319,7 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
     info_ptr: u32,
     cb_alloc: u32,
     alloc_ctx: u32,
-) -> Result<u32, VMError> {
+) -> VMResult<u32> {
     let read_cost = caller.context().config.host_function_costs().read;
     charge_host_function_call(
         &mut caller,
@@ -440,7 +538,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
     seed_ptr: u32,
     seed_len: u32,
     result_ptr: u32,
-) -> VMResult<HostResult> {
+) -> VMResult<u32> {
     let create_cost = caller.context().config.host_function_costs().create;
     charge_host_function_call(
         &mut caller,
@@ -475,7 +573,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
 
     let seed = if seed_ptr != 0 {
         if seed_len != 32 {
-            return Ok(Err(CallError::NotCallable));
+            return Ok(CALLEE_NOT_CALLABLE);
         }
         let seed_bytes = caller.memory_read(seed_ptr, seed_len as usize)?;
         let seed_bytes: [u8; 32] = seed_bytes.try_into().unwrap(); // SAFETY: We checked for length.
@@ -495,7 +593,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
                     Ok(entry_point) => Some(entry_point),
                     Err(utf8_error) => {
                         error!(%utf8_error, "entry point name is not a valid utf-8 string; unable to call");
-                        return Ok(Err(CallError::NotCallable));
+                        return Ok(CALLEE_NOT_CALLABLE);
                     }
                 }
             }
@@ -590,9 +688,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
         Ok(uref) => uref,
         Err(mint_error) => {
             error!(?mint_error, "Failed to create a purse");
-            return Ok(Err(CallError::CalleeTrapped(
-                TrapCode::UnreachableCodeReached,
-            )));
+            return Ok(CALLEE_TRAPPED);
         }
     };
 
@@ -661,7 +757,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
                     caller.consume_gas(gas_usage.gas_spent())?;
 
                     if let Some(host_error) = host_error {
-                        return Ok(Err(host_error));
+                        return Ok(host_error.into_u32());
                     }
 
                     caller
@@ -695,7 +791,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
 
     caller.memory_write(result_ptr, create_result_bytes)?;
 
-    Ok(Ok(()))
+    Ok(CALLEE_SUCCEEDED)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -710,7 +806,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
     input_len: u32,
     cb_alloc: u32,
     cb_ctx: u32,
-) -> VMResult<HostResult> {
+) -> VMResult<u32> {
     let call_cost = caller.context().config.host_function_costs().call;
     charge_host_function_call(
         &mut caller,
@@ -749,7 +845,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
             Ok(entry_point) => entry_point,
             Err(utf8_error) => {
                 error!(%utf8_error, "entry point name is not a valid utf-8 string; unable to call");
-                return Ok(Err(CallError::NotCallable));
+                return Ok(CALLEE_NOT_CALLABLE);
             }
         }
     };
@@ -843,7 +939,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
 
     caller.consume_gas(gas_spent)?;
 
-    Ok(host_result)
+    Ok(u32_from_host_result(host_result))
 }
 
 pub fn casper_env_caller<S: GlobalStateReader, E: Executor>(
@@ -882,7 +978,7 @@ pub fn casper_env_caller<S: GlobalStateReader, E: Executor>(
 pub fn casper_env_transferred_value<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
     output: u32,
-) -> Result<(), VMError> {
+) -> VMResult<()> {
     let transferred_value_cost = caller
         .context()
         .config
@@ -1176,7 +1272,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
     entry_point_size: u32,
     input_ptr: u32,
     input_size: u32,
-) -> VMResult<HostResult> {
+) -> VMResult<u32> {
     let upgrade_cost = caller.context().config.host_function_costs().upgrade;
     charge_host_function_call(
         &mut caller,
@@ -1204,7 +1300,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                 Ok(entry_point) => Some(entry_point),
                 Err(utf8_error) => {
                     error!(%utf8_error, "entry point name is not a valid utf-8 string; unable to call");
-                    return Ok(Err(CallError::NotCallable));
+                    return Ok(CALLEE_NOT_CALLABLE);
                 }
             }
         }
@@ -1225,7 +1321,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
     let (smart_contract_addr, callee_addressable_entity_key) = match caller.context().callee {
         Key::Account(_account_hash) => {
             error!("Account upgrade is not possible");
-            return Ok(Err(CallError::NotCallable));
+            return Ok(CALLEE_NOT_CALLABLE);
         }
         addressable_entity_key @ Key::SmartContract(smart_contract_addr) => {
             let smart_contract_key = addressable_entity_key;
@@ -1243,12 +1339,12 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                                 ?smart_contract_key,
                                 "Unable to find latest addressible entity hash for contract"
                             );
-                            return Ok(Err(CallError::NotCallable));
+                            return Ok(CALLEE_NOT_CALLABLE);
                         }
                     }
                 }
                 Ok(Some(other)) => panic!("should be smart contract but got {other:?}"),
-                Ok(None) => return Ok(Err(CallError::NotCallable)),
+                Ok(None) => return Ok(CALLEE_NOT_CALLABLE),
                 Err(error) => {
                     error!(
                         ?error,
@@ -1271,7 +1367,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
         Ok(Some(other_entity)) => {
             panic!("Unexpected entity type: {other_entity:?}")
         }
-        Ok(None) => return Ok(Err(CallError::NotCallable)),
+        Ok(None) => return Ok(CALLEE_NOT_CALLABLE),
         Err(error) => {
             panic!("Error while reading from storage; aborting key={callee_addressable_entity_key:?} error={error:?}")
         }
@@ -1348,7 +1444,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                 caller.consume_gas(gas_usage.gas_spent())?;
 
                 if let Some(host_error) = host_error {
-                    return Ok(Err(host_error));
+                    return Ok(host_error.into_u32());
                 }
 
                 caller
@@ -1370,12 +1466,12 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
                     ?preparation_error,
                     "Wasm preparation error while performing upgrade"
                 );
-                return Ok(Err(CallError::NotCallable));
+                return Ok(CALLEE_NOT_CALLABLE);
             }
         }
     }
 
-    Ok(Ok(()))
+    Ok(CALLEE_SUCCEEDED)
 }
 
 // TODO: Should this be blocktime instead of block_time? [Consistency]

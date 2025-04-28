@@ -38,6 +38,8 @@ const DEFAULT_TRANSFER_COST: u32 = 2_500_000_000;
 const DEFAULT_WRITE_COST: u32 = 25_000;
 const DEFAULT_WRITE_SIZE_WEIGHT: u32 = 100_000;
 
+const DEFAULT_REMOVE_COST: u32 = 15_000;
+
 const DEFAULT_COPY_INPUT_COST: u32 = 300;
 const DEFAULT_COPY_INPUT_VALUE_SIZE_WEIGHT: u32 = 0;
 
@@ -62,6 +64,8 @@ pub struct HostFunctionCostsV2 {
     pub read: HostFunction<[Cost; 6]>,
     /// Cost of calling the `write` host function.
     pub write: HostFunction<[Cost; 5]>,
+    /// Cost of calling the `remove` host function.
+    pub remove: HostFunction<[Cost; 3]>,
     /// Cost of calling the `copy_input` host function.
     pub copy_input: HostFunction<[Cost; 2]>,
     /// Cost of calling the `ret` host function.
@@ -95,6 +99,7 @@ impl Zero for HostFunctionCostsV2 {
         Self {
             read: HostFunction::zero(),
             write: HostFunction::zero(),
+            remove: HostFunction::zero(),
             copy_input: HostFunction::zero(),
             ret: HostFunction::zero(),
             create: HostFunction::zero(),
@@ -115,6 +120,7 @@ impl Zero for HostFunctionCostsV2 {
         let HostFunctionCostsV2 {
             read,
             write,
+            remove,
             copy_input,
             ret,
             create,
@@ -131,6 +137,7 @@ impl Zero for HostFunctionCostsV2 {
         } = self;
         read.is_zero()
             && write.is_zero()
+            && remove.is_zero()
             && copy_input.is_zero()
             && ret.is_zero()
             && create.is_zero()
@@ -171,6 +178,7 @@ impl Default for HostFunctionCostsV2 {
                     DEFAULT_WRITE_SIZE_WEIGHT,
                 ],
             ),
+            remove: HostFunction::new(DEFAULT_REMOVE_COST, [NOT_USED, NOT_USED, NOT_USED]),
             copy_input: HostFunction::new(
                 DEFAULT_COPY_INPUT_COST,
                 [NOT_USED, DEFAULT_COPY_INPUT_VALUE_SIZE_WEIGHT],
@@ -227,6 +235,7 @@ impl ToBytes for HostFunctionCostsV2 {
         let mut ret = bytesrepr::unchecked_allocate_buffer(self);
         ret.append(&mut self.read.to_bytes()?);
         ret.append(&mut self.write.to_bytes()?);
+        ret.append(&mut self.remove.to_bytes()?);
         ret.append(&mut self.copy_input.to_bytes()?);
         ret.append(&mut self.ret.to_bytes()?);
         ret.append(&mut self.create.to_bytes()?);
@@ -246,6 +255,7 @@ impl ToBytes for HostFunctionCostsV2 {
     fn serialized_length(&self) -> usize {
         self.read.serialized_length()
             + self.write.serialized_length()
+            + self.remove.serialized_length()
             + self.copy_input.serialized_length()
             + self.ret.serialized_length()
             + self.create.serialized_length()
@@ -266,6 +276,7 @@ impl FromBytes for HostFunctionCostsV2 {
     fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
         let (read, rem) = FromBytes::from_bytes(bytes)?;
         let (write, rem) = FromBytes::from_bytes(rem)?;
+        let (remove, rem) = FromBytes::from_bytes(rem)?;
         let (copy_input, rem) = FromBytes::from_bytes(rem)?;
         let (ret, rem) = FromBytes::from_bytes(rem)?;
         let (create, rem) = FromBytes::from_bytes(rem)?;
@@ -283,6 +294,7 @@ impl FromBytes for HostFunctionCostsV2 {
             HostFunctionCostsV2 {
                 read,
                 write,
+                remove,
                 copy_input,
                 ret,
                 create,
@@ -308,6 +320,7 @@ impl Distribution<HostFunctionCostsV2> for Standard {
         HostFunctionCostsV2 {
             read: rng.gen(),
             write: rng.gen(),
+            remove: rng.gen(),
             copy_input: rng.gen(),
             ret: rng.gen(),
             create: rng.gen(),
@@ -343,6 +356,7 @@ pub mod gens {
         pub fn host_function_costs_v2_arb() (
             read in host_function_cost_v2_arb(),
             write in host_function_cost_v2_arb(),
+            remove in host_function_cost_v2_arb(),
             copy_input in host_function_cost_v2_arb(),
             ret in host_function_cost_v2_arb(),
             create in host_function_cost_v2_arb(),
@@ -360,6 +374,7 @@ pub mod gens {
             HostFunctionCostsV2 {
                 read,
                 write,
+                remove,
                 copy_input,
                 ret,
                 create,

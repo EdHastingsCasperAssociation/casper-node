@@ -271,6 +271,25 @@ impl Environment {
         Ok(HOST_ERROR_SUCCESS)
     }
 
+    fn casper_remove(
+        &self,
+        key_space: u64,
+        key_ptr: *const u8,
+        key_size: usize,
+    ) -> Result<u32, NativeTrap> {
+        assert!(!key_ptr.is_null());
+        let key_bytes = unsafe { slice::from_raw_parts(key_ptr, key_size) };
+        let key_bytes = self.key_prefix(key_bytes);
+
+        let mut db = self.db.write().unwrap();
+        if let Some(values) = db.get_mut(&key_space) {
+            values.remove(key_bytes.as_slice());
+            Ok(HOST_ERROR_SUCCESS)
+        } else {
+            Ok(HOST_ERROR_NOT_FOUND)
+        }
+    }
+
     fn casper_print(&self, msg_ptr: *const u8, msg_size: usize) -> Result<(), NativeTrap> {
         let msg_bytes = unsafe { slice::from_raw_parts(msg_ptr, msg_size) };
         let msg = std::str::from_utf8(msg_bytes).expect("Valid UTF-8 string");
@@ -670,6 +689,15 @@ mod symbols {
         let _call_result = with_current_environment(|stub| {
             stub.casper_write(key_space, key_ptr, key_size, value_ptr, value_size)
         });
+        crate::casper::native::handle_ret(_call_result)
+    }
+
+    #[no_mangle]
+    pub extern "C" fn casper_remove(key_space: u64, key_ptr: *const u8, key_size: usize) -> u32 {
+        let _name = "casper_remove";
+        let _args = (&key_space, &key_ptr, &key_size);
+        let _call_result =
+            with_current_environment(|stub| stub.casper_remove(key_space, key_ptr, key_size));
         crate::casper::native::handle_ret(_call_result)
     }
 
