@@ -54,8 +54,8 @@ mod tests {
         let exports = native::list_exports()
             .into_iter()
             .filter_map(|e| match e.kind {
-                ExportKind::SmartContract {} => None,
-                ExportKind::TraitImpl {} => None,
+                ExportKind::SmartContract { .. } => None,
+                ExportKind::TraitImpl { .. } => None,
                 ExportKind::Function { name } => Some(name),
             })
             .collect::<Vec<_>>();

@@ -91,7 +91,7 @@ pub struct HostFunctionCostsV2 {
     /// Cost of calling the `emit` host function.
     pub emit: HostFunction<[Cost; 4]>,
     /// Cost of calling the `env_info` host function.
-    pub env_info: HostFunction<[Cost; 0]>,
+    pub env_info: HostFunction<[Cost; 3]>,
 }
 
 impl Zero for HostFunctionCostsV2 {
@@ -225,7 +225,7 @@ impl Default for HostFunctionCostsV2 {
                     DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT,
                 ],
             ),
-            env_info: HostFunction::new(DEFAULT_ENV_INFO_COST, []),
+            env_info: HostFunction::new(DEFAULT_ENV_INFO_COST, [NOT_USED, NOT_USED, NOT_USED]),
         }
     }
 }
