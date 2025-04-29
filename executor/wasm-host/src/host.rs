@@ -1045,7 +1045,6 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
                             let key = Key::AddressableEntity(EntityAddr::SmartContract(
                                 addressible_entity_hash.value(),
                             ));
-                            // Either::Right(Key::AddressableEntity(*addressible_entity_hash))
                             Either::Right(key)
                         }
                         None => {
@@ -1487,6 +1486,7 @@ pub fn casper_env_block_time<S: GlobalStateReader, E: Executor>(
 }
 
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub struct EnvInfo {
     block_time: u64,
     transferred_value: u64,
@@ -1497,7 +1497,7 @@ pub struct EnvInfo {
 
 unsafe impl TriviallyTransmutable for EnvInfo {}
 
-pub fn env_info<S: GlobalStateReader, E: Executor>(
+pub fn casper_env_info<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
     entity_addr_ptr: u32,
     entity_addr_len: u32,
@@ -1560,7 +1560,6 @@ pub fn env_info<S: GlobalStateReader, E: Executor>(
                             let key = Key::AddressableEntity(EntityAddr::SmartContract(
                                 addressible_entity_hash.value(),
                             ));
-                            // Either::Right(Key::AddressableEntity(*addressible_entity_hash))
                             Either::Right(key)
                         }
                         None => {
