@@ -1232,7 +1232,7 @@ where
             let seigniorage_recipient =
                 snapshot.get_seignorage_recipient(&header.era_id(), &validator);
 
-            let reward = auction::reward(
+            let reward = auction::detail::reward(
                 &validator,
                 delegator.as_deref(),
                 header.era_id(),

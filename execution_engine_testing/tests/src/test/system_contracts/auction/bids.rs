@@ -5354,7 +5354,10 @@ fn should_change_validator_bid_public_key() {
     );
     let new_validator_bid = bids
         .validator_bid(&NON_FOUNDER_VALIDATOR_2_PK.clone())
-        .unwrap();
+        .expect(&format!(
+            "should have validator bid {:?}",
+            NON_FOUNDER_VALIDATOR_2_PK.clone()
+        ));
     assert_eq!(
         builder.get_purse_balance(*new_validator_bid.bonding_purse()),
         U512::from(ADD_BID_AMOUNT_1)
