@@ -14,6 +14,7 @@ pub use linkme;
 pub mod abi_generator;
 pub mod casper;
 pub mod collections;
+pub mod contrib;
 #[cfg(feature = "std")]
 pub mod schema;
 pub mod types;

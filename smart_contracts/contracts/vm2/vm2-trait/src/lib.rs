@@ -5,6 +5,7 @@ use casper_macros::casper;
 use casper_sdk::{
     casper::{self, Entity},
     collections::{sorted_vector::SortedVector, Map},
+    contrib::access_control::{AccessControl, AccessControlExt, AccessControlState},
     log,
     prelude::*,
     types::Address,
@@ -123,58 +124,6 @@ pub trait Ownable {
     }
 }
 
-#[casper]
-pub struct AccessControlState {
-    roles: Map<Address, SortedVector<[u8; 32]>>,
-}
-
-impl Default for AccessControlState {
-    fn default() -> Self {
-        Self {
-            roles: Map::new("roles"),
-        }
-    }
-}
-
-#[casper]
-pub trait AccessControl {
-    #[casper(private)]
-    fn state(&self) -> &AccessControlState;
-    #[casper(private)]
-    fn state_mut(&mut self) -> &mut AccessControlState;
-
-    fn has_role(&self, account: Address, role: [u8; 32]) -> bool {
-        match self.state().roles.get(&account) {
-            Some(roles) => roles.contains(&role),
-            None => false,
-        }
-    }
-
-    fn grant_role(&mut self, account: Address, role: [u8; 32]) {
-        // let roles = self.state_mut().roles.entry(account).or_insert_with(Vec::new);
-        match self.state_mut().roles.get(&account) {
-            Some(mut roles) => {
-                if roles.contains(&role) {
-                    return;
-                }
-                roles.push(role);
-            }
-            None => {
-                let mut roles =
-                    SortedVector::new(format!("roles-{}", base16::encode_lower(&account)));
-                roles.push(role);
-                self.state_mut().roles.insert(&account, &roles);
-            }
-        }
-    }
-
-    fn revoke_role(&mut self, account: Address, role: [u8; 32]) {
-        if let Some(mut roles) = self.state_mut().roles.get(&account) {
-            roles.retain(|r| r != &role);
-        }
-    }
-}
-
 #[casper(contract_state)]
 #[derive(Default)]
 pub struct HasTraits {
@@ -216,6 +165,16 @@ impl Ownable for HasTraits {
     }
     fn state_mut(&mut self) -> &mut OwnableState {
         &mut self.ownable_state
+    }
+}
+
+#[casper(path = casper_sdk::contrib::access_control)]
+impl AccessControl for HasTraits {
+    fn state(&self) -> &AccessControlState {
+        &self.access_control_state
+    }
+    fn state_mut(&mut self) -> &mut AccessControlState {
+        &mut self.access_control_state
     }
 }
 
