@@ -70,6 +70,36 @@ pub enum MemoryError {
     NonUtf8String,
 }
 
+#[derive(Error, Debug)]
+pub enum InternalHostError {
+    #[error("type conversion failure")]
+    TypeConversion,
+    #[error("contract already exists")]
+    ContractAlreadyExists,
+    #[error("tracking copy error")]
+    TrackingCopy,
+    #[error("no call table in wasm blob")]
+    MissingCallTable,
+    #[error("entry not found in call table")]
+    CallTableEntryNotFound,
+    #[error("call table entry is not a function pointer")]
+    CallTableEntryNotFunctionPtr,
+    #[error("function pointer is not valid")]
+    InvalidFunctionPtr,
+    #[error("failed building execution request")]
+    ExecuteRequestBuildFailure,
+    #[error("unexpected entity kind")]
+    UnexpectedEntityKind,
+    #[error("failed reading total balance")]
+    TotalBalanceReadFailure,
+    #[error("total balance exceeded u64::MAX")]
+    TotalBalanceOverflow,
+    #[error("account not found under key")]
+    AccountRecordNotFound,
+    #[error("message did not have a checksum")]
+    MessageChecksumMissing,
+}
+
 /// The outcome of a call.
 /// We can fold all errors into this type and return it from the host functions and remove Outcome
 /// type.
@@ -84,6 +114,8 @@ pub enum VMError {
     Export(ExportError),
     #[error("Out of gas")]
     OutOfGas,
+    #[error("Internal host error")]
+    Internal(InternalHostError),
     /// Error while executing Wasm: traps, memory access errors, etc.
     ///
     /// NOTE: for supporting multiple different backends we may want to abstract this a bit and
@@ -104,6 +136,12 @@ impl VMError {
 
 /// Result of a VM operation.
 pub type VMResult<T> = Result<T, VMError>;
+
+impl From<InternalHostError> for VMError {
+    fn from(value: InternalHostError) -> Self {
+        Self::Internal(value)
+    }
+}
 
 /// Configuration for the Wasm engine.
 #[derive(Clone, Debug)]
