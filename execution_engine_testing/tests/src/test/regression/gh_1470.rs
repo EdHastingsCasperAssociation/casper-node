@@ -928,8 +928,10 @@ fn should_upgrade_from_1_3_1_rel_fixture() {
 #[ignore]
 #[test]
 fn should_correctly_retain_disabled_contract_version() {
+    const DISABLED_VERSIONS_FIX: &str = "disabled_versions";
+
     let (mut builder, lmdb_fixture_state, _temp_dir) =
-        lmdb_fixture::builder_from_global_state_fixture(lmdb_fixture::RELEASE_1_3_1);
+        lmdb_fixture::builder_from_global_state_fixture(DISABLED_VERSIONS_FIX);
 
     let previous_protocol_version = lmdb_fixture_state.genesis_protocol_version();
 
