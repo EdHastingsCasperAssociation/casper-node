@@ -953,4 +953,29 @@ fn should_correctly_retain_disabled_contract_version() {
         .with_block_time(Timestamp::now().into())
         .upgrade_using_scratch(&mut upgrade_request)
         .expect_upgrade_success();
+
+    let exec_request = {
+        let contract_name = format!("{}.wasm", "do_nothing_stored_upgrader");
+        ExecuteRequestBuilder::standard(
+            *DEFAULT_ACCOUNT_ADDR,
+            &contract_name,
+            RuntimeArgs::default(),
+        )
+        .build()
+    };
+
+    builder.exec(exec_request).expect_success().commit();
+
+    let contract_package = builder
+        .query(
+            None,
+            Key::Account(*DEFAULT_ACCOUNT_ADDR),
+            &vec!["do_nothng_package_hash".to_string()],
+        )
+        .expect("must have stored value")
+        .as_contract_package()
+        .expect("must have contract_package")
+        .clone();
+
+    assert_eq!(contract_package.versions().len(), 3);
 }
