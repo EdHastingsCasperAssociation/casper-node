@@ -924,3 +924,31 @@ fn should_upgrade_from_1_3_1_rel_fixture() {
         .upgrade(&mut upgrade_request)
         .expect_upgrade_success();
 }
+
+#[ignore]
+#[test]
+fn should_correctly_retain_disabled_contract_version() {
+    let (mut builder, lmdb_fixture_state, _temp_dir) =
+        lmdb_fixture::builder_from_global_state_fixture(lmdb_fixture::RELEASE_1_3_1);
+
+    let previous_protocol_version = lmdb_fixture_state.genesis_protocol_version();
+
+    let new_protocol_version =
+        ProtocolVersion::from_parts(previous_protocol_version.value().major + 1, 0, 0);
+
+    let activation_point = EraId::new(0u64);
+
+    let mut upgrade_request = UpgradeRequestBuilder::new()
+        .with_current_protocol_version(previous_protocol_version)
+        .with_new_protocol_version(new_protocol_version)
+        .with_activation_point(activation_point)
+        .with_new_gas_hold_handling(HoldBalanceHandling::Accrued)
+        .with_new_gas_hold_interval(24 * 60 * 60 * 60)
+        .with_enable_addressable_entity(true)
+        .build();
+
+    builder
+        .with_block_time(Timestamp::now().into())
+        .upgrade_using_scratch(&mut upgrade_request)
+        .expect_upgrade_success();
+}
