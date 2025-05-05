@@ -877,6 +877,7 @@ dependencies = [
  "hex",
  "num-derive",
  "num-traits",
+ "safe-transmute",
  "serde",
  "thiserror 2.0.12",
 ]
