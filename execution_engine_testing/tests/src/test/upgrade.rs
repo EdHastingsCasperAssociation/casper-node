@@ -1216,8 +1216,6 @@ fn should_correctly_retain_disabled_contract_version() {
 
     let versions = contract_package.disabled_versions();
 
-    println!("{:?}", versions);
-
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
         AddressableEntityHash::new(disabled_contract_hash.value()),
