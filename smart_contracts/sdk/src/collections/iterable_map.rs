@@ -18,7 +18,7 @@ pub struct IterableMapPtr {
 }
 
 /// Trait for types that can be used as keys in [IterableMap].
-/// Must produce a deterministic hash that will be supplied to [IterableMapPtr::hash].
+/// Must produce a deterministic hash.
 ///
 /// A blanket implementation is provided for all types that implement
 /// [BorshSerialize].
