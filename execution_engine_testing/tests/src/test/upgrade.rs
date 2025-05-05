@@ -3,11 +3,13 @@ use casper_engine_test_support::{
     DEFAULT_ACCOUNT_ADDR, LOCAL_GENESIS_REQUEST, MINIMUM_ACCOUNT_CREATION_BALANCE,
 };
 
+use crate::lmdb_fixture;
 use casper_execution_engine::{engine_state, execution::ExecError};
 use casper_types::{
     account::AccountHash,
     addressable_entity::{AssociatedKeys, Weight},
-    runtime_args, AddressableEntityHash, CLValue, EntityVersion, EraId, HoldBalanceHandling,
+    contracts::ContractPackageHash,
+    runtime_args, AddressableEntityHash, CLValue, EntityVersion, EraId, HoldBalanceHandling, Key,
     PackageHash, ProtocolVersion, RuntimeArgs, StoredValue, Timestamp, ENTITY_INITIAL_VERSION,
 };
 
@@ -38,6 +40,7 @@ const PURSE_NAME: &str = "purse_name";
 const ENTRY_POINT_NAME: &str = "entry_point";
 const ENTRY_POINT_ADD: &str = "add_named_purse";
 const ARG_CONTRACT_PACKAGE: &str = "contract_package";
+const ARG_MAJOR_VERSION: &str = "major_version";
 const ARG_VERSION: &str = "version";
 const ARG_NEW_PURSE_NAME: &str = "new_purse_name";
 const ARG_IS_LOCKED: &str = "is_locked";
@@ -203,6 +206,7 @@ fn should_upgrade_do_nothing_to_do_something_contract_call() {
         let contract_name = format!("{}.wasm", DO_NOTHING_STORED_CALLER_CONTRACT_NAME);
         let args = runtime_args! {
             ARG_CONTRACT_PACKAGE => stored_contract_package_hash,
+            ARG_MAJOR_VERSION => 2u32,
             ARG_VERSION => INITIAL_VERSION,
             ARG_NEW_PURSE_NAME => PURSE_1,
         };
@@ -261,6 +265,7 @@ fn should_upgrade_do_nothing_to_do_something_contract_call() {
         let contract_name = format!("{}.wasm", DO_NOTHING_STORED_CALLER_CONTRACT_NAME);
         let args = runtime_args! {
             ARG_CONTRACT_PACKAGE => stored_contract_package_hash,
+            ARG_MAJOR_VERSION => 2,
             ARG_VERSION => UPGRADED_VERSION,
             ARG_NEW_PURSE_NAME => PURSE_1,
         };
@@ -1010,24 +1015,34 @@ fn call_and_migrate_purse_holder_contract(migration_scenario: MigrationScenario)
 
     let execute_request = match migration_scenario {
         MigrationScenario::ByPackageName(maybe_contract_version) => {
-            ExecuteRequestBuilder::versioned_contract_call_by_name(
+            let req = ExecuteRequestBuilder::versioned_contract_call_by_name(
                 *DEFAULT_ACCOUNT_ADDR,
                 HASH_KEY_NAME,
                 maybe_contract_version,
                 ENTRY_POINT_ADD,
                 runtime_args,
             )
-            .build()
+            .build();
+            if maybe_contract_version.is_some() {
+                builder.exec(req).expect_failure();
+                return;
+            }
+            req
         }
         MigrationScenario::ByPackageHash(maybe_contract_version) => {
-            ExecuteRequestBuilder::versioned_contract_call_by_hash(
+            let req = ExecuteRequestBuilder::versioned_contract_call_by_hash(
                 *DEFAULT_ACCOUNT_ADDR,
                 package_hash,
                 maybe_contract_version,
                 ENTRY_POINT_ADD,
                 runtime_args,
             )
-            .build()
+            .build();
+            if maybe_contract_version.is_some() {
+                builder.exec(req).expect_failure();
+                return;
+            }
+            req
         }
         MigrationScenario::ByContractHash => ExecuteRequestBuilder::contract_call_by_hash(
             *DEFAULT_ACCOUNT_ADDR,
@@ -1133,4 +1148,108 @@ fn should_correctly_migrate_contract_when_invoked_by_contract_name() {
 #[test]
 fn should_correctly_migrate_and_upgrade_with_upgrader() {
     call_and_migrate_purse_holder_contract(MigrationScenario::ByUpgrader)
+}
+
+#[ignore]
+#[test]
+fn should_correctly_retain_disabled_contract_version() {
+    const DISABLED_VERSIONS_FIX: &str = "disabled_versions";
+
+    let (mut builder, lmdb_fixture_state, _temp_dir) =
+        lmdb_fixture::builder_from_global_state_fixture(DISABLED_VERSIONS_FIX);
+
+    let previous_protocol_version = lmdb_fixture_state.genesis_protocol_version();
+
+    let new_protocol_version =
+        ProtocolVersion::from_parts(previous_protocol_version.value().major + 1, 0, 0);
+
+    let activation_point = EraId::new(0u64);
+
+    let mut upgrade_request = UpgradeRequestBuilder::new()
+        .with_current_protocol_version(previous_protocol_version)
+        .with_new_protocol_version(new_protocol_version)
+        .with_activation_point(activation_point)
+        .with_new_gas_hold_handling(HoldBalanceHandling::Accrued)
+        .with_new_gas_hold_interval(24 * 60 * 60 * 60)
+        .with_enable_addressable_entity(true)
+        .build();
+
+    builder
+        .with_block_time(Timestamp::now().into())
+        .upgrade_using_scratch(&mut upgrade_request)
+        .expect_upgrade_success();
+
+    let exec_request = {
+        let contract_name = format!("{}.wasm", "do_nothing_stored_upgrader");
+        ExecuteRequestBuilder::standard(
+            *DEFAULT_ACCOUNT_ADDR,
+            &contract_name,
+            RuntimeArgs::default(),
+        )
+        .build()
+    };
+
+    builder.exec(exec_request).expect_success().commit();
+
+    let contract_package = builder
+        .query(
+            None,
+            Key::Account(*DEFAULT_ACCOUNT_ADDR),
+            &["do_nothing_package_hash".to_string()],
+        )
+        .expect("must have stored value")
+        .as_contract_package()
+        .expect("must have contract_package")
+        .clone();
+
+    assert_eq!(contract_package.versions().len(), 3);
+
+    let disabled_version_key = contract_package
+        .disabled_versions()
+        .first()
+        .expect("must have disabled version  key");
+
+    let disabled_contract_hash = contract_package
+        .versions()
+        .get(disabled_version_key)
+        .expect("package must contain one disabled hash");
+
+    let versions = contract_package.disabled_versions();
+
+    println!("{:?}", versions);
+
+    let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
+        *DEFAULT_ACCOUNT_ADDR,
+        AddressableEntityHash::new(disabled_contract_hash.value()),
+        "delegate",
+        runtime_args! {
+            "purse_name" => "purse_2"
+        },
+    )
+    .build();
+
+    builder.exec(exec_request).expect_failure();
+
+    let package_hash = builder
+        .get_account(*DEFAULT_ACCOUNT_ADDR)
+        .expect("must get account")
+        .named_keys()
+        .get("do_nothing_package_hash")
+        .expect("must have key")
+        .into_hash_addr()
+        .map(ContractPackageHash::new)
+        .expect("must have contract package hash");
+
+    let runtime_args = runtime_args! {
+        "contract_package_hash" => package_hash,
+        "major_version" => 1u32,
+        "version" => 1u32,
+    };
+
+    let contract_name = format!("{}.wasm", "call_package_version_by_hash");
+    let exec_request =
+        ExecuteRequestBuilder::standard(*DEFAULT_ACCOUNT_ADDR, &contract_name, runtime_args)
+            .build();
+
+    builder.exec(exec_request).expect_success().commit();
 }

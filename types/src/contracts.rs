@@ -960,7 +960,10 @@ impl From<ContractPackage> for Package {
             .versions
             .into_iter()
             .map(|(version, contract_hash)| {
-                let entity_version = EntityVersionKey::new(2, version.contract_version());
+                let entity_version = EntityVersionKey::new(
+                    version.protocol_version_major(),
+                    version.contract_version(),
+                );
                 let entity_hash = EntityAddr::SmartContract(contract_hash.value());
                 (entity_version, entity_hash)
             })
