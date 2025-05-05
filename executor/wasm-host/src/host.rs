@@ -2,15 +2,20 @@ use std::{borrow::Cow, cmp, num::NonZeroU32, sync::Arc};
 
 use bytes::Bytes;
 use casper_executor_wasm_common::{
-    chain_utils, entry_point::{
+    chain_utils,
+    entry_point::{
         ENTRY_POINT_PAYMENT_CALLER, ENTRY_POINT_PAYMENT_DIRECT_INVOCATION_ONLY,
         ENTRY_POINT_PAYMENT_SELF_ONWARD,
-    }, env_info::EnvInfo, error::{
+    },
+    env_info::EnvInfo,
+    error::{
         CallError, CALLEE_NOT_CALLABLE, CALLEE_SUCCEEDED, CALLEE_TRAPPED, HOST_ERROR_INVALID_DATA,
         HOST_ERROR_INVALID_INPUT, HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED,
         HOST_ERROR_MESSAGE_TOPIC_FULL, HOST_ERROR_NOT_FOUND, HOST_ERROR_PAYLOAD_TOO_LONG,
         HOST_ERROR_SUCCESS, HOST_ERROR_TOO_MANY_TOPICS, HOST_ERROR_TOPIC_TOO_LONG,
-    }, flags::ReturnFlags, keyspace::{Keyspace, KeyspaceTag}
+    },
+    flags::ReturnFlags,
+    keyspace::{Keyspace, KeyspaceTag},
 };
 use casper_executor_wasm_interface::{
     executor::{ExecuteError, ExecuteRequestBuilder, ExecuteResult, ExecutionKind, Executor},
