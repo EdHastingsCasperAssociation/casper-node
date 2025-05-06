@@ -1214,8 +1214,6 @@ fn should_correctly_retain_disabled_contract_version() {
         .get(disabled_version_key)
         .expect("package must contain one disabled hash");
 
-    let versions = contract_package.disabled_versions();
-
     let exec_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
         AddressableEntityHash::new(disabled_contract_hash.value()),
