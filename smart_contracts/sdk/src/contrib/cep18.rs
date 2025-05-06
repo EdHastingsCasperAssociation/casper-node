@@ -1,13 +1,132 @@
-use casper_sdk::{collections::Map, prelude::*};
+//! CEP-18 token standard.
+//!
+//! This module implements the CEP-18 token standard, which is a fungible token standard
+//! for the Casper blockchain. It provides a set of functions and traits for creating, transferring,
+//! and managing fungible tokens.
+//!
+//! The CEP-18 standard is designed to be simple and efficient, allowing developers to easily
+//! create and manage fungible tokens on the Casper blockchain. It includes support for
+//! minting, burning, and transferring tokens, as well as managing allowances and balances.
+//!
+//! The standard also includes support for events, allowing developers to emit events
+//! when tokens are transferred, minted, or burned. This allows for easy tracking
+//! and monitoring of token activity on the blockchain.
+//!
+//! It only requires implementation of `CEP18` trait for your contract to receive already
+//! implemented entry points.
+//!
+//! # Example CEP18 token contract
+//!
+//! ```rust
+//! use casper_sdk::prelude::*;
+//! use casper_sdk::contrib::cep18::{CEP18, Mintable, Burnable};
+//! use casper_sdk::collections::Map;
+//! use casper_sdk::macros::casper;
+//!
+//! #[derive(PanicOnDefault)]
+//! #[casper(contract_state)]
+//! struct MyToken {
+//!    state: CEP18State,
+//! }
+//!
+//! impl Default for MyToken {
+//!   fn default() -> Self {
+//!    Self {
+//!       state: CEP18State::new("MyToken", "MTK", 18, 10_000_000_000),
+//!    }
+//! }
+//!
+//! #[casper]
+//! impl MyToken {
+//!   #[casper(constructor)]
+//!   pub fn new() -> Self {
+//!     let my_token = Self::default();
+//!     // Perform extra initialization if needed i.e. mint tokens, set genesis balance holders etc.
+//!     my_token
+//!   }
+//! }
+//!
+//! #[casper(path = casper_sdk::contrib::cep18)]
+//! impl CEP18 for MyToken {
+//!   fn state(&self) -> &CEP18State {
+//!     &self.state
+//! }
+//! ```
+use super::access_control::{AccessControl, AccessControlError, Role};
+#[allow(unused_imports)]
+use crate as casper_sdk;
+use crate::{collections::Map, macros::blake2b256, prelude::*};
 
-use crate::{
-    error::Cep18Error,
-    messages::{Approve, Transfer},
-    security_badge::SecurityBadge,
-};
-
-#[derive(Debug)]
+/// While the code consuming this contract needs to define further error variants, it can
+/// return those via the [`Error::User`] variant or equivalently via the [`ApiError::User`]
+/// variant.
+#[derive(Debug, PartialEq, Eq)]
 #[casper]
+pub enum Cep18Error {
+    /// CEP-18 contract called from within an invalid context.
+    InvalidContext,
+    /// Spender does not have enough balance.
+    InsufficientBalance,
+    /// Spender does not have enough allowance approved.
+    InsufficientAllowance,
+    /// Operation would cause an integer overflow.
+    Overflow,
+    /// A required package hash was not specified.
+    PackageHashMissing,
+    /// The package hash specified does not represent a package.
+    PackageHashNotPackage,
+    /// An invalid event mode was specified.
+    InvalidEventsMode,
+    /// The event mode required was not specified.
+    MissingEventsMode,
+    /// An unknown error occurred.
+    Phantom,
+    /// Failed to read the runtime arguments provided.
+    FailedToGetArgBytes,
+    /// The caller does not have sufficient security access.
+    InsufficientRights,
+    /// The list of Admin accounts provided is invalid.
+    InvalidAdminList,
+    /// The list of accounts that can mint tokens is invalid.
+    InvalidMinterList,
+    /// The list of accounts with no access rights is invalid.
+    InvalidNoneList,
+    /// The flag to enable the mint and burn mode is invalid.
+    InvalidEnableMBFlag,
+    /// This contract instance cannot be initialized again.
+    AlreadyInitialized,
+    ///  The mint and burn mode is disabled.
+    MintBurnDisabled,
+    CannotTargetSelfUser,
+    InvalidBurnTarget,
+}
+
+impl From<AccessControlError> for Cep18Error {
+    fn from(error: AccessControlError) -> Self {
+        match error {
+            AccessControlError::NotAuthorized => Cep18Error::InsufficientRights,
+        }
+    }
+}
+
+#[casper(message, path = crate)]
+pub struct Transfer {
+    pub from: Option<Entity>,
+    pub to: Entity,
+    pub amount: u64,
+}
+
+#[casper(message, path = crate)]
+pub struct Approve {
+    pub owner: Entity,
+    pub spender: Entity,
+    pub amount: u64,
+}
+
+pub const ADMIN_ROLE: Role = blake2b256!("admin");
+pub const MINTER_ROLE: Role = blake2b256!("minter");
+
+#[casper(path = crate)]
 pub struct CEP18State {
     pub name: String,
     pub symbol: String,
@@ -15,23 +134,10 @@ pub struct CEP18State {
     pub total_supply: u64, // TODO: U256
     pub balances: Map<Entity, u64>,
     pub allowances: Map<(Entity, Entity), u64>,
-    pub security_badges: Map<Entity, SecurityBadge>,
     pub enable_mint_burn: bool,
 }
 
 impl CEP18State {
-    pub(crate) fn sec_check(&self, allowed_badge_list: &[SecurityBadge]) -> Result<(), Cep18Error> {
-        let caller = casper::get_caller();
-        let security_badge = self
-            .security_badges
-            .get(&caller)
-            .ok_or(Cep18Error::InsufficientRights)?;
-        if !allowed_badge_list.contains(&security_badge) {
-            return Err(Cep18Error::InsufficientRights);
-        }
-        Ok(())
-    }
-
     fn transfer_balance(
         &mut self,
         sender: &Entity,
@@ -61,7 +167,7 @@ impl CEP18State {
 }
 
 impl CEP18State {
-    pub(crate) fn new(name: &str, symbol: &str, decimals: u8, total_supply: u64) -> CEP18State {
+    pub fn new(name: &str, symbol: &str, decimals: u8, total_supply: u64) -> CEP18State {
         CEP18State {
             name: name.to_string(),
             symbol: symbol.to_string(),
@@ -69,13 +175,12 @@ impl CEP18State {
             total_supply,
             balances: Map::new("balances"),
             allowances: Map::new("allowances"),
-            security_badges: Map::new("security_badges"),
             enable_mint_burn: false,
         }
     }
 }
 
-#[casper]
+#[casper(path = crate, export = true)]
 pub trait CEP18 {
     #[casper(private)]
     fn state(&self) -> &CEP18State;
@@ -218,23 +323,20 @@ pub trait CEP18 {
     }
 }
 
-#[casper]
-pub trait Mintable: CEP18 {
+#[casper(path = crate, export = true)]
+pub trait Mintable: CEP18 + AccessControl {
     #[casper(revert_on_error)]
     fn mint(&mut self, owner: Entity, amount: u64) -> Result<(), Cep18Error> {
-        log!("mint {}", self.state().name);
-        if !self.state().enable_mint_burn {
+        if !CEP18::state(self).enable_mint_burn {
             return Err(Cep18Error::MintBurnDisabled);
         }
 
-        self.state()
-            .sec_check(&[SecurityBadge::Admin, SecurityBadge::Minter])?;
+        AccessControl::require_any_role(self, &[ADMIN_ROLE, MINTER_ROLE])?;
 
-        let balance = self.state().balances.get(&owner).unwrap_or_default();
+        let balance = CEP18::state(self).balances.get(&owner).unwrap_or_default();
         let new_balance = balance.checked_add(amount).ok_or(Cep18Error::Overflow)?;
-        self.state_mut().balances.insert(&owner, &new_balance);
-        self.state_mut().total_supply = self
-            .state()
+        CEP18::state_mut(self).balances.insert(&owner, &new_balance);
+        CEP18::state_mut(self).total_supply = CEP18::state(self)
             .total_supply
             .checked_add(amount)
             .ok_or(Cep18Error::Overflow)?;
@@ -250,7 +352,7 @@ pub trait Mintable: CEP18 {
     }
 }
 
-#[casper]
+#[casper(path = crate, export = true)]
 pub trait Burnable: CEP18 {
     #[casper(revert_on_error)]
     fn burn(&mut self, owner: Entity, amount: u64) -> Result<(), Cep18Error> {

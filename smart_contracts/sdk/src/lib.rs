@@ -10,7 +10,7 @@ pub mod serializers;
 #[cfg(not(target_arch = "wasm32"))]
 pub use linkme;
 
-#[cfg(feature = "__abi_generator")]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod abi_generator;
 pub mod casper;
 pub mod collections;

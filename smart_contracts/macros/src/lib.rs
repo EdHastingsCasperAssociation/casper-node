@@ -14,11 +14,6 @@ use syn::{
 use casper_executor_wasm_common::flags::EntryPointFlags;
 const CASPER_RESERVED_FALLBACK_EXPORT: &str = "__casper_fallback";
 
-#[derive(Debug, FromMeta)]
-struct CasperAttribute {
-    #[darling(default)]
-    path: Option<syn::Path>,
-}
 #[derive(Debug, FromAttributes)]
 #[darling(attributes(casper))]
 struct MethodAttribute {
@@ -109,7 +104,7 @@ pub fn casper(attrs: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    let mut has_fallback_selector = false;
+    let has_fallback_selector = false;
 
     if let Ok(item_struct) = syn::parse::<ItemStruct>(item.clone()) {
         let struct_meta = StructMeta::from_list(&attr_args).unwrap();
@@ -180,7 +175,7 @@ fn process_casper_message_for_struct(
         )
     };
 
-    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone().into());
+    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone());
 
     let maybe_abi_collectors;
     let maybe_entrypoint_defs;
@@ -188,13 +183,13 @@ fn process_casper_message_for_struct(
     #[cfg(feature = "__abi_generator")]
     {
         maybe_abi_collectors = quote! {
-                const _: () = {
-                    #[#crate_path::linkme::distributed_slice(#crate_path::abi_generator::ABI_COLLECTORS)]
-                    #[linkme(crate = #crate_path::linkme)]
-                    static COLLECTOR: fn(&mut casper_sdk::abi::Definitions) = |defs| {
-                        defs.populate_one::<#struct_name>();
-                    };
+            const _: () = {
+                #[#crate_path::linkme::distributed_slice(#crate_path::abi_generator::ABI_COLLECTORS)]
+                #[linkme(crate = #crate_path::linkme)]
+                static COLLECTOR: fn(&mut #crate_path::abi::Definitions) = |defs| {
+                    defs.populate_one::<#struct_name>();
                 };
+            };
         };
 
         maybe_entrypoint_defs = quote! {
@@ -799,6 +794,7 @@ fn generate_impl_for_contract(
 
         maybe_entrypoint_defs = quote! {
             #(
+
                 const _: () = {
                     #[casper_sdk::linkme::distributed_slice(casper_sdk::abi_generator::ENTRYPOINTS)]
                     #[linkme(crate = casper_sdk::linkme)]
@@ -882,7 +878,7 @@ fn generate_impl_trait_for_contract(
                 .ident
                 .clone();
 
-            if crate_name.to_string() == "crate" {
+            if crate_name == "crate" {
                 // This is local, can't refer by absolute path
                 quote! { #path }
             } else {
@@ -1201,7 +1197,11 @@ fn casper_trait_definition(mut item_trait: ItemTrait, trait_meta: TraitMeta) -> 
                 });
                 }
             }
-            syn::TraitItem::Type(_) => todo!("Type"),
+            syn::TraitItem::Type(_) => {
+                return syn::Error::new(Span::call_site(), "Unsupported generic associated types")
+                    .to_compile_error()
+                    .into();
+            }
             syn::TraitItem::Macro(_) => todo!("Macro"),
             syn::TraitItem::Verbatim(_) => todo!("Verbatim"),
             other => todo!("Other {other:?}"),
@@ -1288,7 +1288,7 @@ fn generate_casper_state_for_struct(
             Span::call_site(),
         )
     };
-    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone().into());
+    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone());
 
     quote! {
         #[derive(#crate_path::serializers::borsh::BorshSerialize, #crate_path::serializers::borsh::BorshDeserialize)]
@@ -1318,7 +1318,7 @@ fn generate_casper_state_for_enum(
         )
     };
 
-    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone().into());
+    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone());
 
     quote! {
         #[derive(#crate_path::serializers::borsh::BorshSerialize, #crate_path::serializers::borsh::BorshDeserialize)]
@@ -1329,11 +1329,11 @@ fn generate_casper_state_for_enum(
     }
 }
 
-fn get_maybe_derive_abi(crate_path: TokenStream) -> impl ToTokens {
+fn get_maybe_derive_abi(_crate_path: impl ToTokens) -> impl ToTokens {
     #[cfg(feature = "__abi_generator")]
     {
         quote! {
-            #[derive(#crate_path::macros::CasperABI)]
+            #[derive(#_crate_path::macros::CasperABI)]
         }
     }
 
@@ -1366,20 +1366,20 @@ fn process_casper_contract_state_for_struct(
         )
     };
 
-    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone().into());
+    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone());
 
     // Optionally, generate a schema export if the appropriate flag
     // is set.
     let maybe_casper_schema = {
         #[cfg(feature = "__embed_schema")]
         quote! {
-            const SCHEMA: &str = env!("__CARGO_CASPER_INJECT_SCHEMA_MARKER");
+            const SCHEMA: Option<&str> = option_env!("__CARGO_CASPER_INJECT_SCHEMA_MARKER");
 
             #[no_mangle]
             pub extern "C" fn __casper_schema() {
                 use #crate_path::casper::ret;
                 use #crate_path::casper_executor_wasm_common::flags::ReturnFlags;
-                let bytes = SCHEMA.as_bytes();
+                let bytes = SCHEMA.unwrap_or_default().as_bytes();
                 ret(ReturnFlags::empty(), Some(bytes));
             }
         }

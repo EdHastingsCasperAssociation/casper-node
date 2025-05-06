@@ -1,12 +1,13 @@
 #![cfg_attr(target_family = "wasm", no_main)]
 
 pub mod exports {
-    use casper_sdk::{prelude::*, types::Address, ContractHandle};
-
-    use vm2_cep18::{
-        contract::TokenContractRef,
-        traits::{CEP18Ext, MintableExt},
+    use casper_sdk::{
+        contrib::cep18::{CEP18Ext, MintableExt},
+        prelude::*,
+        types::Address,
+        ContractHandle,
     };
+    use vm2_cep18::TokenContractRef;
 
     #[casper(export)]
     pub fn call(address: Address) -> String {

@@ -1,14 +1,15 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 #![cfg_attr(target_arch = "wasm32", no_std)]
 
-use casper_macros::casper;
+use casper_macros::{blake2b256, casper};
 use casper_sdk::{
-    casper::{self, Entity},
-    collections::{sorted_vector::SortedVector, Map},
-    contrib::access_control::{AccessControl, AccessControlExt, AccessControlState},
+    casper,
+    contrib::{
+        access_control::{AccessControl, AccessControlExt, AccessControlState, Role},
+        ownable::{Ownable, OwnableError, OwnableExt, OwnableState},
+    },
     log,
     prelude::*,
-    types::Address,
     ContractBuilder, ContractHandle,
 };
 
@@ -67,63 +68,6 @@ pub trait Counter {
     fn counter_state_mut(&mut self) -> &mut CounterState;
 }
 
-#[casper]
-pub struct OwnableState {
-    owner: Option<Entity>,
-}
-
-impl Default for OwnableState {
-    fn default() -> Self {
-        Self {
-            owner: Some(casper_sdk::casper::get_caller()),
-        }
-    }
-}
-
-#[casper]
-pub enum OwnableError {
-    /// The caller is not authorized to perform the action.
-    NotAuthorized,
-}
-
-#[casper]
-pub trait Ownable {
-    #[casper(private)]
-    fn state(&self) -> &OwnableState;
-    #[casper(private)]
-    fn state_mut(&mut self) -> &mut OwnableState;
-
-    fn only_owner(&self) -> Result<(), OwnableError> {
-        let caller = casper_sdk::casper::get_caller();
-        match self.state().owner {
-            Some(owner) if caller != owner => {
-                return Err(OwnableError::NotAuthorized);
-            }
-            None => {
-                return Err(OwnableError::NotAuthorized);
-            }
-            Some(_owner) => {}
-        }
-        Ok(())
-    }
-
-    fn transfer_ownership(&mut self, new_owner: Entity) -> Result<(), OwnableError> {
-        self.only_owner()?;
-        self.state_mut().owner = Some(new_owner);
-        Ok(())
-    }
-
-    fn owner(&self) -> Option<Entity> {
-        self.state().owner
-    }
-
-    fn renounce_ownership(&mut self) -> Result<(), OwnableError> {
-        self.only_owner()?;
-        self.state_mut().owner = None;
-        Ok(())
-    }
-}
-
 #[casper(contract_state)]
 #[derive(Default)]
 pub struct HasTraits {
@@ -158,13 +102,28 @@ impl Counter for HasTraits {
     }
 }
 
-#[casper]
+#[casper(path = casper_sdk::contrib::ownable)]
 impl Ownable for HasTraits {
     fn state(&self) -> &OwnableState {
         &self.ownable_state
     }
     fn state_mut(&mut self) -> &mut OwnableState {
         &mut self.ownable_state
+    }
+}
+
+#[casper]
+pub enum UserRole {
+    Admin,
+    User,
+}
+
+impl Into<Role> for UserRole {
+    fn into(self) -> Role {
+        match self {
+            UserRole::Admin => blake2b256!("admin"),
+            UserRole::User => blake2b256!("user"),
+        }
     }
 }
 
