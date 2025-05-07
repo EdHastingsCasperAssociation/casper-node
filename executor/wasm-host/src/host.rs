@@ -1491,11 +1491,7 @@ pub fn casper_env_info<S: GlobalStateReader, E: Executor>(
     info_size: u32,
 ) -> VMResult<u32> {
     let block_time_cost = caller.context().config.host_function_costs().env_info;
-    charge_host_function_call(
-        &mut caller,
-        &block_time_cost,
-        [info_ptr, info_size],
-    )?;
+    charge_host_function_call(&mut caller, &block_time_cost, [info_ptr, info_size])?;
 
     // TODO: Decide whether we want to return the full address and entity kind or just the 32 bytes
     // "unified".
