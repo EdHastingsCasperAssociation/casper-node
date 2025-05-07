@@ -967,7 +967,6 @@ pub fn casper_env_caller<S: GlobalStateReader, E: Executor>(
     // "unified".
 
     let entity_addr = context_to_entity_addr(caller.context());
-    // TODO: This is a mismatch between entity_addr.tag() -- is this deliberate?
     let entity_kind = if entity_addr.is_account() { 0u32 } else { 1u32 };
     let mut data = &entity_addr.value()[..];
     if dest_ptr == 0 {
