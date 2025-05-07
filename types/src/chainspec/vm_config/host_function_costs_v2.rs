@@ -76,6 +76,13 @@ where
             ..Default::default()
         }
     }
+
+    pub fn zero() -> Self {
+        Self {
+            cost: Default::default(),
+            arguments: Default::default(),
+        }
+    }
 }
 
 impl<T> HostFunctionV2<T>
@@ -221,6 +228,28 @@ pub struct HostFunctionCostsV2 {
     pub print: HostFunctionV2<[Cost; 2]>,
     /// Cost of calling the `emit` host function.
     pub emit: HostFunctionV2<[Cost; 4]>,
+}
+
+impl HostFunctionCostsV2 {
+    pub fn zero() -> Self {
+        Self {
+            read: HostFunctionV2::zero(),
+            write: HostFunctionV2::zero(),
+            remove: HostFunctionV2::zero(),
+            copy_input: HostFunctionV2::zero(),
+            ret: HostFunctionV2::zero(),
+            create: HostFunctionV2::zero(),
+            env_caller: HostFunctionV2::zero(),
+            env_block_time: HostFunctionV2::zero(),
+            env_transferred_value: HostFunctionV2::zero(),
+            transfer: HostFunctionV2::zero(),
+            env_balance: HostFunctionV2::zero(),
+            upgrade: HostFunctionV2::zero(),
+            call: HostFunctionV2::zero(),
+            print: HostFunctionV2::zero(),
+            emit: HostFunctionV2::zero(),
+        }
+    }
 }
 
 impl Default for HostFunctionCostsV2 {
