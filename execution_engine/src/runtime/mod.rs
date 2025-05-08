@@ -84,6 +84,11 @@ enum CallContractIdentifier {
         contract_package_hash: HashAddr,
         version: Option<EntityVersion>,
     },
+    PackageVersion {
+        contract_package_hash: HashAddr,
+        major_version: u32,
+        version: EntityVersion,
+    },
 }
 
 #[repr(u8)]
@@ -1454,6 +1459,27 @@ where
         self.execute_contract(identifier, &entry_point_name, args)
     }
 
+    /// Calls `version` of the contract living at `key`, invoking `method` with
+    /// supplied `args`. This function also checks the args conform with the
+    /// types given in the contract header.
+    pub fn call_package_version(
+        &mut self,
+        contract_package_hash: PackageHash,
+        major_version: u32,
+        contract_version: EntityVersion,
+        entry_point_name: String,
+        args: RuntimeArgs,
+    ) -> Result<CLValue, ExecError> {
+        let contract_package_hash = contract_package_hash.value();
+        let identifier = CallContractIdentifier::PackageVersion {
+            contract_package_hash,
+            major_version,
+            version: contract_version,
+        };
+
+        self.execute_contract(identifier, &entry_point_name, args)
+    }
+
     fn get_key_from_entity_addr(&self, entity_addr: EntityAddr) -> Key {
         if self.context().engine_config().enable_entity {
             Key::AddressableEntity(entity_addr)
@@ -1648,22 +1674,84 @@ where
                 contract_package_hash,
                 version,
             } => {
+                if version.is_some() {
+                    return Err(ExecError::Revert(ApiError::UnexpectedContractRefVariant));
+                }
+
                 let package = self.context.get_package(contract_package_hash)?;
 
-                let entity_version_key = match version {
-                    Some(version) => EntityVersionKey::new(
-                        self.context.protocol_version().value().major,
-                        version,
-                    ),
-                    None => match package.current_entity_version() {
-                        Some(v) => v,
-                        None => {
-                            return Err(ExecError::NoActiveEntityVersions(
-                                contract_package_hash.into(),
-                            ));
-                        }
-                    },
+                let entity_version_key = match package.current_entity_version() {
+                    Some(v) => v,
+                    None => {
+                        return Err(ExecError::NoActiveEntityVersions(
+                            contract_package_hash.into(),
+                        ));
+                    }
                 };
+
+                if package.is_version_missing(entity_version_key) {
+                    return Err(ExecError::MissingEntityVersion(entity_version_key));
+                }
+
+                if !package.is_version_enabled(entity_version_key) {
+                    return Err(ExecError::DisabledEntityVersion(entity_version_key));
+                }
+
+                let hash_addr = package
+                    .lookup_entity_hash(entity_version_key)
+                    .copied()
+                    .ok_or(ExecError::MissingEntityVersion(entity_version_key))?
+                    .value();
+
+                let entity_addr = if self.context.is_system_addressable_entity(&hash_addr)? {
+                    EntityAddr::new_system(hash_addr)
+                } else {
+                    EntityAddr::new_smart_contract(hash_addr)
+                };
+
+                let footprint = match self.context.read_gs(&Key::Hash(hash_addr))? {
+                    Some(StoredValue::Contract(contract)) => {
+                        if self.context.engine_config().enable_entity {
+                            self.migrate_contract_and_contract_package(hash_addr)?;
+                        };
+                        let maybe_system_entity_type = self.maybe_system_type(hash_addr);
+                        RuntimeFootprint::new_contract_footprint(
+                            ContractHash::new(hash_addr),
+                            contract,
+                            maybe_system_entity_type,
+                        )
+                    }
+                    Some(_) | None => {
+                        if !self.context.engine_config().enable_entity {
+                            return Err(ExecError::KeyNotFound(Key::Hash(hash_addr)));
+                        }
+                        let key = Key::AddressableEntity(entity_addr);
+                        let entity = self.context.read_gs_typed::<AddressableEntity>(&key)?;
+                        let entity_named_keys = self
+                            .context
+                            .state()
+                            .borrow_mut()
+                            .get_named_keys(entity_addr)?;
+                        let entry_points = self.context.get_casper_vm_v1_entry_point(key)?;
+                        RuntimeFootprint::new_entity_footprint(
+                            entity_addr,
+                            entity,
+                            entity_named_keys,
+                            entry_points,
+                        )
+                    }
+                };
+
+                (footprint, entity_addr, package)
+            }
+            CallContractIdentifier::PackageVersion {
+                contract_package_hash,
+                major_version,
+                version,
+            } => {
+                let package = self.context.get_package(contract_package_hash)?;
+
+                let entity_version_key = EntityVersionKey::new(major_version, version);
 
                 if package.is_version_missing(entity_version_key) {
                     return Err(ExecError::MissingEntityVersion(entity_version_key));
@@ -2125,6 +2213,46 @@ where
 
         let result = self.call_versioned_contract(
             contract_package_hash,
+            contract_version,
+            entry_point_name,
+            args,
+        )?;
+        self.manage_call_contract_host_buffer(result_size_ptr, result)
+    }
+
+    fn call_package_version_host_buffer(
+        &mut self,
+        contract_package_hash: PackageHash,
+        major_version: u32,
+        contract_version: EntityVersion,
+        entry_point_name: String,
+        args_bytes: &[u8],
+        result_size_ptr: u32,
+    ) -> Result<Result<(), ApiError>, ExecError> {
+        // Exit early if the host buffer is already occupied
+        if let Err(err) = self.check_host_buffer() {
+            return Ok(Err(err));
+        }
+        let args: RuntimeArgs = bytesrepr::deserialize_from_slice(args_bytes)?;
+
+        if let Some(payment_purse) = self.context.maybe_payment_purse() {
+            for named_arg in args.named_args() {
+                if utils::extract_urefs(named_arg.cl_value())?
+                    .into_iter()
+                    .any(|uref| uref.remove_access_rights() == payment_purse.remove_access_rights())
+                {
+                    warn!("attempt to call_versioned_contract with payment purse");
+
+                    return Err(Into::into(ExecError::Revert(ApiError::HandlePayment(
+                        handle_payment::Error::AttemptToPersistPaymentPurse as u8,
+                    ))));
+                }
+            }
+        }
+
+        let result = self.call_package_version(
+            contract_package_hash,
+            major_version,
             contract_version,
             entry_point_name,
             args,
