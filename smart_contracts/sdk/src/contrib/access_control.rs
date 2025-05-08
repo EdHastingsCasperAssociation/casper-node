@@ -39,6 +39,7 @@ impl Default for AccessControlState {
 
 /// Represents the possible errors that can occur during access control operations.
 #[casper(path = "crate")]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum AccessControlError {
     /// The caller is not authorized to perform the action.
     NotAuthorized,

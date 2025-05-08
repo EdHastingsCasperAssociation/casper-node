@@ -3,7 +3,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     convert::Infallible,
     fmt,
-    os::raw::c_void,
     panic::{self, UnwindSafe},
     ptr::{self, NonNull},
     slice,
@@ -134,8 +133,8 @@ pub struct Environment {
     contracts: Arc<RwLock<BTreeSet<Address>>>,
     // input_data: Arc<RwLock<Option<Bytes>>>,
     input_data: Option<Bytes>,
-    contract_address: Option<Address>,
     caller: Entity,
+    callee: Entity,
 }
 
 impl Default for Environment {
@@ -144,8 +143,8 @@ impl Default for Environment {
             db: Default::default(),
             contracts: Default::default(),
             input_data: Default::default(),
-            contract_address: Default::default(),
             caller: DEFAULT_ADDRESS,
+            callee: DEFAULT_ADDRESS,
         }
     }
 }
@@ -159,8 +158,8 @@ impl Environment {
             db: Arc::new(RwLock::new(db)),
             contracts: Default::default(),
             input_data: Default::default(),
-            contract_address: None,
             caller,
+            callee: caller,
         }
     }
 
@@ -172,26 +171,39 @@ impl Environment {
     }
 
     #[must_use]
+    pub fn smart_contract(&self, callee: Entity) -> Self {
+        let mut env = self.clone();
+        env.caller = self.callee;
+        env.callee = callee;
+        env
+    }
+
+    #[must_use]
+    pub fn session(&self, callee: Entity) -> Self {
+        let mut env = self.clone();
+        env.caller = callee;
+        env.callee = callee;
+        env
+    }
+
+    #[must_use]
+    pub fn with_callee(&self, callee: Entity) -> Self {
+        let mut env = self.clone();
+        env.callee = callee;
+        env
+    }
+
+    #[must_use]
     pub fn with_input_data(&self, input_data: Vec<u8>) -> Self {
         let mut env = self.clone();
         env.input_data = Some(Bytes::from(input_data));
         env
     }
-
-    fn casper_env_transferred_value(&self, dest: *mut core::ffi::c_void) -> Result<(), NativeTrap> {
-        let dest_ptr = NonNull::new(dest).expect("Valid pointer");
-        let value = 0u128;
-        let src_ptr = NonNull::from(&value);
-        unsafe {
-            ptr::copy_nonoverlapping(src_ptr.as_ptr() as *const c_void, dest_ptr.as_ptr(), 16);
-        }
-        Ok(())
-    }
 }
 
 impl Environment {
     fn key_prefix(&self, key: &[u8]) -> Vec<u8> {
-        let entity = self.contract_address.map_or(self.caller, Entity::Contract);
+        let entity = self.callee;
 
         let mut bytes = Vec::new();
         bytes.extend(entity.tag().to_le_bytes());
@@ -303,8 +315,11 @@ impl Environment {
         data_len: usize,
     ) -> Result<Infallible, NativeTrap> {
         let return_flags = ReturnFlags::from_bits_truncate(flags);
-        let data = unsafe { slice::from_raw_parts(data_ptr, data_len) };
-        let data = Bytes::copy_from_slice(data);
+        let data = if data_ptr.is_null() {
+            Bytes::new()
+        } else {
+            Bytes::copy_from_slice(unsafe { slice::from_raw_parts(data_ptr, data_len) })
+        };
         Err(NativeTrap::Return(return_flags, data))
     }
 
@@ -339,11 +354,13 @@ impl Environment {
         &self,
         code_ptr: *const u8,
         code_size: usize,
-        transferred_value_ptr: *const c_void,
+        transferred_value: u64,
         constructor_ptr: *const u8,
         constructor_size: usize,
         input_ptr: *const u8,
         input_size: usize,
+        seed_ptr: *const u8,
+        seed_size: usize,
         result_ptr: *mut casper_sdk_sys::CreateResult,
     ) -> Result<u32, NativeTrap> {
         // let manifest =
@@ -371,9 +388,10 @@ impl Environment {
             Some(unsafe { slice::from_raw_parts(input_ptr, input_size) })
         };
 
-        let transferred_value = {
-            let value_ptr = NonNull::new(transferred_value_ptr as *mut u64).expect("Valid pointer");
-            unsafe { *value_ptr.as_ptr() }
+        let _seed = if seed_ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { slice::from_raw_parts(seed_ptr, seed_size) })
         };
 
         assert_eq!(
@@ -400,9 +418,12 @@ impl Environment {
                 .expect("Entry point exists");
 
             let mut stub = with_current_environment(|stub| stub);
-            stub.contract_address = Some(contract_address);
             stub.input_data = input_data.map(Bytes::copy_from_slice);
 
+            stub.caller = stub.callee;
+            stub.callee = Entity::Contract(package_address);
+
+            // stub.callee
             // Call constructor, expect a trap
             let result = dispatch_with(stub, || {
                 // TODO: Handle panic inside constructor
@@ -431,7 +452,7 @@ impl Environment {
         &self,
         address_ptr: *const u8,
         address_size: usize,
-        value: *const core::ffi::c_void,
+        transferred_value: u64,
         entry_point_ptr: *const u8,
         entry_point_size: usize,
         input_ptr: *const u8,
@@ -450,13 +471,8 @@ impl Environment {
             entry_point.to_string()
         };
 
-        let value: u128 = {
-            let value_ptr = NonNull::new(value as *mut u128).expect("Valid pointer");
-            unsafe { *value_ptr.as_ptr() }
-        };
-
         assert_eq!(
-            value, 0,
+            transferred_value, 0,
             "Transferred value is not supported in native mode"
         );
 
@@ -470,7 +486,9 @@ impl Environment {
 
         let mut new_stub = with_current_environment(|stub| stub.clone());
         new_stub.input_data = Some(Bytes::copy_from_slice(input_data));
-        new_stub.contract_address = Some(address.try_into().expect("Size to match"));
+        // new_stub.caller = Entity::Contract(address.try_into().expect("Size to match"));
+        new_stub.caller = new_stub.callee;
+        new_stub.callee = Entity::Contract(address.try_into().expect("Size to match"));
 
         let ret = dispatch_with(new_stub, || {
             // We need to convert any panic inside the entry point into a native trap. This probably
@@ -555,6 +573,10 @@ Example paths:
         dst.copy_from_slice(&addr);
 
         Ok(unsafe { dest.add(32) })
+    }
+
+    fn casper_env_transferred_value(&self) -> Result<u64, NativeTrap> {
+        Ok(0)
     }
 }
 
@@ -708,6 +730,8 @@ mod symbols {
         crate::casper::native::handle_ret(_call_result);
     }
 
+    use casper_executor_wasm_common::error::HOST_ERROR_SUCCESS;
+
     use crate::casper::native::LAST_TRAP;
 
     #[no_mangle]
@@ -736,22 +760,26 @@ mod symbols {
     pub extern "C" fn casper_create(
         code_ptr: *const u8,
         code_size: usize,
-        value: *const core::ffi::c_void,
+        transferred_value: u64,
         constructor_ptr: *const u8,
         constructor_size: usize,
         input_ptr: *const u8,
         input_size: usize,
-        result_ptr: *mut ::casper_sdk_sys::CreateResult,
+        seed_ptr: *const u8,
+        seed_size: usize,
+        result_ptr: *mut casper_sdk_sys::CreateResult,
     ) -> u32 {
         let _call_result = with_current_environment(|stub| {
             stub.casper_create(
                 code_ptr,
                 code_size,
-                value,
+                transferred_value,
                 constructor_ptr,
                 constructor_size,
                 input_ptr,
                 input_size,
+                seed_ptr,
+                seed_size,
                 result_ptr,
             )
         });
@@ -762,7 +790,7 @@ mod symbols {
     pub extern "C" fn casper_call(
         address_ptr: *const u8,
         address_size: usize,
-        value: *const core::ffi::c_void,
+        transferred_value: u64,
         entry_point_ptr: *const u8,
         entry_point_size: usize,
         input_ptr: *const u8,
@@ -775,7 +803,7 @@ mod symbols {
             stub.casper_call(
                 address_ptr,
                 address_size,
-                value,
+                transferred_value,
                 entry_point_ptr,
                 entry_point_size,
                 input_ptr,
@@ -799,6 +827,7 @@ mod symbols {
         todo!()
     }
 
+    use core::slice;
     use std::ptr;
 
     use super::with_current_environment;
@@ -831,11 +860,11 @@ mod symbols {
         crate::casper::native::handle_ret_with(_call_result, ptr::null)
     }
     #[no_mangle]
-    pub extern "C" fn casper_env_transferred_value(dest: *mut core::ffi::c_void) {
+    pub extern "C" fn casper_env_transferred_value() -> u64 {
         let _name = "casper_env_transferred_value";
         let _args = ();
-        let _call_result = with_current_environment(|stub| stub.casper_env_transferred_value(dest));
-        crate::casper::native::handle_ret(_call_result);
+        let _call_result = with_current_environment(|stub| stub.casper_env_transferred_value());
+        crate::casper::native::handle_ret(_call_result)
     }
     #[no_mangle]
     pub extern "C" fn casper_env_balance(
@@ -862,19 +891,64 @@ mod symbols {
 
     #[no_mangle]
     pub extern "C" fn casper_emit(
-        _topic_ptr: *const u8,
-        _topic_size: usize,
-        _data_ptr: *const u8,
-        _data_size: usize,
+        topic_ptr: *const u8,
+        topic_size: usize,
+        data_ptr: *const u8,
+        data_size: usize,
     ) -> u32 {
-        todo!()
+        let topic = unsafe { slice::from_raw_parts(topic_ptr, topic_size) };
+        let data = unsafe { slice::from_raw_parts(data_ptr, data_size) };
+        let topic = std::str::from_utf8(topic).expect("Valid UTF-8 string");
+        println!("Emitting event with topic: {topic:?} and data: {data:?}");
+        HOST_ERROR_SUCCESS
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use casper_executor_wasm_common::keyspace::Keyspace;
+
+    use crate::casper;
+
     use super::*;
 
+    #[test]
+    fn foo() {
+        dispatch(|| {
+            casper::print("Hello");
+            casper::write(Keyspace::Context(b"test"), b"value 1").unwrap();
+
+            let change_context_1 =
+                with_current_environment(|stub| stub.smart_contract(Entity::Contract([1; 32])));
+
+            dispatch_with(change_context_1, || {
+                casper::write(Keyspace::Context(b"test"), b"value 2").unwrap();
+                casper::write(Keyspace::State, b"state").unwrap();
+            })
+            .unwrap();
+
+            let change_context_1 =
+                with_current_environment(|stub| stub.smart_contract(Entity::Contract([1; 32])));
+            dispatch_with(change_context_1, || {
+                assert_eq!(
+                    casper::read_into_vec(Keyspace::Context(b"test")),
+                    Ok(Some(b"value 2".to_vec()))
+                );
+                assert_eq!(
+                    casper::read_into_vec(Keyspace::State),
+                    Ok(Some(b"state".to_vec()))
+                );
+            })
+            .unwrap();
+
+            assert_eq!(casper::get_caller(), DEFAULT_ADDRESS);
+            assert_eq!(
+                casper::read_into_vec(Keyspace::Context(b"test")),
+                Ok(Some(b"value 1".to_vec()))
+            );
+        })
+        .unwrap();
+    }
     #[test]
     fn test() {
         dispatch_with(Environment::default(), || {
@@ -885,7 +959,6 @@ mod tests {
         .unwrap();
     }
 
-    #[ignore]
     #[test]
     fn test_returns() {
         dispatch_with(Environment::default(), || {

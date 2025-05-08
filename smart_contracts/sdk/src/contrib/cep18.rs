@@ -19,11 +19,11 @@
 //!
 //! ```rust
 //! use casper_sdk::prelude::*;
-//! use casper_sdk::contrib::cep18::{CEP18, Mintable, Burnable};
-//! use casper_sdk::collections::Map;
-//! use casper_sdk::macros::casper;
+//! use casper_sdk::contrib::cep18::{CEP18, CEP18State, CEP18Ext, Mintable, Burnable};
+//! # use casper_sdk::collections::Map;
+//! # use casper_sdk::macros::casper;
+//! # use casper_sdk::types::U256;
 //!
-//! #[derive(PanicOnDefault)]
 //! #[casper(contract_state)]
 //! struct MyToken {
 //!    state: CEP18State,
@@ -31,9 +31,10 @@
 //!
 //! impl Default for MyToken {
 //!   fn default() -> Self {
-//!    Self {
-//!       state: CEP18State::new("MyToken", "MTK", 18, 10_000_000_000),
-//!    }
+//!     Self {
+//!       state: CEP18State::new("MyToken", "MTK", 18, U256::from(10_000_000_000u64)),
+//!     }
+//!   }
 //! }
 //!
 //! #[casper]
@@ -50,8 +51,15 @@
 //! impl CEP18 for MyToken {
 //!   fn state(&self) -> &CEP18State {
 //!     &self.state
+//!   }
+//!
+//!   fn state_mut(&mut self) -> &mut CEP18State {
+//!     &mut self.state
+//!   }
 //! }
 //! ```
+use bnum::types::U256;
+
 use super::access_control::{AccessControl, AccessControlError, Role};
 #[allow(unused_imports)]
 use crate as casper_sdk;
@@ -113,14 +121,14 @@ impl From<AccessControlError> for Cep18Error {
 pub struct Transfer {
     pub from: Option<Entity>,
     pub to: Entity,
-    pub amount: u64,
+    pub amount: U256,
 }
 
 #[casper(message, path = crate)]
 pub struct Approve {
     pub owner: Entity,
     pub spender: Entity,
-    pub amount: u64,
+    pub amount: U256,
 }
 
 pub const ADMIN_ROLE: Role = blake2b256!("admin");
@@ -131,9 +139,9 @@ pub struct CEP18State {
     pub name: String,
     pub symbol: String,
     pub decimals: u8,
-    pub total_supply: u64, // TODO: U256
-    pub balances: Map<Entity, u64>,
-    pub allowances: Map<(Entity, Entity), u64>,
+    pub total_supply: U256,
+    pub balances: Map<Entity, U256>,
+    pub allowances: Map<(Entity, Entity), U256>,
     pub enable_mint_burn: bool,
 }
 
@@ -142,9 +150,9 @@ impl CEP18State {
         &mut self,
         sender: &Entity,
         recipient: &Entity,
-        amount: u64,
+        amount: U256,
     ) -> Result<(), Cep18Error> {
-        if amount == 0 {
+        if amount.is_zero() {
             return Ok(());
         }
 
@@ -167,7 +175,7 @@ impl CEP18State {
 }
 
 impl CEP18State {
-    pub fn new(name: &str, symbol: &str, decimals: u8, total_supply: u64) -> CEP18State {
+    pub fn new(name: &str, symbol: &str, decimals: u8, total_supply: U256) -> CEP18State {
         CEP18State {
             name: name.to_string(),
             symbol: symbol.to_string(),
@@ -200,11 +208,11 @@ pub trait CEP18 {
         self.state().decimals
     }
 
-    fn total_supply(&self) -> u64 {
+    fn total_supply(&self) -> U256 {
         self.state().total_supply
     }
 
-    fn balance_of(&self, address: Entity) -> u64 {
+    fn balance_of(&self, address: Entity) -> U256 {
         self.state().balances.get(&address).unwrap_or_default()
     }
 
@@ -216,7 +224,7 @@ pub trait CEP18 {
     }
 
     #[casper(revert_on_error)]
-    fn approve(&mut self, spender: Entity, amount: u64) -> Result<(), Cep18Error> {
+    fn approve(&mut self, spender: Entity, amount: U256) -> Result<(), Cep18Error> {
         let owner = casper::get_caller();
         if owner == spender {
             return Err(Cep18Error::CannotTargetSelfUser);
@@ -233,7 +241,7 @@ pub trait CEP18 {
     }
 
     #[casper(revert_on_error)]
-    fn decrease_allowance(&mut self, spender: Entity, amount: u64) -> Result<(), Cep18Error> {
+    fn decrease_allowance(&mut self, spender: Entity, amount: U256) -> Result<(), Cep18Error> {
         let owner = casper::get_caller();
         if owner == spender {
             return Err(Cep18Error::CannotTargetSelfUser);
@@ -246,7 +254,7 @@ pub trait CEP18 {
     }
 
     #[casper(revert_on_error)]
-    fn increase_allowance(&mut self, spender: Entity, amount: u64) -> Result<(), Cep18Error> {
+    fn increase_allowance(&mut self, spender: Entity, amount: U256) -> Result<(), Cep18Error> {
         let owner = casper::get_caller();
         if owner == spender {
             return Err(Cep18Error::CannotTargetSelfUser);
@@ -259,7 +267,7 @@ pub trait CEP18 {
     }
 
     #[casper(revert_on_error)]
-    fn transfer(&mut self, recipient: Entity, amount: u64) -> Result<(), Cep18Error> {
+    fn transfer(&mut self, recipient: Entity, amount: U256) -> Result<(), Cep18Error> {
         let sender = casper::get_caller();
         if sender == recipient {
             return Err(Cep18Error::CannotTargetSelfUser);
@@ -285,14 +293,14 @@ pub trait CEP18 {
         &mut self,
         owner: Entity,
         recipient: Entity,
-        amount: u64,
+        amount: U256,
     ) -> Result<(), Cep18Error> {
         let spender = casper::get_caller();
         if owner == recipient {
             return Err(Cep18Error::CannotTargetSelfUser);
         }
 
-        if amount == 0 {
+        if amount.is_zero() {
             return Ok(());
         }
 
@@ -326,7 +334,7 @@ pub trait CEP18 {
 #[casper(path = crate, export = true)]
 pub trait Mintable: CEP18 + AccessControl {
     #[casper(revert_on_error)]
-    fn mint(&mut self, owner: Entity, amount: u64) -> Result<(), Cep18Error> {
+    fn mint(&mut self, owner: Entity, amount: U256) -> Result<(), Cep18Error> {
         if !CEP18::state(self).enable_mint_burn {
             return Err(Cep18Error::MintBurnDisabled);
         }
@@ -355,7 +363,7 @@ pub trait Mintable: CEP18 + AccessControl {
 #[casper(path = crate, export = true)]
 pub trait Burnable: CEP18 {
     #[casper(revert_on_error)]
-    fn burn(&mut self, owner: Entity, amount: u64) -> Result<(), Cep18Error> {
+    fn burn(&mut self, owner: Entity, amount: U256) -> Result<(), Cep18Error> {
         if !self.state().enable_mint_burn {
             return Err(Cep18Error::MintBurnDisabled);
         }

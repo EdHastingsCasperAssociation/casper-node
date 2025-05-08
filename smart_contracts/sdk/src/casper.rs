@@ -226,12 +226,11 @@ pub(crate) fn call_into<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
     input_data: &[u8],
     alloc: Option<F>,
 ) -> Result<(), CallError> {
-    let ptr = NonNull::from(&transferred_value);
     let result_code = unsafe {
         casper_sdk_sys::casper_call(
             address.as_ptr(),
             address.len(),
-            ptr.as_ptr() as *const c_void,
+            transferred_value,
             entry_point.as_ptr(),
             entry_point.len(),
             input_data.as_ptr(),

@@ -815,7 +815,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
     mut caller: impl Caller<Context = Context<S, E>>,
     address_ptr: u32,
     address_len: u32,
-    value_ptr: u32,
+    transferred_value: u64,
     entry_point_ptr: u32,
     entry_point_len: u32,
     input_ptr: u32,
@@ -830,7 +830,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
         [
             u64::from(address_ptr),
             u64::from(address_len),
-            u64::from(value_ptr),
+            transferred_value,
             u64::from(entry_point_ptr),
             u64::from(entry_point_len),
             u64::from(input_ptr),
@@ -866,12 +866,6 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
         }
     };
 
-    let value = {
-        let mut value_bytes = [0u8; 8];
-        caller.memory_read_into(value_ptr, &mut value_bytes)?;
-        u64::from_le_bytes(value_bytes)
-    };
-
     let tracking_copy = caller.context().tracking_copy.fork2();
 
     // Take the gas spent so far and use it as a limit for the new VM.
@@ -888,7 +882,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
             address: smart_contract_addr,
             entry_point,
         })
-        .with_transferred_value(value)
+        .with_transferred_value(transferred_value)
         .with_input(input_data)
         .with_transaction_hash(caller.context().transaction_hash)
         // We're using shared address generator there as we need to preserve and advance the state
