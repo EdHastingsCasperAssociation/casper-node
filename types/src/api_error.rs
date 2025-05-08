@@ -157,7 +157,7 @@ pub enum ApiError {
     /// assert_eq!(ApiError::from(9), ApiError::UnexpectedKeyVariant);
     /// ```
     UnexpectedKeyVariant,
-    /// Obsolete error variant (we no longer have ContractRef).
+    /// Unsupported contract discovery variant.
     /// ```
     /// # use casper_types::ApiError;
     /// assert_eq!(ApiError::from(10), ApiError::UnexpectedContractRefVariant);

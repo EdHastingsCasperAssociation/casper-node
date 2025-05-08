@@ -605,12 +605,12 @@ where
             .clone())
     }
 
-    fn get_package(&mut self, package_hash: HashAddr) -> Result<Package, Self::Error> {
-        let key = Key::Hash(package_hash);
+    fn get_package(&mut self, hash_addr: HashAddr) -> Result<Package, Self::Error> {
+        let key = Key::Hash(hash_addr);
         match self.read(&key)? {
             Some(StoredValue::ContractPackage(contract_package)) => Ok(contract_package.into()),
-            Some(_) | None => match self.read(&Key::SmartContract(package_hash))? {
-                Some(StoredValue::SmartContract(contract_package)) => Ok(contract_package),
+            Some(_) | None => match self.read(&Key::SmartContract(hash_addr))? {
+                Some(StoredValue::SmartContract(package)) => Ok(package),
                 Some(other) => Err(TrackingCopyError::TypeMismatch(
                     StoredValueTypeMismatch::new(
                         "Package or CLValue".to_string(),
