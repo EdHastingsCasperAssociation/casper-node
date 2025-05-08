@@ -27,6 +27,7 @@ const RESERVATION_ACCOUNT_TAG: u8 = 5;
 const RESERVATION_PURSE_TAG: u8 = 6;
 const UNBOND_ACCOUNT_TAG: u8 = 7;
 const UNBOND_PURSE_TAG: u8 = 8;
+const VALIDATOR_REV_PURSE_TAG: u8 = 9;
 
 /// Serialization tag for BidAddr variants.
 #[derive(
@@ -57,6 +58,8 @@ pub enum BidAddrTag {
     UnbondAccount = UNBOND_ACCOUNT_TAG,
     /// BidAddr for unbonding purses.
     UnbondPurse = UNBOND_PURSE_TAG,
+    /// BidAddr for reverse validator look up.
+    ValidatorRev = VALIDATOR_REV_PURSE_TAG,
 }
 
 impl Display for BidAddrTag {
@@ -72,6 +75,7 @@ impl Display for BidAddrTag {
             BidAddrTag::ReservedDelegationPurse => RESERVATION_PURSE_TAG,
             BidAddrTag::UnbondAccount => UNBOND_ACCOUNT_TAG,
             BidAddrTag::UnbondPurse => UNBOND_PURSE_TAG,
+            BidAddrTag::ValidatorRev => VALIDATOR_REV_PURSE_TAG,
         };
         write!(f, "{}", base16::encode_lower(&[tag]))
     }
@@ -112,7 +116,9 @@ impl BidAddrTag {
         if value == UNBOND_PURSE_TAG {
             return Some(BidAddrTag::UnbondPurse);
         }
-
+        if value == VALIDATOR_REV_PURSE_TAG {
+            return Some(BidAddrTag::ValidatorRev);
+        }
         None
     }
 }
@@ -173,6 +179,9 @@ pub enum BidAddr {
         /// The unbonder.
         unbonder: URefAddr,
     },
+    /// Validator BidAddr for reverse look up.
+    /// For instance, in the case of a changed public key.
+    ValidatorRev(AccountHash),
 }
 
 impl BidAddr {
@@ -189,9 +198,19 @@ impl BidAddr {
         BidAddr::Validator(AccountHash::new(validator))
     }
 
+    /// Constructs a new [`BidAddr`] instance from a validator's [`AccountHash`].
+    pub const fn new_validator_rev_addr(validator: [u8; ACCOUNT_HASH_LENGTH]) -> Self {
+        BidAddr::ValidatorRev(AccountHash::new(validator))
+    }
+
     /// Constructs a new [`BidAddr`] instance from a validator's [`PublicKey`].
     pub fn new_validator_addr_from_public_key(validator_public_key: PublicKey) -> Self {
         BidAddr::Validator(validator_public_key.to_account_hash())
+    }
+
+    /// Constructs a new [`BidAddr`] instance from a validator's [`PublicKey`].
+    pub fn new_validator_rev_addr_from_public_key(validator_public_key: PublicKey) -> Self {
+        BidAddr::ValidatorRev(validator_public_key.to_account_hash())
     }
 
     /// Constructs a new [`BidAddr::DelegatedAccount`] instance from the [`AccountHash`] pair of a
@@ -363,7 +382,9 @@ impl BidAddr {
     /// Validator account hash.
     pub fn validator_account_hash(&self) -> AccountHash {
         match self {
-            BidAddr::Unified(account_hash) | BidAddr::Validator(account_hash) => *account_hash,
+            BidAddr::Unified(account_hash)
+            | BidAddr::Validator(account_hash)
+            | BidAddr::ValidatorRev(account_hash) => *account_hash,
             BidAddr::DelegatedAccount { validator, .. }
             | BidAddr::DelegatedPurse { validator, .. }
             | BidAddr::Credit { validator, .. }
@@ -379,6 +400,7 @@ impl BidAddr {
         match self {
             BidAddr::Unified(_)
             | BidAddr::Validator(_)
+            | BidAddr::ValidatorRev(_)
             | BidAddr::Credit { .. }
             | BidAddr::DelegatedPurse { .. }
             | BidAddr::ReservedDelegationPurse { .. }
@@ -394,6 +416,7 @@ impl BidAddr {
         match self {
             BidAddr::Unified(_)
             | BidAddr::Validator(_)
+            | BidAddr::ValidatorRev(_)
             | BidAddr::Credit { .. }
             | BidAddr::DelegatedAccount { .. }
             | BidAddr::ReservedDelegationAccount { .. }
@@ -409,6 +432,7 @@ impl BidAddr {
         match self {
             BidAddr::Unified(_)
             | BidAddr::Validator(_)
+            | BidAddr::ValidatorRev(_)
             | BidAddr::DelegatedAccount { .. }
             | BidAddr::DelegatedPurse { .. }
             | BidAddr::ReservedDelegationAccount { .. }
@@ -425,6 +449,7 @@ impl BidAddr {
         match self {
             BidAddr::Unified(_)
             | BidAddr::Validator(_)
+            | BidAddr::ValidatorRev(_)
             | BidAddr::Credit { .. }
             | BidAddr::ReservedDelegationAccount { .. }
             | BidAddr::ReservedDelegationPurse { .. }
@@ -437,9 +462,9 @@ impl BidAddr {
     /// How long will be the serialized value for this instance.
     pub fn serialized_length(&self) -> usize {
         match self {
-            BidAddr::Unified(account_hash) | BidAddr::Validator(account_hash) => {
-                ToBytes::serialized_length(account_hash) + 1
-            }
+            BidAddr::Unified(account_hash)
+            | BidAddr::Validator(account_hash)
+            | BidAddr::ValidatorRev(account_hash) => ToBytes::serialized_length(account_hash) + 1,
             BidAddr::DelegatedAccount {
                 validator,
                 delegator,
@@ -475,6 +500,7 @@ impl BidAddr {
         match self {
             BidAddr::Unified(_) => BidAddrTag::Unified,
             BidAddr::Validator(_) => BidAddrTag::Validator,
+            BidAddr::ValidatorRev(_) => BidAddrTag::ValidatorRev,
             BidAddr::DelegatedAccount { .. } => BidAddrTag::DelegatedAccount,
             BidAddr::DelegatedPurse { .. } => BidAddrTag::DelegatedPurse,
 
@@ -517,6 +543,8 @@ impl FromBytes for BidAddr {
                 .map(|(account_hash, remainder)| (BidAddr::Unified(account_hash), remainder)),
             tag if tag == BidAddrTag::Validator as u8 => AccountHash::from_bytes(remainder)
                 .map(|(account_hash, remainder)| (BidAddr::Validator(account_hash), remainder)),
+            tag if tag == BidAddrTag::ValidatorRev as u8 => AccountHash::from_bytes(remainder)
+                .map(|(account_hash, remainder)| (BidAddr::ValidatorRev(account_hash), remainder)),
             tag if tag == BidAddrTag::DelegatedAccount as u8 => {
                 let (validator, remainder) = AccountHash::from_bytes(remainder)?;
                 let (delegator, remainder) = AccountHash::from_bytes(remainder)?;
@@ -622,7 +650,9 @@ impl Display for BidAddr {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let tag = self.tag();
         match self {
-            BidAddr::Unified(account_hash) | BidAddr::Validator(account_hash) => {
+            BidAddr::Unified(account_hash)
+            | BidAddr::Validator(account_hash)
+            | BidAddr::ValidatorRev(account_hash) => {
                 write!(f, "{}{}", tag, account_hash)
             }
             BidAddr::DelegatedAccount {
@@ -678,6 +708,7 @@ impl Debug for BidAddr {
         match self {
             BidAddr::Unified(validator) => write!(f, "BidAddr::Unified({:?})", validator),
             BidAddr::Validator(validator) => write!(f, "BidAddr::Validator({:?})", validator),
+            BidAddr::ValidatorRev(validator) => write!(f, "BidAddr::ValidatorRev({:?})", validator),
             BidAddr::DelegatedAccount {
                 validator,
                 delegator,
