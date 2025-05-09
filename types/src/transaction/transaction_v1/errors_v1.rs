@@ -276,7 +276,8 @@ pub enum InvalidTransaction {
         attempted: U512,
     },
 
-    // Passing TransactionInvocationTarget::ByPackageHash::version or TransactionInvocationTarget::ByPackageName::version is no longer supported
+    // Passing TransactionInvocationTarget::ByPackageHash::version or
+    // TransactionInvocationTarget::ByPackageName::version is no longer supported
     TargetingPackageVersionNotSupported,
 }
 

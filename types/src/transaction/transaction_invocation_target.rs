@@ -55,24 +55,28 @@ pub enum TransactionInvocationTarget {
             schemars(with = "String", description = "Hex-encoded address of the package.")
         )]
         addr: PackageAddr,
-        /// This field is considered unused, it needs to stay in the type definition for backwards compatibility
+        /// This field is considered unused, it needs to stay in the type definition for backwards
+        /// compatibility
         version: Option<EntityVersion>,
         /// The package version key.
         ///
-        /// If `None`, the latest enabled version is implied. From a serializatoin point of view `None`
-        /// means that this field should NOT have an entry in the calltable serialization representation
+        /// If `None`, the latest enabled version is implied. From a serializatoin point of view
+        /// `None` means that this field should NOT have an entry in the calltable
+        /// serialization representation
         version_key: Option<EntityVersionKey>,
     },
     /// The alias and optional version identifying the package.
     ByPackageName {
         /// The package name.
         name: String,
-        /// This field is considered unused, it needs to stay in the type definition for backwards compatibility
+        /// This field is considered unused, it needs to stay in the type definition for backwards
+        /// compatibility
         version: Option<EntityVersion>,
         /// The package version key.
         ///
-        /// If `None`, the latest enabled version is implied. From a serializatoin point of view `None`
-        /// means that this field should NOT have an entry in the calltable serialization representation
+        /// If `None`, the latest enabled version is implied. From a serializatoin point of view
+        /// `None` means that this field should NOT have an entry in the calltable
+        /// serialization representation
         version_key: Option<EntityVersionKey>,
     },
 }
@@ -271,8 +275,9 @@ impl ToBytes for TransactionInvocationTarget {
                         .add_field(BY_PACKAGE_HASH_ADDR_INDEX, &addr)?
                         .add_field(BY_PACKAGE_HASH_VERSION_INDEX, &version)?;
                 if let Some(version_key) = version_key {
-                    //We do this to support transactions that were created before the `version_key` fix.
-                    // The pre-fix transactions will not have a BY_PACKAGE_HASH_VERSION_KEY_INDEX entry and
+                    //We do this to support transactions that were created before the `version_key`
+                    // fix. The pre-fix transactions will not have a
+                    // BY_PACKAGE_HASH_VERSION_KEY_INDEX entry and
                     builder = builder.add_field(BY_PACKAGE_HASH_VERSION_KEY_INDEX, &version_key)?;
                 }
                 builder.binary_payload_bytes()
@@ -288,7 +293,8 @@ impl ToBytes for TransactionInvocationTarget {
                         .add_field(BY_PACKAGE_NAME_NAME_INDEX, &name)?
                         .add_field(BY_PACKAGE_NAME_VERSION_INDEX, &version)?;
                 if let Some(version_key) = version_key {
-                    //We do this hooplah to support transactions that were created before the `version_key` fix
+                    //We do this hooplah to support transactions that were created before the
+                    // `version_key` fix
                     builder = builder.add_field(BY_PACKAGE_NAME_VERSION_KEY_INDEX, &version_key)?;
                 }
                 builder.binary_payload_bytes()
@@ -499,7 +505,8 @@ mod tests {
             version_key: None,
         };
         let expected_bytes = expected.to_bytes().unwrap();
-        assert_eq!(bytes, expected_bytes); //We want the "legacy" binary representation and current representation without version_key equal
+        assert_eq!(bytes, expected_bytes); //We want the "legacy" binary representation and current representation without version_key
+                                           // equal
 
         let (got, remainder) = TransactionInvocationTarget::from_bytes(&bytes).unwrap();
         assert_eq!(expected, got);
@@ -531,7 +538,8 @@ mod tests {
             version_key: None,
         };
         let expected_bytes = expected.to_bytes().unwrap();
-        assert_eq!(bytes, expected_bytes); //We want the "legacy" binary representation and current representation without version_key equal
+        assert_eq!(bytes, expected_bytes); //We want the "legacy" binary representation and current representation without version_key
+                                           // equal
 
         let (got, remainder) = TransactionInvocationTarget::from_bytes(&bytes).unwrap();
         assert_eq!(expected, got);
@@ -547,7 +555,8 @@ mod tests {
         };
         let bytes = target.to_bytes().unwrap();
         let (number_of_fields, _) = u32::from_bytes(&bytes).unwrap();
-        assert_eq!(number_of_fields, 4); //We want the enum tag, addr, version (even if it's None) and version_key to have been serialized
+        assert_eq!(number_of_fields, 4); //We want the enum tag, addr, version (even if it's None) and version_key to have been
+                                         // serialized
         let (got, remainder) = TransactionInvocationTarget::from_bytes(&bytes).unwrap();
         assert_eq!(target, got);
         assert!(remainder.is_empty());
@@ -562,7 +571,8 @@ mod tests {
         };
         let bytes = target.to_bytes().unwrap();
         let (number_of_fields, _) = u32::from_bytes(&bytes).unwrap();
-        assert_eq!(number_of_fields, 4); //We want the enum tag, addr, version (even if it's None) and version_key to have been serialized
+        assert_eq!(number_of_fields, 4); //We want the enum tag, addr, version (even if it's None) and version_key to have been
+                                         // serialized
         let (got, remainder) = TransactionInvocationTarget::from_bytes(&bytes).unwrap();
         assert_eq!(target, got);
         assert!(remainder.is_empty());

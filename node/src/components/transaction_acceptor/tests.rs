@@ -488,13 +488,15 @@ impl TestScenario {
                     ),
                     ContractPackageScenario::MissingPackageAtHash => {
                         Transaction::from(Deploy::random_with_missing_payment_package_by_hash(rng))
-                    },
+                    }
                     ContractPackageScenario::MissingContractVersion => {
-                        //Keeping this enum because the Transaction::V1 version of this test is still valid, 
-                        // still FromPeerCustomPaymentContractPackage(MissingContractVersion) and 
-                        // FromClientCustomPaymentContractPackage(MissingContractVersion) should not be called
+                        //Keeping this enum because the Transaction::V1 version of this test is
+                        // still valid,
+                        // still FromPeerCustomPaymentContractPackage(MissingContractVersion) and
+                        // FromClientCustomPaymentContractPackage(MissingContractVersion) should not
+                        // be called
                         todo!("This scenario is no longer valid and is not called")
-                    },
+                    }
                 }
             }
             TestScenario::FromPeerSessionContract(TxnType::Deploy, contract_scenario)
@@ -570,11 +572,12 @@ impl TestScenario {
                     Transaction::from(Deploy::random_with_missing_session_package_by_hash(rng))
                 }
                 ContractPackageScenario::MissingContractVersion => {
-                    //Keeping this enum because the Transaction::V1 version of this test is still valid, 
-                    // still FromPeerSessionContractPackage(MissingContractVersion) and 
+                    //Keeping this enum because the Transaction::V1 version of this test is still
+                    // valid,
+                    // still FromPeerSessionContractPackage(MissingContractVersion) and
                     // FromClientSessionContractPackage(MissingContractVersion) should not be called
-                        todo!("This scenario is no longer valid and is not called")      
-                },
+                    todo!("This scenario is no longer valid and is not called")
+                }
             },
             TestScenario::FromPeerSessionContractPackage(
                 TxnType::V1,
@@ -811,40 +814,60 @@ impl TestScenario {
             }
             TestScenario::V1ByPackageHashTargetsVersion => {
                 let txn = TransactionV1Builder::new_targeting_stored(
-                TransactionInvocationTarget::ByPackageHash { addr: [1; 32], version: Some(1), version_key: None },
-        "x",
-        TransactionRuntimeParams::VmCasperV1,
+                    TransactionInvocationTarget::ByPackageHash {
+                        addr: [1; 32],
+                        version: Some(1),
+                        version_key: None,
+                    },
+                    "x",
+                    TransactionRuntimeParams::VmCasperV1,
                 )
                 .with_chain_name("casper-example")
                 .with_secret_key(&secret_key)
                 .build()
                 .unwrap();
                 Transaction::from(txn)
-            },
+            }
             TestScenario::V1ByPackageNameTargetsVersion => {
                 let txn = TransactionV1Builder::new_targeting_stored(
-                    TransactionInvocationTarget::ByPackageName { name: "xyz".to_string(), version: Some(1), version_key: None },
-        "x",
-        TransactionRuntimeParams::VmCasperV1,
+                    TransactionInvocationTarget::ByPackageName {
+                        name: "xyz".to_string(),
+                        version: Some(1),
+                        version_key: None,
+                    },
+                    "x",
+                    TransactionRuntimeParams::VmCasperV1,
                 )
                 .with_chain_name("casper-example")
                 .with_secret_key(&secret_key)
                 .build()
                 .unwrap();
                 Transaction::from(txn)
-            },
+            }
             TestScenario::DeployPaymentStoredVersionedContractByHashTargetsVersion => {
-                Transaction::from(Deploy::random_with_payment_package_version_by_hash(Some(10), rng))
-            },
-            TestScenario::DeployPaymentStoredVersionedContractByNameTargetsVersion=> {
-                Transaction::from(Deploy::random_with_versioned_payment_package_by_name(Some(10), rng))
-            },
-             TestScenario::DeploySessionStoredVersionedContractByHashTargetsVersion=> {
-                Transaction::from(Deploy::random_with_versioned_session_package_by_hash(Some(10), rng))
-             },
-             TestScenario::DeploySessionStoredVersionedContractByNameTargetsVersion=> {
-                Transaction::from(Deploy::random_with_versioned_session_package_by_name(Some(10), rng))
-             },
+                Transaction::from(Deploy::random_with_payment_package_version_by_hash(
+                    Some(10),
+                    rng,
+                ))
+            }
+            TestScenario::DeployPaymentStoredVersionedContractByNameTargetsVersion => {
+                Transaction::from(Deploy::random_with_versioned_payment_package_by_name(
+                    Some(10),
+                    rng,
+                ))
+            }
+            TestScenario::DeploySessionStoredVersionedContractByHashTargetsVersion => {
+                Transaction::from(Deploy::random_with_versioned_session_package_by_hash(
+                    Some(10),
+                    rng,
+                ))
+            }
+            TestScenario::DeploySessionStoredVersionedContractByNameTargetsVersion => {
+                Transaction::from(Deploy::random_with_versioned_session_package_by_name(
+                    Some(10),
+                    rng,
+                ))
+            }
         }
     }
 
@@ -910,8 +933,8 @@ impl TestScenario {
             | TestScenario::InvalidArgumentsKind
             | TestScenario::WasmTransactionWithTooBigPayment
             | TestScenario::WasmDeployWithTooBigPayment
-            | TestScenario::RedelegateExceedingMaximumDelegation {.. }
-            | TestScenario::DelegateExceedingMaximumDelegation {..} 
+            | TestScenario::RedelegateExceedingMaximumDelegation { .. }
+            | TestScenario::DelegateExceedingMaximumDelegation { .. }
             | TestScenario::V1ByPackageHashTargetsVersion
             | TestScenario::V1ByPackageNameTargetsVersion
             | TestScenario::DeployPaymentStoredVersionedContractByHashTargetsVersion
@@ -2839,43 +2862,55 @@ async fn should_reject_transactions_targets_package_version_2() {
 
 #[tokio::test]
 async fn should_reject_transactions_targets_package_version_3() {
-    let result = run_transaction_acceptor(TestScenario::DeployPaymentStoredVersionedContractByHashTargetsVersion).await;
+    let result = run_transaction_acceptor(
+        TestScenario::DeployPaymentStoredVersionedContractByHashTargetsVersion,
+    )
+    .await;
     assert!(matches!(
         result,
-        Err(super::Error::InvalidTransaction(InvalidTransaction::Deploy(
-            InvalidDeploy::TargetingPackageVersionNotSupported
-        )))
+        Err(super::Error::InvalidTransaction(
+            InvalidTransaction::Deploy(InvalidDeploy::TargetingPackageVersionNotSupported)
+        ))
     ));
 }
 
 #[tokio::test]
 async fn should_reject_transactions_targets_package_version_4() {
-    let result = run_transaction_acceptor(TestScenario::DeployPaymentStoredVersionedContractByNameTargetsVersion).await;
+    let result = run_transaction_acceptor(
+        TestScenario::DeployPaymentStoredVersionedContractByNameTargetsVersion,
+    )
+    .await;
     assert!(matches!(
         result,
-        Err(super::Error::InvalidTransaction(InvalidTransaction::Deploy(
-            InvalidDeploy::TargetingPackageVersionNotSupported
-        )))
+        Err(super::Error::InvalidTransaction(
+            InvalidTransaction::Deploy(InvalidDeploy::TargetingPackageVersionNotSupported)
+        ))
     ));
 }
 
 #[tokio::test]
 async fn should_reject_transactions_targets_package_version_5() {
-    let result = run_transaction_acceptor(TestScenario::DeploySessionStoredVersionedContractByHashTargetsVersion).await;
+    let result = run_transaction_acceptor(
+        TestScenario::DeploySessionStoredVersionedContractByHashTargetsVersion,
+    )
+    .await;
     assert!(matches!(
         result,
-        Err(super::Error::InvalidTransaction(InvalidTransaction::Deploy(
-            InvalidDeploy::TargetingPackageVersionNotSupported
-        )))
+        Err(super::Error::InvalidTransaction(
+            InvalidTransaction::Deploy(InvalidDeploy::TargetingPackageVersionNotSupported)
+        ))
     ));
 }
 #[tokio::test]
 async fn should_reject_transactions_targets_package_version_6() {
-    let result = run_transaction_acceptor(TestScenario::DeploySessionStoredVersionedContractByNameTargetsVersion).await;
+    let result = run_transaction_acceptor(
+        TestScenario::DeploySessionStoredVersionedContractByNameTargetsVersion,
+    )
+    .await;
     assert!(matches!(
         result,
-        Err(super::Error::InvalidTransaction(InvalidTransaction::Deploy(
-            InvalidDeploy::TargetingPackageVersionNotSupported
-        )))
+        Err(super::Error::InvalidTransaction(
+            InvalidTransaction::Deploy(InvalidDeploy::TargetingPackageVersionNotSupported)
+        ))
     ));
 }
