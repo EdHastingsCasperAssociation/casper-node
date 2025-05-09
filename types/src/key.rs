@@ -754,6 +754,7 @@ impl Key {
             let bid_addr = match tag {
                 BidAddrTag::Unified => BidAddr::legacy(validator_bytes),
                 BidAddrTag::Validator => BidAddr::new_validator_addr(validator_bytes),
+                BidAddrTag::ValidatorRev => BidAddr::new_validator_rev_addr(validator_bytes),
                 BidAddrTag::DelegatedAccount => {
                     let delegator_bytes = <[u8; ACCOUNT_HASH_LENGTH]>::try_from(
                         bytes[BidAddr::VALIDATOR_BID_ADDR_LENGTH..].as_ref(),
