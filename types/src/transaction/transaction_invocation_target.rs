@@ -11,7 +11,8 @@ use crate::{
     },
     serde_helpers,
     transaction::serialization::CalltableSerializationEnvelopeBuilder,
-    AddressableEntityHash, EntityVersion, HashAddr, PackageAddr, PackageHash, PackageIdentifier,
+    AddressableEntityHash, EntityVersion, EntityVersionKey, HashAddr, PackageAddr, PackageHash,
+    PackageIdentifier,
 };
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
@@ -54,19 +55,25 @@ pub enum TransactionInvocationTarget {
             schemars(with = "String", description = "Hex-encoded address of the package.")
         )]
         addr: PackageAddr,
-        /// The package version.
-        ///
-        /// If `None`, the latest enabled version is implied.
+        /// This field is considered unused, it needs to stay in the type definition for backwards compatibility
         version: Option<EntityVersion>,
+        /// The package version key.
+        ///
+        /// If `None`, the latest enabled version is implied. From a serializatoin point of view `None`
+        /// means that this field should NOT have an entry in the calltable serialization representation
+        version_key: Option<EntityVersionKey>,
     },
     /// The alias and optional version identifying the package.
     ByPackageName {
         /// The package name.
         name: String,
-        /// The package version.
-        ///
-        /// If `None`, the latest enabled version is implied.
+        /// This field is considered unused, it needs to stay in the type definition for backwards compatibility
         version: Option<EntityVersion>,
+        /// The package version key.
+        ///
+        /// If `None`, the latest enabled version is implied. From a serializatoin point of view `None`
+        /// means that this field should NOT have an entry in the calltable serialization representation
+        version_key: Option<EntityVersionKey>,
     },
 }
 
@@ -82,18 +89,23 @@ impl TransactionInvocationTarget {
     }
 
     /// Returns a new `TransactionInvocationTarget::Package`.
-    pub fn new_package(hash: PackageHash, version: Option<EntityVersion>) -> Self {
+    pub fn new_package_with_key(hash: PackageHash, version_key: Option<EntityVersionKey>) -> Self {
         TransactionInvocationTarget::ByPackageHash {
             addr: hash.value(),
-            version,
+            version: None,
+            version_key,
         }
     }
 
     /// Returns a new `TransactionInvocationTarget::PackageAlias`.
-    pub fn new_package_alias(alias: String, version: Option<EntityVersion>) -> Self {
+    pub fn new_package_alias_with_key(
+        alias: String,
+        version_key: Option<EntityVersionKey>,
+    ) -> Self {
         TransactionInvocationTarget::ByPackageName {
             name: alias,
-            version,
+            version: None,
+            version_key,
         }
     }
 
@@ -124,18 +136,21 @@ impl TransactionInvocationTarget {
     pub fn package_identifier(&self) -> Option<PackageIdentifier> {
         match self {
             TransactionInvocationTarget::ByHash(_) | TransactionInvocationTarget::ByName(_) => None,
-            TransactionInvocationTarget::ByPackageHash { addr, version } => {
-                Some(PackageIdentifier::Hash {
-                    package_hash: PackageHash::new(*addr),
-                    version: *version,
-                })
-            }
+            TransactionInvocationTarget::ByPackageHash {
+                addr,
+                version: _,
+                version_key,
+            } => Some(PackageIdentifier::HashWithVersion {
+                package_hash: PackageHash::new(*addr),
+                version_key: *version_key,
+            }),
             TransactionInvocationTarget::ByPackageName {
                 name: alias,
-                version,
-            } => Some(PackageIdentifier::Name {
+                version: _,
+                version_key,
+            } => Some(PackageIdentifier::NameWithVersion {
                 name: alias.clone(),
-                version: *version,
+                version_key: *version_key,
             }),
         }
     }
@@ -154,19 +169,39 @@ impl TransactionInvocationTarget {
                     name.serialized_length(),
                 ]
             }
-            TransactionInvocationTarget::ByPackageHash { addr, version } => {
-                vec![
+            TransactionInvocationTarget::ByPackageHash {
+                addr,
+                version,
+                version_key,
+            } => {
+                let mut field_sizes = vec![
                     crate::bytesrepr::U8_SERIALIZED_LENGTH,
                     addr.serialized_length(),
                     version.serialized_length(),
-                ]
+                ];
+                if let Some(version_key) = version_key {
+                    //When we serialize version_key we put the actual value,
+                    // if we want to denote `None` we don't put an entry in the calltable.
+                    field_sizes.push(version_key.serialized_length());
+                }
+                field_sizes
             }
-            TransactionInvocationTarget::ByPackageName { name, version } => {
-                vec![
+            TransactionInvocationTarget::ByPackageName {
+                name,
+                version,
+                version_key,
+            } => {
+                let mut field_sizes = vec![
                     crate::bytesrepr::U8_SERIALIZED_LENGTH,
                     name.serialized_length(),
                     version.serialized_length(),
-                ]
+                ];
+                if let Some(version_key) = version_key {
+                    //When we serialize version_key we put the actual value,
+                    // if we want to denote `None` we don't put an entry in the calltable.
+                    field_sizes.push(version_key.serialized_length());
+                }
+                field_sizes
             }
         }
     }
@@ -179,11 +214,13 @@ impl TransactionInvocationTarget {
             1 => TransactionInvocationTarget::ByName(rng.random_string(1..21)),
             2 => TransactionInvocationTarget::ByPackageHash {
                 addr: rng.gen(),
-                version: rng.gen::<bool>().then(|| rng.gen::<EntityVersion>()),
+                version: None,
+                version_key: rng.gen::<bool>().then(|| rng.gen::<EntityVersionKey>()),
             },
             3 => TransactionInvocationTarget::ByPackageName {
                 name: rng.random_string(1..21),
-                version: rng.gen::<bool>().then(|| rng.gen::<EntityVersion>()),
+                version: None,
+                version_key: rng.gen::<bool>().then(|| rng.gen::<EntityVersionKey>()),
             },
             _ => unreachable!(),
         }
@@ -201,10 +238,12 @@ const BY_NAME_NAME_INDEX: u16 = 1;
 const BY_PACKAGE_HASH_VARIANT: u8 = 2;
 const BY_PACKAGE_HASH_ADDR_INDEX: u16 = 1;
 const BY_PACKAGE_HASH_VERSION_INDEX: u16 = 2;
+const BY_PACKAGE_HASH_VERSION_KEY_INDEX: u16 = 3;
 
 const BY_PACKAGE_NAME_VARIANT: u8 = 3;
 const BY_PACKAGE_NAME_NAME_INDEX: u16 = 1;
 const BY_PACKAGE_NAME_VERSION_INDEX: u16 = 2;
+const BY_PACKAGE_NAME_VERSION_KEY_INDEX: u16 = 3;
 
 impl ToBytes for TransactionInvocationTarget {
     fn to_bytes(&self) -> Result<Vec<u8>, Error> {
@@ -221,19 +260,38 @@ impl ToBytes for TransactionInvocationTarget {
                     .add_field(BY_NAME_NAME_INDEX, &name)?
                     .binary_payload_bytes()
             }
-            TransactionInvocationTarget::ByPackageHash { addr, version } => {
-                CalltableSerializationEnvelopeBuilder::new(self.serialized_field_lengths())?
-                    .add_field(TAG_FIELD_INDEX, &BY_PACKAGE_HASH_VARIANT)?
-                    .add_field(BY_PACKAGE_HASH_ADDR_INDEX, &addr)?
-                    .add_field(BY_PACKAGE_HASH_VERSION_INDEX, &version)?
-                    .binary_payload_bytes()
+            TransactionInvocationTarget::ByPackageHash {
+                addr,
+                version,
+                version_key,
+            } => {
+                let mut builder =
+                    CalltableSerializationEnvelopeBuilder::new(self.serialized_field_lengths())?
+                        .add_field(TAG_FIELD_INDEX, &BY_PACKAGE_HASH_VARIANT)?
+                        .add_field(BY_PACKAGE_HASH_ADDR_INDEX, &addr)?
+                        .add_field(BY_PACKAGE_HASH_VERSION_INDEX, &version)?;
+                if let Some(version_key) = version_key {
+                    //We do this to support transactions that were created before the `version_key` fix.
+                    // The pre-fix transactions will not have a BY_PACKAGE_HASH_VERSION_KEY_INDEX entry and
+                    builder = builder.add_field(BY_PACKAGE_HASH_VERSION_KEY_INDEX, &version_key)?;
+                }
+                builder.binary_payload_bytes()
             }
-            TransactionInvocationTarget::ByPackageName { name, version } => {
-                CalltableSerializationEnvelopeBuilder::new(self.serialized_field_lengths())?
-                    .add_field(TAG_FIELD_INDEX, &BY_PACKAGE_NAME_VARIANT)?
-                    .add_field(BY_PACKAGE_NAME_NAME_INDEX, &name)?
-                    .add_field(BY_PACKAGE_NAME_VERSION_INDEX, &version)?
-                    .binary_payload_bytes()
+            TransactionInvocationTarget::ByPackageName {
+                name,
+                version,
+                version_key,
+            } => {
+                let mut builder =
+                    CalltableSerializationEnvelopeBuilder::new(self.serialized_field_lengths())?
+                        .add_field(TAG_FIELD_INDEX, &BY_PACKAGE_NAME_VARIANT)?
+                        .add_field(BY_PACKAGE_NAME_NAME_INDEX, &name)?
+                        .add_field(BY_PACKAGE_NAME_VERSION_INDEX, &version)?;
+                if let Some(version_key) = version_key {
+                    //We do this hooplah to support transactions that were created before the `version_key` fix
+                    builder = builder.add_field(BY_PACKAGE_NAME_VERSION_KEY_INDEX, &version_key)?;
+                }
+                builder.binary_payload_bytes()
             }
         }
     }
@@ -244,14 +302,14 @@ impl ToBytes for TransactionInvocationTarget {
 
 impl FromBytes for TransactionInvocationTarget {
     fn from_bytes(bytes: &[u8]) -> Result<(TransactionInvocationTarget, &[u8]), Error> {
-        let (binary_payload, remainder) = CalltableSerializationEnvelope::from_bytes(3, bytes)?;
+        let (binary_payload, remainder) = CalltableSerializationEnvelope::from_bytes(4, bytes)?;
         let window = binary_payload.start_consuming()?.ok_or(Formatting)?;
-        window.verify_index(0)?;
+        window.verify_index(TAG_FIELD_INDEX)?;
         let (tag, window) = window.deserialize_and_maybe_next::<u8>()?;
         let to_ret = match tag {
             BY_HASH_VARIANT => {
                 let window = window.ok_or(Formatting)?;
-                window.verify_index(1u16)?;
+                window.verify_index(BY_HASH_HASH_INDEX)?;
                 let (hash, window) = window.deserialize_and_maybe_next::<HashAddr>()?;
                 if window.is_some() {
                     return Err(Formatting);
@@ -260,7 +318,7 @@ impl FromBytes for TransactionInvocationTarget {
             }
             BY_NAME_VARIANT => {
                 let window = window.ok_or(Formatting)?;
-                window.verify_index(1u16)?;
+                window.verify_index(BY_NAME_NAME_INDEX)?;
                 let (name, window) = window.deserialize_and_maybe_next::<String>()?;
                 if window.is_some() {
                     return Err(Formatting);
@@ -269,29 +327,60 @@ impl FromBytes for TransactionInvocationTarget {
             }
             BY_PACKAGE_HASH_VARIANT => {
                 let window = window.ok_or(Formatting)?;
-                window.verify_index(1u16)?;
+                window.verify_index(BY_PACKAGE_HASH_ADDR_INDEX)?;
                 let (addr, window) = window.deserialize_and_maybe_next::<PackageAddr>()?;
                 let window = window.ok_or(Formatting)?;
-                window.verify_index(2u16)?;
+                window.verify_index(BY_PACKAGE_HASH_VERSION_INDEX)?;
                 let (version, window) =
                     window.deserialize_and_maybe_next::<Option<EntityVersion>>()?;
-                if window.is_some() {
-                    return Err(Formatting);
-                }
-                Ok(TransactionInvocationTarget::ByPackageHash { addr, version })
+                let version_key = if let Some(window) = window {
+                    window.verify_index(BY_PACKAGE_HASH_VERSION_KEY_INDEX)?;
+                    let (version_key, window) =
+                        window.deserialize_and_maybe_next::<EntityVersionKey>()?;
+                    if window.is_some() {
+                        return Err(Formatting);
+                    }
+                    Some(version_key)
+                } else {
+                    if window.is_some() {
+                        return Err(Formatting);
+                    }
+                    None
+                };
+
+                Ok(TransactionInvocationTarget::ByPackageHash {
+                    addr,
+                    version,
+                    version_key,
+                })
             }
             BY_PACKAGE_NAME_VARIANT => {
                 let window = window.ok_or(Formatting)?;
-                window.verify_index(1u16)?;
+                window.verify_index(BY_PACKAGE_NAME_NAME_INDEX)?;
                 let (name, window) = window.deserialize_and_maybe_next::<String>()?;
                 let window = window.ok_or(Formatting)?;
-                window.verify_index(2u16)?;
+                window.verify_index(BY_PACKAGE_NAME_VERSION_INDEX)?;
                 let (version, window) =
                     window.deserialize_and_maybe_next::<Option<EntityVersion>>()?;
-                if window.is_some() {
-                    return Err(Formatting);
-                }
-                Ok(TransactionInvocationTarget::ByPackageName { name, version })
+                let version_key = if let Some(window) = window {
+                    window.verify_index(BY_PACKAGE_NAME_VERSION_KEY_INDEX)?;
+                    let (version_key, window) =
+                        window.deserialize_and_maybe_next::<EntityVersionKey>()?;
+                    if window.is_some() {
+                        return Err(Formatting);
+                    }
+                    Some(version_key)
+                } else {
+                    if window.is_some() {
+                        return Err(Formatting);
+                    }
+                    None
+                };
+                Ok(TransactionInvocationTarget::ByPackageName {
+                    name,
+                    version,
+                    version_key,
+                })
             }
             _ => Err(Formatting),
         };
@@ -310,27 +399,27 @@ impl Display for TransactionInvocationTarget {
             }
             TransactionInvocationTarget::ByPackageHash {
                 addr,
-                version: Some(ver),
+                version,
+                version_key,
             } => {
-                write!(formatter, "package({:10}, version {})", HexFmt(addr), ver)
-            }
-            TransactionInvocationTarget::ByPackageHash {
-                addr,
-                version: None,
-            } => {
-                write!(formatter, "package({:10}, latest)", HexFmt(addr))
-            }
-            TransactionInvocationTarget::ByPackageName {
-                name: alias,
-                version: Some(ver),
-            } => {
-                write!(formatter, "package({}, version {})", alias, ver)
+                write!(
+                    formatter,
+                    "package({:10}, version {:?}, version_key {:?})",
+                    HexFmt(addr),
+                    version,
+                    version_key
+                )
             }
             TransactionInvocationTarget::ByPackageName {
                 name: alias,
-                version: None,
+                version,
+                version_key,
             } => {
-                write!(formatter, "package({}, latest)", alias)
+                write!(
+                    formatter,
+                    "package({}, version {:?}, version_key {:?})",
+                    alias, version, version_key
+                )
             }
         }
     }
@@ -347,18 +436,25 @@ impl Debug for TransactionInvocationTarget {
                 .debug_tuple("InvocableEntityAlias")
                 .field(alias)
                 .finish(),
-            TransactionInvocationTarget::ByPackageHash { addr, version } => formatter
+            TransactionInvocationTarget::ByPackageHash {
+                addr,
+                version,
+                version_key,
+            } => formatter
                 .debug_struct("Package")
                 .field("addr", &HexFmt(addr))
                 .field("version", version)
+                .field("version_key", version_key)
                 .finish(),
             TransactionInvocationTarget::ByPackageName {
                 name: alias,
                 version,
+                version_key,
             } => formatter
                 .debug_struct("PackageAlias")
                 .field("alias", alias)
                 .field("version", version)
+                .field("version_key", version_key)
                 .finish(),
         }
     }
@@ -377,6 +473,101 @@ mod tests {
             bytesrepr::test_serialization_roundtrip(&TransactionInvocationTarget::random(rng));
         }
     }
+
+    #[test]
+    fn by_package_hash_variant_without_version_key_should_serialize_exactly_as_before_the_version_key_change(
+    ) {
+        let addr = [1; 32];
+        let version = Some(1200);
+        let field_sizes = vec![
+            crate::bytesrepr::U8_SERIALIZED_LENGTH,
+            addr.serialized_length(),
+            version.serialized_length(),
+        ];
+        let builder = CalltableSerializationEnvelopeBuilder::new(field_sizes)
+            .unwrap()
+            .add_field(TAG_FIELD_INDEX, &BY_PACKAGE_HASH_VARIANT)
+            .unwrap()
+            .add_field(BY_PACKAGE_HASH_ADDR_INDEX, &addr)
+            .unwrap()
+            .add_field(BY_PACKAGE_HASH_VERSION_INDEX, &version)
+            .unwrap();
+        let bytes = builder.binary_payload_bytes().unwrap();
+        let expected = TransactionInvocationTarget::ByPackageHash {
+            addr,
+            version,
+            version_key: None,
+        };
+        let expected_bytes = expected.to_bytes().unwrap();
+        assert_eq!(bytes, expected_bytes); //We want the "legacy" binary representation and current representation without version_key equal
+
+        let (got, remainder) = TransactionInvocationTarget::from_bytes(&bytes).unwrap();
+        assert_eq!(expected, got);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn by_package_name_variant_without_version_key_should_serialize_exactly_as_before_the_version_key_change(
+    ) {
+        let name = "some_name".to_string();
+        let version = Some(1200);
+        let field_sizes = vec![
+            crate::bytesrepr::U8_SERIALIZED_LENGTH,
+            name.serialized_length(),
+            version.serialized_length(),
+        ];
+        let builder = CalltableSerializationEnvelopeBuilder::new(field_sizes)
+            .unwrap()
+            .add_field(TAG_FIELD_INDEX, &BY_PACKAGE_NAME_VARIANT)
+            .unwrap()
+            .add_field(BY_PACKAGE_NAME_NAME_INDEX, &name)
+            .unwrap()
+            .add_field(BY_PACKAGE_NAME_VERSION_INDEX, &version)
+            .unwrap();
+        let bytes = builder.binary_payload_bytes().unwrap();
+        let expected = TransactionInvocationTarget::ByPackageName {
+            name,
+            version,
+            version_key: None,
+        };
+        let expected_bytes = expected.to_bytes().unwrap();
+        assert_eq!(bytes, expected_bytes); //We want the "legacy" binary representation and current representation without version_key equal
+
+        let (got, remainder) = TransactionInvocationTarget::from_bytes(&bytes).unwrap();
+        assert_eq!(expected, got);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn by_package_hash_variant_should_deserialize_bytes_that_have_both_version_and_key() {
+        let target = TransactionInvocationTarget::ByPackageHash {
+            addr: [1; 32],
+            version: Some(11),
+            version_key: Some(EntityVersionKey::new(1, 2)),
+        };
+        let bytes = target.to_bytes().unwrap();
+        let (number_of_fields, _) = u32::from_bytes(&bytes).unwrap();
+        assert_eq!(number_of_fields, 4); //We want the enum tag, addr, version (even if it's None) and version_key to have been serialized
+        let (got, remainder) = TransactionInvocationTarget::from_bytes(&bytes).unwrap();
+        assert_eq!(target, got);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn by_package_name_variant_should_deserialize_bytes_that_have_both_version_and_key() {
+        let target = TransactionInvocationTarget::ByPackageName {
+            name: "xyz".to_string(),
+            version: Some(11),
+            version_key: Some(EntityVersionKey::new(1, 2)),
+        };
+        let bytes = target.to_bytes().unwrap();
+        let (number_of_fields, _) = u32::from_bytes(&bytes).unwrap();
+        assert_eq!(number_of_fields, 4); //We want the enum tag, addr, version (even if it's None) and version_key to have been serialized
+        let (got, remainder) = TransactionInvocationTarget::from_bytes(&bytes).unwrap();
+        assert_eq!(target, got);
+        assert!(remainder.is_empty());
+    }
+
     proptest! {
         #[test]
         fn generative_bytesrepr_roundtrip(val in transaction_invocation_target_arb()) {

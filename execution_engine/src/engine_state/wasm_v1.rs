@@ -752,27 +752,27 @@ fn build_session_info_for_executable_item(
         }
         ExecutableDeployItem::StoredVersionedContractByHash {
             hash,
-            version,
+            version: _,
             entry_point,
             args,
         } => {
-            session = ExecutableItem::Invocation(TransactionInvocationTarget::new_package(
-                PackageHash::new(hash.value()),
-                *version,
-            ));
+            session =
+                ExecutableItem::Invocation(TransactionInvocationTarget::new_package_with_key(
+                    PackageHash::new(hash.value()),
+                    None,
+                ));
             session_entry_point = entry_point.clone();
             session_args = args.clone();
         }
         ExecutableDeployItem::StoredVersionedContractByName {
             name,
-            version,
+            version: _,
             entry_point,
             args,
         } => {
-            session = ExecutableItem::Invocation(TransactionInvocationTarget::new_package_alias(
-                name.clone(),
-                *version,
-            ));
+            session = ExecutableItem::Invocation(
+                TransactionInvocationTarget::new_package_alias_with_key(name.clone(), None),
+            );
             session_entry_point = entry_point.clone();
             session_args = args.clone();
         }
@@ -917,25 +917,27 @@ fn build_payment_info_for_executable_item(
         ExecutableDeployItem::StoredVersionedContractByHash {
             args,
             hash,
-            version,
+            version: _,
             entry_point,
         } => Ok(PaymentInfo(ExecutableInfo {
             item: ExecutableItem::Invocation(TransactionInvocationTarget::ByPackageHash {
                 addr: hash.value(),
-                version: *version,
+                version: None,
+                version_key: None,
             }),
             entry_point: entry_point.clone(),
             args: args.clone(),
         })),
         ExecutableDeployItem::StoredVersionedContractByName {
             name,
-            version,
+            version: _,
             args,
             entry_point,
         } => Ok(PaymentInfo(ExecutableInfo {
             item: ExecutableItem::Invocation(TransactionInvocationTarget::ByPackageName {
                 name: name.clone(),
-                version: *version,
+                version: None,
+                version_key: None,
             }),
             entry_point: entry_point.clone(),
             args: args.clone(),

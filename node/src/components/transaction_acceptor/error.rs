@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use casper_binary_port::ErrorCode as BinaryPortErrorCode;
 use casper_types::{
-    AddressableEntityHash, BlockHash, BlockHeader, Digest, EntityVersion, InitiatorAddr,
+    AddressableEntityHash, BlockHash, BlockHeader, Digest, EntityVersionKey, InitiatorAddr,
     InvalidTransaction, PackageHash, Timestamp,
 };
 
@@ -145,14 +145,20 @@ pub(crate) enum ParameterFailure {
     #[error("package at {package_hash} does not exist")]
     NoSuchPackageAtHash { package_hash: PackageHash },
     /// Invalid contract at given version.
-    #[error("invalid entity at version: {entity_version}")]
-    InvalidEntityAtVersion { entity_version: EntityVersion },
+    #[error("invalid entity at version key: {entity_version_key}")]
+    InvalidEntityAtVersion {
+        entity_version_key: EntityVersionKey,
+    },
     /// Invalid contract at given version.
-    #[error("disabled entity at version: {entity_version}")]
-    DisabledEntityAtVersion { entity_version: EntityVersion },
+    #[error("disabled entity at version key: {entity_version_key}")]
+    DisabledEntityAtVersion {
+        entity_version_key: EntityVersionKey,
+    },
     /// Invalid contract at given version.
-    #[error("missing entity at version: {entity_version}")]
-    MissingEntityAtVersion { entity_version: EntityVersion },
+    #[error("missing entity at version key: {entity_version_key}")]
+    MissingEntityAtVersion {
+        entity_version_key: EntityVersionKey,
+    },
     /// Invalid associated keys.
     #[error("account authorization invalid")]
     InvalidAssociatedKeys,

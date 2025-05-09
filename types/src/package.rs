@@ -11,6 +11,9 @@ use core::{
     fmt::{self, Debug, Display, Formatter},
 };
 
+#[cfg(any(feature = "testing", feature = "gens", test))]
+use rand::{distributions::Standard, prelude::Distribution, Rng};
+
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
 #[cfg(feature = "json-schema")]
@@ -97,7 +100,7 @@ pub const ENTITY_INITIAL_VERSION: EntityVersion = 1;
 pub type ProtocolVersionMajor = u32;
 
 /// Major element of `ProtocolVersion` combined with `EntityVersion`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 pub struct EntityVersionKey {
@@ -173,6 +176,16 @@ impl FromBytes for EntityVersionKey {
 impl Display for EntityVersionKey {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}.{}", self.protocol_version_major, self.entity_version)
+    }
+}
+
+#[cfg(any(feature = "testing", feature = "gens", test))]
+impl Distribution<EntityVersionKey> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> EntityVersionKey {
+        EntityVersionKey {
+            protocol_version_major: rng.gen(),
+            entity_version: rng.gen(),
+        }
     }
 }
 

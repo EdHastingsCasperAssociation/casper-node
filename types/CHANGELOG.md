@@ -9,7 +9,13 @@ All notable changes to this project will be documented in this file. The format 
 [comment]: <> (Fixed: any bug fixes)
 [comment]: <> (Security: in case of vulnerabilities)
 
-## [Unreleased] (node 2.0)
+## [UNRELEASED] casper-types 6.0.0
+
+### Added 
+- TransactionInvocationTarget::ByPackageHash::version_key field
+- TransactionInvocationTarget::ByPackageName::version_key field
+
+## casper-types 5.0.0
 
 ### Added
 

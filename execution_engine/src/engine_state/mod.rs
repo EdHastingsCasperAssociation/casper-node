@@ -107,7 +107,6 @@ impl ExecutionEngineV1 {
             &named_keys,
             &executable_item,
             entry_point,
-            protocol_version,
         ) {
             Ok(execution_kind) => execution_kind,
             Err(ese) => return WasmV1Result::precondition_failure(gas_limit, ese),
@@ -158,7 +157,7 @@ impl ExecutionEngineV1 {
         // A good deal of effort has been put into removing all such behaviors; please do not
         // come along and start adding it back.
 
-        let account_hash = initiator_addr.account_hash();
+        let account_hash: AccountHash = initiator_addr.account_hash();
         let protocol_version = self.config.protocol_version();
         let tc = Rc::new(RefCell::new(tracking_copy));
         let (runtime_footprint, entity_addr) = {
@@ -180,7 +179,6 @@ impl ExecutionEngineV1 {
             &named_keys,
             &executable_item,
             entry_point,
-            protocol_version,
         ) {
             Ok(execution_kind) => execution_kind,
             Err(ese) => return WasmV1Result::precondition_failure(gas_limit, ese),

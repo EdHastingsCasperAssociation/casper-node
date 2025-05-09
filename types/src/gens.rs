@@ -1073,18 +1073,23 @@ pub fn transaction_invocation_target_arb() -> impl Strategy<Value = TransactionI
         Just(TransactionInvocationTarget::new_invocable_entity_alias(
             "abcd".to_string()
         )),
-        Just(TransactionInvocationTarget::new_package_alias(
+        Just(TransactionInvocationTarget::new_package_alias_with_key(
             "abcd".to_string(),
             None
         )),
-        Just(TransactionInvocationTarget::new_package_alias(
+        Just(TransactionInvocationTarget::new_package_alias_with_key(
             "abcd".to_string(),
-            Some(10)
+            Some(EntityVersionKey::new(2, 15))
         )),
-        u8_slice_32()
-            .prop_map(|addr| { TransactionInvocationTarget::new_package(addr.into(), None) }),
-        u8_slice_32()
-            .prop_map(|addr| { TransactionInvocationTarget::new_package(addr.into(), Some(150)) }),
+        u8_slice_32().prop_map(|addr| {
+            TransactionInvocationTarget::new_package_with_key(addr.into(), None)
+        }),
+        u8_slice_32().prop_map(|addr| {
+            TransactionInvocationTarget::new_package_with_key(
+                addr.into(),
+                Some(EntityVersionKey::new(1, 150)),
+            )
+        }),
     ]
 }
 

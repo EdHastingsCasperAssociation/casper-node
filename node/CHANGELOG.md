@@ -9,7 +9,18 @@ All notable changes to this project will be documented in this file.  The format
 [comment]: <> (Fixed:      any bug fixes)
 [comment]: <> (Security:   in case of vulnerabilities)
 
-## Unreleased (2.0.0)
+## [Unreleased]
+### Added
+* `TransactionInvocationTarget::ByPackageHash` has a new field `version_key`
+* `TransactionInvocationTarget::ByPackageName` has a new field `version_key`
+
+### Changed
+* Transaction::Deploy no longer supports using (in `payment` or `session`) when the `ExecutableDeployItem::StoredVersionedContractByHash` with field `version` (the field is retained for retro compatiblity but new transactions will be rejected by TransactionAcceptor). To execute a stored contract in a specific version please use Transaction::V1.
+* Transaction::Deploy no longer supports using (in `payment` or `session`) when the `ExecutableDeployItem::StoredVersionedContractByName` with field `version` (the field is retained for retro compatiblity but new transactions will be rejected by TransactionAcceptor). To execute a stored contract in a specific version please use Transaction::V1.
+* Transaction::V1 no longer supports using `TransactionInvocationTarget::ByPackageHash` variant with `version` defined (the field is retained for retro compatiblity but new transactions will be rejected by TransactionAcceptor). Please use `version_key` instead.
+* Transaction::V1 no longer supports using `TransactionInvocationTarget::ByPackageName` variant with `version` defined (the field is retained for retro compatiblity but new transactions will be rejected by TransactionAcceptor). Please use `version_key` instead.
+
+## 2.0.0
 
 ### Added
 * Add `BinaryPort` interface along with the relevant config entries.
