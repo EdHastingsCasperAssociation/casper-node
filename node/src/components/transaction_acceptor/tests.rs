@@ -811,7 +811,7 @@ impl TestScenario {
             }
             TestScenario::V1ByPackageHashTargetsVersion => {
                 let txn = TransactionV1Builder::new_targeting_stored(
-                    TransactionInvocationTarget::ByPackageHash { addr: [1; 32], version: Some(1), version_key: None },
+                TransactionInvocationTarget::ByPackageHash { addr: [1; 32], version: Some(1), version_key: None },
         "x",
         TransactionRuntimeParams::VmCasperV1,
                 )
