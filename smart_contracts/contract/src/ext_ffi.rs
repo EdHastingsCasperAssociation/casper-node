@@ -950,4 +950,33 @@ extern "C" {
         public_key_ptr: *const u8,
         public_key_size: usize,
     ) -> i32;
+    /// Calls a contract by its package hash. Requires both a major and contract version. Requires
+    /// an entry point name registered in a given version of contract. Returns a standard error
+    /// code in case of failure, otherwise a successful execution returns zero. Bytes returned
+    /// from contract execution are set to `result_size` pointer
+    ///
+    /// # Arguments
+    ///
+    /// * `contract_package_hash_ptr` - pointer to serialized contract package hash.
+    /// * `contract_package_hash_size` - size of contract package hash in serialized form.
+    /// * `contract_version_ptr` - Contract package hash in a serialized form
+    /// * `contract_version_size` -
+    /// * `entry_point_name_ptr` -
+    /// * `entry_point_name_size` -
+    /// * `runtime_args_ptr` -
+    /// * `runtime_args_size` -
+    /// * `result_size` -
+    pub fn casper_call_package_version(
+        contract_package_hash_ptr: *const u8,
+        contract_package_hash_size: usize,
+        major_version_ptr: *const u8,
+        major_version_size: usize,
+        contract_version_ptr: *const u8,
+        contract_version_size: usize,
+        entry_point_name_ptr: *const u8,
+        entry_point_name_size: usize,
+        runtime_args_ptr: *const u8,
+        runtime_args_size: usize,
+        result_size: *mut usize,
+    ) -> i32;
 }

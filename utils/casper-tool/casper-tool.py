@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 import subprocess
 
@@ -226,7 +226,7 @@ def create_chainspec(template, network_name, genesis_in, contract_paths):
     chainspec = toml.load(open(template))
 
     show_val("Chain name", network_name)
-    genesis_timestamp = (datetime.utcnow() + timedelta(seconds=genesis_in)).isoformat(
+    genesis_timestamp = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=genesis_in)).isoformat(
         "T"
     ) + "Z"
 

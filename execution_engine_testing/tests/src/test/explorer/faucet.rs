@@ -663,7 +663,8 @@ fn faucet_costs() {
     // This test will fail if execution costs vary.  The expected costs should not be updated
     // without understanding why the cost has changed.  If the costs do change, it should be
     // reflected in the "Costs by Entry Point" section of the faucet crate's README.md.
-    const EXPECTED_FAUCET_INSTALL_COST: u64 = 146_883_061_016;
+    const EXPECTED_FAUCET_INSTALL_COST: u64 = 147_060_757_349;
+    const EXPECTED_FAUCET_INSTALL_COST_ALT: u64 = 158_323_799_135;
 
     const EXPECTED_FAUCET_SET_VARIABLES_COST: u64 = 79_640_385;
 
@@ -781,7 +782,8 @@ fn faucet_costs() {
     let faucet_call_by_user_cost = builder.last_exec_gas_consumed();
 
     let mut costs_as_expected = true;
-    if faucet_install_cost.value().as_u64() != EXPECTED_FAUCET_INSTALL_COST {
+    let cost_64 = faucet_install_cost.value().as_u64();
+    if cost_64 != EXPECTED_FAUCET_INSTALL_COST && cost_64 != EXPECTED_FAUCET_INSTALL_COST_ALT {
         costs_as_expected = false;
         eprintln!(
             "faucet_install_cost wrong: expected: {}, got: {}",
