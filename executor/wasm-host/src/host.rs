@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cmp, num::NonZeroU32, sync::Arc};
+use std::{borrow::Cow, num::NonZeroU32, sync::Arc};
 
 use bytes::Bytes;
 use casper_executor_wasm_common::{
@@ -942,55 +942,6 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
     Ok(u32_from_host_result(host_result))
 }
 
-pub fn casper_env_caller<S: GlobalStateReader, E: Executor>(
-    mut caller: impl Caller<Context = Context<S, E>>,
-    dest_ptr: u32,
-    dest_len: u32,
-    entity_kind_ptr: u32,
-) -> VMResult<u32> {
-    let caller_cost = caller.context().config.host_function_costs().env_caller;
-    charge_host_function_call(
-        &mut caller,
-        &caller_cost,
-        [dest_ptr, dest_len, entity_kind_ptr],
-    )?;
-
-    // TODO: Decide whether we want to return the full address and entity kind or just the 32 bytes
-    // "unified".
-    let (entity_kind, data) = match &caller.context().caller {
-        Key::Account(account_hash) => (0u32, account_hash.value()),
-        Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
-        other => panic!("Unexpected caller: {other:?}"),
-    };
-    let mut data = &data[..];
-    if dest_ptr == 0 {
-        Ok(dest_ptr)
-    } else {
-        let dest_len = dest_len as usize;
-        data = &data[0..cmp::min(32, dest_len)];
-        caller.memory_write(dest_ptr, data)?;
-        let entity_kind_bytes = entity_kind.to_le_bytes();
-        caller.memory_write(entity_kind_ptr, entity_kind_bytes.as_slice())?;
-        Ok(dest_ptr + (data.len() as u32))
-    }
-}
-
-pub fn casper_env_transferred_value<S: GlobalStateReader, E: Executor>(
-    mut caller: impl Caller<Context = Context<S, E>>,
-    output: u32,
-) -> VMResult<()> {
-    let transferred_value_cost = caller
-        .context()
-        .config
-        .host_function_costs()
-        .env_transferred_value;
-    charge_host_function_call(&mut caller, &transferred_value_cost, [output])?;
-
-    let result = caller.context().transferred_value;
-    caller.memory_write(output, &result.to_le_bytes())?;
-    Ok(())
-}
-
 pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
     entity_kind: u32,
@@ -1473,18 +1424,6 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
     Ok(CALLEE_SUCCEEDED)
 }
 
-// TODO: Should this be blocktime instead of block_time? [Consistency]
-// If addressed, make sure to fix this in chainspec too
-pub fn casper_env_block_time<S: GlobalStateReader, E: Executor>(
-    mut caller: impl Caller<Context = Context<S, E>>,
-) -> VMResult<u64> {
-    let block_time_cost = caller.context().config.host_function_costs().env_block_time;
-    charge_host_function_call(&mut caller, &block_time_cost, [])?;
-
-    let block_time = caller.context().block_time;
-    Ok(block_time.value())
-}
-
 pub fn casper_env_info<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
     info_ptr: u32,
@@ -1493,12 +1432,16 @@ pub fn casper_env_info<S: GlobalStateReader, E: Executor>(
     let block_time_cost = caller.context().config.host_function_costs().env_info;
     charge_host_function_call(&mut caller, &block_time_cost, [info_ptr, info_size])?;
 
-    // TODO: Decide whether we want to return the full address and entity kind or just the 32 bytes
-    // "unified".
-    let (entity_kind, caller_id) = match &caller.context().caller {
+    let (caller_kind, caller_addr) = match &caller.context().caller {
         Key::Account(account_hash) => (0u32, account_hash.value()),
         Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
         other => panic!("Unexpected caller: {other:?}"),
+    };
+
+    let (callee_kind, callee_addr) = match &caller.context().callee {
+        Key::Account(initiator_addr) => (0u32, initiator_addr.value()),
+        Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
+        other => panic!("Unexpected callee: {other:?}"),
     };
 
     let transferred_value = caller.context().transferred_value;
@@ -1507,11 +1450,14 @@ pub fn casper_env_info<S: GlobalStateReader, E: Executor>(
 
     // `EnvInfo` in little-endian representation.
     let env_info_le = EnvInfo {
-        caller_id,
+        caller_addr,
+        caller_kind: caller_kind.to_le(),
+        callee_addr,
+        callee_kind: callee_kind.to_le(),
         transferred_value: transferred_value.to_le(),
         block_time: block_time.to_le(),
-        entity_kind: entity_kind.to_le(),
     };
+
     let env_info_bytes = safe_transmute::transmute_one_to_bytes(&env_info_le);
     let write_len = env_info_bytes.len().min(info_size as usize);
     caller.memory_write(info_ptr, &env_info_bytes[..write_len])?;
