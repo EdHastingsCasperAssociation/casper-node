@@ -6,7 +6,7 @@ extern crate alloc;
 use alloc::string::String;
 use casper_contract::{contract_api::runtime, unwrap_or_revert::UnwrapOrRevert};
 use casper_types::{
-    contracts::{ContractHash, ContractPackageHash},
+    contracts::{ContractHash, ContractPackageHash, ContractVersion},
     ApiError, RuntimeArgs,
 };
 
@@ -14,6 +14,7 @@ const CONTRACT_PACKAGE_HASH_KEY: &str = "contract_package_hash";
 const DO_SOMETHING_ENTRYPOINT: &str = "do_something";
 const ARG_METHOD: &str = "method";
 const ARG_CONTRACT_HASH_KEY: &str = "contract_hash_key";
+const ARG_MAJOR_VERSION: &str = "major_version";
 const ARG_CONTRACT_VERSION: &str = "contract_version";
 const METHOD_CALL_CONTRACT: &str = "call_contract";
 const METHOD_CALL_VERSIONED_CONTRACT: &str = "call_versioned_contract";
@@ -44,13 +45,28 @@ pub extern "C" fn call() {
             .map(ContractPackageHash::new)
             .unwrap_or_revert();
 
-        let contract_version = runtime::get_named_arg(ARG_CONTRACT_VERSION);
-        runtime::call_versioned_contract::<()>(
-            contract_package_hash,
-            contract_version,
-            DO_SOMETHING_ENTRYPOINT,
-            RuntimeArgs::default(),
-        );
+        let major_version = runtime::get_named_arg(ARG_MAJOR_VERSION);
+        let contract_version =
+            runtime::get_named_arg::<Option<ContractVersion>>(ARG_CONTRACT_VERSION);
+        match contract_version {
+            None => {
+                runtime::call_versioned_contract::<()>(
+                    contract_package_hash,
+                    None,
+                    DO_SOMETHING_ENTRYPOINT,
+                    RuntimeArgs::default(),
+                );
+            }
+            Some(contract_version) => {
+                runtime::call_package_version::<()>(
+                    contract_package_hash,
+                    major_version,
+                    contract_version,
+                    DO_SOMETHING_ENTRYPOINT,
+                    RuntimeArgs::default(),
+                );
+            }
+        }
     } else {
         runtime::revert(ApiError::User(0));
     }

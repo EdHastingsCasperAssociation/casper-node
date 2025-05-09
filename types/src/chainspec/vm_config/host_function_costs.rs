@@ -367,6 +367,8 @@ pub struct HostFunctionCostsV1 {
     pub recover_secp256k1: HostFunction<[Cost; 6]>,
     /// Cost of calling the 'recover_secp256k1' host function.
     pub verify_signature: HostFunction<[Cost; 6]>,
+    /// Cost of calling the 'call_package_version' host function.
+    pub call_package_version: HostFunction<[Cost; 11]>,
 }
 
 impl Zero for HostFunctionCostsV1 {
@@ -425,6 +427,7 @@ impl Zero for HostFunctionCostsV1 {
             generic_hash: HostFunction::zero(),
             recover_secp256k1: HostFunction::zero(),
             verify_signature: HostFunction::zero(),
+            call_package_version: HostFunction::zero(),
         }
     }
 
@@ -483,6 +486,7 @@ impl Zero for HostFunctionCostsV1 {
             generic_hash,
             recover_secp256k1,
             verify_signature,
+            call_package_version,
         } = self;
         read_value.is_zero()
             && dictionary_get.is_zero()
@@ -537,6 +541,7 @@ impl Zero for HostFunctionCostsV1 {
             && generic_hash.is_zero()
             && recover_secp256k1.is_zero()
             && verify_signature.is_zero()
+            && call_package_version.is_zero()
     }
 }
 
@@ -787,6 +792,22 @@ impl Default for HostFunctionCostsV1 {
                     NOT_USED,
                 ],
             ),
+            call_package_version: HostFunction::new(
+                DEFAULT_CALL_CONTRACT_COST,
+                [
+                    NOT_USED,
+                    NOT_USED,
+                    NOT_USED,
+                    NOT_USED,
+                    NOT_USED,
+                    NOT_USED,
+                    NOT_USED,
+                    DEFAULT_ARG_CHARGE,
+                    NOT_USED,
+                    DEFAULT_ARG_CHARGE,
+                    NOT_USED,
+                ],
+            ),
         }
     }
 }
@@ -847,6 +868,7 @@ impl ToBytes for HostFunctionCostsV1 {
         ret.append(&mut self.generic_hash.to_bytes()?);
         ret.append(&mut self.recover_secp256k1.to_bytes()?);
         ret.append(&mut self.verify_signature.to_bytes()?);
+        ret.append(&mut self.call_package_version.to_bytes()?);
         Ok(ret)
     }
 
@@ -908,6 +930,7 @@ impl ToBytes for HostFunctionCostsV1 {
             + self.generic_hash.serialized_length()
             + self.recover_secp256k1.serialized_length()
             + self.verify_signature.serialized_length()
+            + self.call_package_version.serialized_length()
     }
 }
 
@@ -966,6 +989,7 @@ impl FromBytes for HostFunctionCostsV1 {
         let (generic_hash, rem) = FromBytes::from_bytes(rem)?;
         let (recover_secp256k1, rem) = FromBytes::from_bytes(rem)?;
         let (verify_signature, rem) = FromBytes::from_bytes(rem)?;
+        let (call_package_version, rem) = FromBytes::from_bytes(rem)?;
         Ok((
             HostFunctionCostsV1 {
                 read_value,
@@ -1021,6 +1045,7 @@ impl FromBytes for HostFunctionCostsV1 {
                 generic_hash,
                 recover_secp256k1,
                 verify_signature,
+                call_package_version,
             },
             rem,
         ))
@@ -1084,6 +1109,7 @@ impl Distribution<HostFunctionCostsV1> for Standard {
             generic_hash: rng.gen(),
             recover_secp256k1: rng.gen(),
             verify_signature: rng.gen(),
+            call_package_version: rng.gen(),
         }
     }
 }
@@ -1156,6 +1182,7 @@ pub mod gens {
             generic_hash in host_function_cost_arb(),
             recover_secp256k1 in host_function_cost_arb(),
             verify_signature in host_function_cost_arb(),
+            call_package_version in host_function_cost_arb(),
         ) -> HostFunctionCostsV1 {
             HostFunctionCostsV1 {
                 read_value,
@@ -1211,6 +1238,7 @@ pub mod gens {
                 generic_hash,
                 recover_secp256k1,
                 verify_signature,
+                call_package_version,
             }
         }
     }

@@ -212,6 +212,7 @@ fn should_not_call_restricted_session_caller_from_wrong_account() {
     let args = runtime_args! {
         "package_hash" => package_hash,
     };
+
     let deploy_item = DeployItemBuilder::new()
         .with_address(ACCOUNT_1_ADDR)
         .with_stored_versioned_contract_by_hash(
@@ -227,7 +228,7 @@ fn should_not_call_restricted_session_caller_from_wrong_account() {
 
     let exec_request_3 = ExecuteRequestBuilder::from_deploy_item(&deploy_item).build();
 
-    builder.exec(exec_request_3).commit();
+    builder.exec(exec_request_3).expect_failure();
 
     let _account = builder
         .query(None, Key::Account(*DEFAULT_ACCOUNT_ADDR), &[])

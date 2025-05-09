@@ -1121,7 +1121,9 @@ pub trait StateProvider: Send + Sync + Sized {
             match tc.get(key) {
                 Ok(ret) => match ret {
                     Some(StoredValue::BidKind(bid_kind)) => {
-                        bids.push(bid_kind);
+                        if !bids.contains(&bid_kind) {
+                            bids.push(bid_kind);
+                        }
                     }
                     Some(_) => {
                         return BidsResult::Failure(
