@@ -7,7 +7,8 @@ use casper_types::{
     bytesrepr::{FromBytes, ToBytes},
     system::auction::{
         BidAddr, BidAddrTag, BidKind, DelegatorBid, DelegatorBids, DelegatorKind, Error,
-        Reservation, Reservations, SeigniorageRecipientV2, SeigniorageRecipientsSnapshotV1,
+        Reservation, Reservations, SeigniorageRecipient, SeigniorageRecipientV2,
+        SeigniorageRecipientsSnapshot, SeigniorageRecipientsSnapshotV1,
         SeigniorageRecipientsSnapshotV2, SeigniorageRecipientsV2, Unbond, UnbondEra, UnbondKind,
         ValidatorBid, ValidatorBids, ValidatorCredit, ValidatorCredits, WeightsBreakout,
         AUCTION_DELAY_KEY, DELEGATION_RATE_DENOMINATOR, ERA_END_TIMESTAMP_MILLIS_KEY, ERA_ID_KEY,
@@ -16,6 +17,7 @@ use casper_types::{
     AccessRights, ApiError, CLTyped, EraId, Key, KeyTag, PublicKey, URef, U512,
 };
 use num_rational::Ratio;
+use num_traits::{CheckedMul, CheckedSub};
 use tracing::{debug, error, warn};
 
 /// Maximum length of bridge records chain.
@@ -591,8 +593,12 @@ pub enum DistributeTarget {
     Validator(Box<ValidatorBid>),
     /// Bridged validator bid.
     BridgedValidator {
-        /// The current addr for the bridged validator.
-        bridged_validator_addr: BidAddr,
+        /// Requested bid addr.
+        requested_validator_bid_addr: BidAddr,
+        /// The current bid addr for the bridged validator.
+        current_validator_bid_addr: BidAddr,
+        /// All chained bid addrs.
+        bridged_validator_addrs: Vec<BidAddr>,
         /// Validator bid.
         validator_bid: Box<ValidatorBid>,
     },
@@ -625,14 +631,16 @@ pub fn get_distribution_target<P: RuntimeProvider + StorageProvider>(
     provider: &mut P,
     bid_addr: BidAddr,
 ) -> Result<DistributeTarget, Error> {
-    let mut current_bid_addr = bid_addr;
-    let mut bridged = false;
+    let mut bridged_addrs = vec![];
+    let mut current_validator_bid_addr = bid_addr;
     for _ in 0..MAX_BRIDGE_CHAIN_LENGTH {
-        match provider.read_bid(&current_bid_addr.into())? {
+        match provider.read_bid(&current_validator_bid_addr.into())? {
             Some(BidKind::Validator(validator_bid)) => {
-                if bridged {
+                if !bridged_addrs.is_empty() {
                     return Ok(DistributeTarget::BridgedValidator {
-                        bridged_validator_addr: current_bid_addr,
+                        requested_validator_bid_addr: bid_addr,
+                        current_validator_bid_addr,
+                        bridged_validator_addrs: bridged_addrs,
                         validator_bid,
                     });
                 }
@@ -645,8 +653,9 @@ pub fn get_distribution_target<P: RuntimeProvider + StorageProvider>(
                 return Ok(DistributeTarget::Unbond(unbond));
             }
             Some(BidKind::Bridge(bridge)) => {
-                current_bid_addr = BidAddr::from(bridge.new_validator_public_key().clone());
-                bridged = true;
+                current_validator_bid_addr =
+                    BidAddr::from(bridge.new_validator_public_key().clone());
+                bridged_addrs.push(current_validator_bid_addr);
             }
             None => {
                 // in the case of missing validator or delegator bids, check unbonds
@@ -1551,4 +1560,175 @@ pub fn process_undelegation<P: Auction>(
     }
 
     Ok(updated_stake)
+}
+
+/// Retrieves the total reward for a given validator or delegator in a given era.
+pub fn reward(
+    validator: &PublicKey,
+    delegator: Option<&DelegatorKind>,
+    era_id: EraId,
+    rewards: &[U512],
+    seigniorage_recipients_snapshot: &SeigniorageRecipientsSnapshot,
+) -> Result<Option<U512>, Error> {
+    let validator_rewards =
+        match rewards_per_validator(validator, era_id, rewards, seigniorage_recipients_snapshot) {
+            Ok(rewards) => rewards,
+            Err(Error::ValidatorNotFound) => return Ok(None),
+            Err(Error::MissingSeigniorageRecipients) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+
+    let reward = validator_rewards
+        .into_iter()
+        .map(|reward_info| {
+            if let Some(delegator) = delegator {
+                reward_info
+                    .delegator_rewards
+                    .get(delegator)
+                    .copied()
+                    .unwrap_or_default()
+            } else {
+                reward_info.validator_reward
+            }
+        })
+        .sum();
+
+    Ok(Some(reward))
+}
+
+/// Calculates the reward for a given validator for a given era.
+pub(crate) fn rewards_per_validator(
+    validator: &PublicKey,
+    era_id: EraId,
+    rewards: &[U512],
+    seigniorage_recipients_snapshot: &SeigniorageRecipientsSnapshot,
+) -> Result<Vec<RewardsPerValidator>, Error> {
+    let mut results = Vec::with_capacity(rewards.len());
+
+    for (reward_amount, eras_back) in rewards
+        .iter()
+        .enumerate()
+        .map(move |(i, &amount)| (amount, i as u64))
+        // do not process zero amounts, unless they are for the current era (we still want to
+        // record zero allocations for the current validators in EraInfo)
+        .filter(|(amount, eras_back)| !amount.is_zero() || *eras_back == 0)
+    {
+        let total_reward = Ratio::from(reward_amount);
+        let rewarded_era = era_id
+            .checked_sub(eras_back)
+            .ok_or(Error::MissingSeigniorageRecipients)?;
+
+        // try to find validator in seigniorage snapshot
+        let maybe_seigniorage_recipient = match seigniorage_recipients_snapshot {
+            SeigniorageRecipientsSnapshot::V1(snapshot) => snapshot
+                .get(&rewarded_era)
+                .ok_or(Error::MissingSeigniorageRecipients)?
+                .get(validator)
+                .cloned()
+                .map(SeigniorageRecipient::V1),
+            SeigniorageRecipientsSnapshot::V2(snapshot) => snapshot
+                .get(&rewarded_era)
+                .ok_or(Error::MissingSeigniorageRecipients)?
+                .get(validator)
+                .cloned()
+                .map(SeigniorageRecipient::V2),
+        };
+
+        let Some(recipient) = maybe_seigniorage_recipient else {
+            // We couldn't find the validator. If the reward amount is zero, we don't care -
+            // the validator wasn't supposed to be rewarded in this era, anyway. Otherwise,
+            // return an error.
+            if reward_amount.is_zero() {
+                continue;
+            } else {
+                return Err(Error::ValidatorNotFound);
+            }
+        };
+
+        let total_stake = recipient.total_stake().ok_or(Error::ArithmeticOverflow)?;
+
+        if total_stake.is_zero() {
+            // The validator has completely unbonded. We can't compute the delegators' part (as
+            // their stakes are also zero), so we just give the whole reward to the validator.
+            // When used from `distribute`, we will mint the reward into their bonding purse
+            // and increase their unbond request by the corresponding amount.
+
+            results.push(RewardsPerValidator {
+                validator_reward: reward_amount,
+                delegator_rewards: BTreeMap::new(),
+            });
+            continue;
+        }
+
+        let delegator_total_stake: U512 = recipient
+            .delegator_total_stake()
+            .ok_or(Error::ArithmeticOverflow)?;
+
+        // calculate part of reward to be distributed to delegators before commission
+        let base_delegators_part: Ratio<U512> = {
+            let reward_multiplier: Ratio<U512> = Ratio::new(delegator_total_stake, total_stake);
+            total_reward
+                .checked_mul(&reward_multiplier)
+                .ok_or(Error::ArithmeticOverflow)?
+        };
+
+        let default = BTreeMap::new();
+        let reservation_delegation_rates =
+            recipient.reservation_delegation_rates().unwrap_or(&default);
+        // calculate commission and final reward for each delegator
+        let mut delegator_rewards: BTreeMap<DelegatorKind, U512> = BTreeMap::new();
+        for (delegator_kind, delegator_stake) in recipient.delegator_stake().iter() {
+            let reward_multiplier = Ratio::new(*delegator_stake, delegator_total_stake);
+            let base_reward = base_delegators_part * reward_multiplier;
+            let delegation_rate = *reservation_delegation_rates
+                .get(delegator_kind)
+                .unwrap_or(recipient.delegation_rate());
+            let commission_rate = Ratio::new(
+                U512::from(delegation_rate),
+                U512::from(DELEGATION_RATE_DENOMINATOR),
+            );
+            let commission: Ratio<U512> = base_reward
+                .checked_mul(&commission_rate)
+                .ok_or(Error::ArithmeticOverflow)?;
+            let reward = base_reward
+                .checked_sub(&commission)
+                .ok_or(Error::ArithmeticOverflow)?;
+            delegator_rewards.insert(delegator_kind.clone(), reward.to_integer());
+        }
+
+        let total_delegator_payout: U512 =
+            delegator_rewards.iter().map(|(_, &amount)| amount).sum();
+
+        let validator_reward = reward_amount - total_delegator_payout;
+
+        results.push(RewardsPerValidator {
+            validator_reward,
+            delegator_rewards,
+        });
+    }
+    Ok(results)
+}
+
+/// Aggregated rewards data for a validator.
+#[derive(Debug, Default)]
+pub struct RewardsPerValidator {
+    validator_reward: U512,
+    delegator_rewards: BTreeMap<DelegatorKind, U512>,
+}
+
+impl RewardsPerValidator {
+    /// The validator reward amount.
+    pub fn validator_reward(&self) -> U512 {
+        self.validator_reward
+    }
+
+    /// The rewards for this validator's delegators.
+    pub fn delegator_rewards(&self) -> &BTreeMap<DelegatorKind, U512> {
+        &self.delegator_rewards
+    }
+
+    /// The rewards for this validator's delegators.
+    pub fn take_delegator_rewards(self) -> BTreeMap<DelegatorKind, U512> {
+        self.delegator_rewards
+    }
 }

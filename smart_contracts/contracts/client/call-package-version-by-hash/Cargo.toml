@@ -1,0 +1,15 @@
+[package]
+name = "call-package-version-by-hash"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "call_package_version_by_hash"
+path = "src/main.rs"
+bench = false
+doctest = false
+test = false
+
+[dependencies]
+casper-contract = { path = "../../../contract" }
+casper-types = { path = "../../../../types" }

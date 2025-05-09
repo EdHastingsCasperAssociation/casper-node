@@ -304,6 +304,7 @@ mod tests {
             get_block_info: HostFunction::new(330, [0, 0]),
             recover_secp256k1: HostFunction::new(331, [0, 1, 2, 3, 4, 5]),
             verify_signature: HostFunction::new(332, [0, 1, 2, 3, 4, 5]),
+            call_package_version: HostFunction::new(105, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
         });
     static EXPECTED_GENESIS_HOST_FUNCTION_COSTS_V2: Lazy<HostFunctionCostsV2> =
         Lazy::new(|| HostFunctionCostsV2 {

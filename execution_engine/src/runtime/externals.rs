@@ -1523,6 +1523,70 @@ where
 
                 Ok(Some(RuntimeValue::I32(0)))
             }
+            FunctionIndex::CallPackageVersion => {
+                // args(0) = pointer to contract_package_hash where contract is at in global state
+                // args(1) = size of contract_package_hash
+                // args(2) = pointer to major version in wasm memory
+                // args(3) = size of major version in wasm memory
+                // args(3) = pointer to contract version in wasm memory
+                // args(4) = size of contract version in wasm memory
+                // args(5) = pointer to method name in wasm memory
+                // args(6) = size of method name in wasm memory
+                // args(7) = pointer to function arguments in Wasm memory
+                // args(8) = size of arguments
+                // args(9) = pointer to result size (output)
+                let (
+                    contract_package_hash_ptr,
+                    contract_package_hash_size,
+                    major_version_ptr,
+                    major_version_size,
+                    contract_version_ptr,
+                    contract_version_size,
+                    entry_point_name_ptr,
+                    entry_point_name_size,
+                    args_ptr,
+                    args_size,
+                    result_size_ptr,
+                ) = Args::parse(args)?;
+                self.charge_host_function_call(
+                    &host_function_costs.call_package_version,
+                    [
+                        contract_package_hash_ptr,
+                        contract_package_hash_size,
+                        major_version_ptr,
+                        major_version_size,
+                        contract_version_ptr,
+                        contract_version_size,
+                        entry_point_name_ptr,
+                        entry_point_name_size,
+                        args_ptr,
+                        args_size,
+                        result_size_ptr,
+                    ],
+                )?;
+
+                let contract_package_hash: PackageHash =
+                    self.t_from_mem(contract_package_hash_ptr, contract_package_hash_size)?;
+                let major_version: u32 = self.t_from_mem(major_version_ptr, major_version_size)?;
+                let contract_version: EntityVersion =
+                    self.t_from_mem(contract_version_ptr, contract_version_size)?;
+                let entry_point_name: String =
+                    self.t_from_mem(entry_point_name_ptr, entry_point_name_size)?;
+                let args_bytes: Vec<u8> = {
+                    let args_size: u32 = args_size;
+                    self.bytes_from_mem(args_ptr, args_size as usize)?.to_vec()
+                };
+
+                let ret = self.call_package_version_host_buffer(
+                    contract_package_hash,
+                    major_version,
+                    contract_version,
+                    entry_point_name,
+                    &args_bytes,
+                    result_size_ptr,
+                )?;
+                Ok(Some(RuntimeValue::I32(api_error::i32_from(ret))))
+            }
         }
     }
 }

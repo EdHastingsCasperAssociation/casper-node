@@ -15,6 +15,7 @@ const ENABLED_CONTRACT_HASH_KEY: &str = "enabled_contract_hash";
 const CONTRACT_PACKAGE_HASH_KEY: &str = "contract_package_hash";
 const ARG_METHOD: &str = "method";
 const ARG_CONTRACT_HASH_KEY: &str = "contract_hash_key";
+const ARG_MAJOR_VERSION: &str = "major_version";
 const ARG_CONTRACT_VERSION: &str = "contract_version";
 const METHOD_CALL_CONTRACT: &str = "call_contract";
 const METHOD_CALL_VERSIONED_CONTRACT: &str = "call_versioned_contract";
@@ -184,6 +185,7 @@ fn should_run_regression() {
         GH_3097_REGRESSION_CALL_WASM,
         runtime_args! {
             ARG_METHOD => METHOD_CALL_VERSIONED_CONTRACT,
+            ARG_MAJOR_VERSION => 2u32,
             ARG_CONTRACT_VERSION => Some(1u32),
         },
     )
@@ -194,6 +196,7 @@ fn should_run_regression() {
         GH_3097_REGRESSION_CALL_WASM,
         runtime_args! {
             ARG_METHOD => METHOD_CALL_VERSIONED_CONTRACT,
+            ARG_MAJOR_VERSION => 2u32,
             ARG_CONTRACT_VERSION => Some(2u32),
         },
     )
@@ -204,6 +207,7 @@ fn should_run_regression() {
         GH_3097_REGRESSION_CALL_WASM,
         runtime_args! {
             ARG_METHOD => METHOD_CALL_VERSIONED_CONTRACT,
+            ARG_MAJOR_VERSION => 2u32,
             ARG_CONTRACT_VERSION => Option::<u32>::None,
         },
     )

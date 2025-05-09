@@ -8,8 +8,8 @@ generate_timestamp() {
     local DELAY=${1}
 
     local SCRIPT=(
-        "from datetime import datetime, timedelta;"
-        "print((datetime.utcnow() + timedelta(seconds=${DELAY})).isoformat('T') + 'Z')"
+        "from datetime import datetime, timedelta, timezone;"
+        "print((datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=${DELAY})).isoformat('T') + 'Z')"
     )
 
     python3 -c "${SCRIPT[*]}"

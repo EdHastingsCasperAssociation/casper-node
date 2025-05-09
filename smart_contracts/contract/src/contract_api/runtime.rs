@@ -126,6 +126,52 @@ pub fn call_versioned_contract<T: CLTyped + FromBytes>(
     deserialize_contract_result(bytes_written)
 }
 
+/// Invokes the specified `entry_point_name` of stored logic at a specific `contract_package_hash`
+/// address, for a specific pair of `major_version` and `contract_version`
+/// and passing the provided `runtime_args` to it
+///
+/// If the stored contract calls [`ret`], then that value is returned from
+/// `call_package_version`.  If the stored contract calls [`revert`], then execution stops and
+/// `call_package_version` doesn't return. Otherwise `call_package_version` returns `()`.
+pub fn call_package_version<T: CLTyped + FromBytes>(
+    contract_package_hash: ContractPackageHash,
+    major_version: u32,
+    contract_version: ContractVersion,
+    entry_point_name: &str,
+    runtime_args: RuntimeArgs,
+) -> T {
+    let (contract_package_hash_ptr, contract_package_hash_size, _bytes1) =
+        contract_api::to_ptr(contract_package_hash);
+    let (major_version_ptr, major_version_size, _bytes_5) = contract_api::to_ptr(major_version);
+    let (contract_version_ptr, contract_version_size, _bytes2) =
+        contract_api::to_ptr(contract_version);
+    let (entry_point_name_ptr, entry_point_name_size, _bytes3) =
+        contract_api::to_ptr(entry_point_name);
+    let (runtime_args_ptr, runtime_args_size, _bytes4) = contract_api::to_ptr(runtime_args);
+
+    let bytes_written = {
+        let mut bytes_written = MaybeUninit::uninit();
+        let ret = unsafe {
+            ext_ffi::casper_call_package_version(
+                contract_package_hash_ptr,
+                contract_package_hash_size,
+                major_version_ptr,
+                major_version_size,
+                contract_version_ptr,
+                contract_version_size,
+                entry_point_name_ptr,
+                entry_point_name_size,
+                runtime_args_ptr,
+                runtime_args_size,
+                bytes_written.as_mut_ptr(),
+            )
+        };
+        api_error::result_from(ret).unwrap_or_revert();
+        unsafe { bytes_written.assume_init() }
+    };
+    deserialize_contract_result(bytes_written)
+}
+
 fn deserialize_contract_result<T: CLTyped + FromBytes>(bytes_written: usize) -> T {
     let serialized_result = if bytes_written == 0 {
         // If no bytes were written, the host buffer hasn't been set and hence shouldn't be read.

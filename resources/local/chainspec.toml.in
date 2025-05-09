@@ -347,6 +347,7 @@ cost_increase_per_message = 50
 get_block_info = { cost = 330, arguments = [0, 0] }
 recover_secp256k1 = { cost = 1_300_000, arguments = [0, 120_000, 0, 0, 0, 0] }
 verify_signature = { cost = 1_300_000, arguments = [0, 120_000, 0, 0, 0, 0] }
+call_package_version = { cost = 300_000_000, arguments = [0, 0, 0, 0, 0, 0, 0, 120_000, 0, 120_000, 0] }
 
 [wasm.v2]
 # Amount of free memory each contract can use for stack.
