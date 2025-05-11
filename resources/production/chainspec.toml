@@ -421,9 +421,6 @@ remove = { cost = 0, arguments = [0, 0, 0] }
 copy_input = { cost = 0, arguments = [0, 0] }
 ret = { cost = 0, arguments = [0, 0] }
 create = { cost = 0, arguments = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }
-env_caller = { cost = 0, arguments = [0, 0, 0] }
-env_block_time = { cost = 0, arguments = [] }
-env_transferred_value = { cost = 0, arguments = [0] }
 transfer = { cost = 0, arguments = [0, 0, 0] }
 env_balance = { cost = 0, arguments = [0, 0, 0, 0] }
 upgrade = { cost = 0, arguments = [0, 0, 0, 0, 0, 0] }
