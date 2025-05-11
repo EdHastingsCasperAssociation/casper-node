@@ -20,10 +20,7 @@ const NOT_USED: Cost = 0;
 const DEFAULT_FIXED_COST: Cost = 200;
 
 const DEFAULT_CALL_COST: u32 = 10_000;
-const DEFAULT_ENV_TRANSFERRED_VALUE_COST: u32 = 10_000;
 const DEFAULT_ENV_BALANCE_COST: u32 = 100;
-const DEFAULT_ENV_BLOCK_TIME_COST: u32 = 100;
-const DEFAULT_GET_CALLER_COST: u32 = 100;
 
 const DEFAULT_PRINT_COST: u32 = 100;
 
@@ -72,12 +69,6 @@ pub struct HostFunctionCostsV2 {
     pub ret: HostFunction<[Cost; 2]>,
     /// Cost of calling the `create` host function.
     pub create: HostFunction<[Cost; 10]>,
-    /// Cost of calling the `env_caller` host function.
-    pub env_caller: HostFunction<[Cost; 3]>,
-    /// Cost of calling the `env_block_time` host function.
-    pub env_block_time: HostFunction<[Cost; 0]>,
-    /// Cost of calling the `env_transferred_value` host function.
-    pub env_transferred_value: HostFunction<[Cost; 1]>,
     /// Cost of calling the `transfer` host function.
     pub transfer: HostFunction<[Cost; 3]>,
     /// Cost of calling the `env_balance` host function.
@@ -103,9 +94,6 @@ impl Zero for HostFunctionCostsV2 {
             copy_input: HostFunction::zero(),
             ret: HostFunction::zero(),
             create: HostFunction::zero(),
-            env_caller: HostFunction::zero(),
-            env_block_time: HostFunction::zero(),
-            env_transferred_value: HostFunction::zero(),
             transfer: HostFunction::zero(),
             env_balance: HostFunction::zero(),
             upgrade: HostFunction::zero(),
@@ -124,9 +112,6 @@ impl Zero for HostFunctionCostsV2 {
             copy_input,
             ret,
             create,
-            env_caller,
-            env_block_time,
-            env_transferred_value,
             transfer,
             env_balance,
             upgrade,
@@ -141,9 +126,6 @@ impl Zero for HostFunctionCostsV2 {
             && copy_input.is_zero()
             && ret.is_zero()
             && create.is_zero()
-            && env_caller.is_zero()
-            && env_block_time.is_zero()
-            && env_transferred_value.is_zero()
             && transfer.is_zero()
             && env_balance.is_zero()
             && upgrade.is_zero()
@@ -199,10 +181,7 @@ impl Default for HostFunctionCostsV2 {
                     NOT_USED,
                 ],
             ),
-            env_caller: HostFunction::new(DEFAULT_GET_CALLER_COST, [NOT_USED, NOT_USED, NOT_USED]),
             env_balance: HostFunction::fixed(DEFAULT_ENV_BALANCE_COST),
-            env_block_time: HostFunction::fixed(DEFAULT_ENV_BLOCK_TIME_COST),
-            env_transferred_value: HostFunction::fixed(DEFAULT_ENV_TRANSFERRED_VALUE_COST),
             transfer: HostFunction::new(DEFAULT_TRANSFER_COST, [NOT_USED, NOT_USED, NOT_USED]),
             upgrade: HostFunction::new(
                 DEFAULT_FIXED_COST,
@@ -239,9 +218,6 @@ impl ToBytes for HostFunctionCostsV2 {
         ret.append(&mut self.copy_input.to_bytes()?);
         ret.append(&mut self.ret.to_bytes()?);
         ret.append(&mut self.create.to_bytes()?);
-        ret.append(&mut self.env_caller.to_bytes()?);
-        ret.append(&mut self.env_block_time.to_bytes()?);
-        ret.append(&mut self.env_transferred_value.to_bytes()?);
         ret.append(&mut self.transfer.to_bytes()?);
         ret.append(&mut self.env_balance.to_bytes()?);
         ret.append(&mut self.upgrade.to_bytes()?);
@@ -259,9 +235,6 @@ impl ToBytes for HostFunctionCostsV2 {
             + self.copy_input.serialized_length()
             + self.ret.serialized_length()
             + self.create.serialized_length()
-            + self.env_caller.serialized_length()
-            + self.env_block_time.serialized_length()
-            + self.env_transferred_value.serialized_length()
             + self.transfer.serialized_length()
             + self.env_balance.serialized_length()
             + self.upgrade.serialized_length()
@@ -280,9 +253,6 @@ impl FromBytes for HostFunctionCostsV2 {
         let (copy_input, rem) = FromBytes::from_bytes(rem)?;
         let (ret, rem) = FromBytes::from_bytes(rem)?;
         let (create, rem) = FromBytes::from_bytes(rem)?;
-        let (env_caller, rem) = FromBytes::from_bytes(rem)?;
-        let (env_block_time, rem) = FromBytes::from_bytes(rem)?;
-        let (env_transferred_value, rem) = FromBytes::from_bytes(rem)?;
         let (transfer, rem) = FromBytes::from_bytes(rem)?;
         let (env_balance, rem) = FromBytes::from_bytes(rem)?;
         let (upgrade, rem) = FromBytes::from_bytes(rem)?;
@@ -298,9 +268,6 @@ impl FromBytes for HostFunctionCostsV2 {
                 copy_input,
                 ret,
                 create,
-                env_caller,
-                env_block_time,
-                env_transferred_value,
                 transfer,
                 env_balance,
                 upgrade,
@@ -324,9 +291,6 @@ impl Distribution<HostFunctionCostsV2> for Standard {
             copy_input: rng.gen(),
             ret: rng.gen(),
             create: rng.gen(),
-            env_caller: rng.gen(),
-            env_block_time: rng.gen(),
-            env_transferred_value: rng.gen(),
             transfer: rng.gen(),
             env_balance: rng.gen(),
             upgrade: rng.gen(),
@@ -360,9 +324,6 @@ pub mod gens {
             copy_input in host_function_cost_v2_arb(),
             ret in host_function_cost_v2_arb(),
             create in host_function_cost_v2_arb(),
-            env_caller in host_function_cost_v2_arb(),
-            env_block_time in host_function_cost_v2_arb(),
-            env_transferred_value in host_function_cost_v2_arb(),
             transfer in host_function_cost_v2_arb(),
             env_balance in host_function_cost_v2_arb(),
             upgrade in host_function_cost_v2_arb(),
@@ -378,9 +339,6 @@ pub mod gens {
                 copy_input,
                 ret,
                 create,
-                env_caller,
-                env_block_time,
-                env_transferred_value,
                 transfer,
                 env_balance,
                 upgrade,
