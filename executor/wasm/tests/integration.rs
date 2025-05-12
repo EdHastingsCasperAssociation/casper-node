@@ -775,15 +775,13 @@ fn call_dummy_host_fn_by_name(
                 copy_input: HostFunctionV2::fixed(1),
                 ret: HostFunctionV2::fixed(1),
                 create: HostFunctionV2::fixed(1),
-                env_caller: HostFunctionV2::fixed(1),
-                env_block_time: HostFunctionV2::fixed(1),
-                env_transferred_value: HostFunctionV2::fixed(1),
                 transfer: HostFunctionV2::fixed(1),
                 env_balance: HostFunctionV2::fixed(1),
                 upgrade: HostFunctionV2::fixed(1),
                 call: HostFunctionV2::fixed(1),
                 print: HostFunctionV2::fixed(1),
                 emit: HostFunctionV2::fixed(1),
+                env_info: HostFunctionV2::fixed(1),
             },
         );
         let executor_config = ExecutorConfigBuilder::default()
@@ -870,15 +868,13 @@ fn write_n_bytes_at_limit(
                 copy_input: HostFunctionV2::fixed(0),
                 ret: HostFunctionV2::fixed(0),
                 create: HostFunctionV2::fixed(0),
-                env_caller: HostFunctionV2::fixed(0),
-                env_block_time: HostFunctionV2::fixed(0),
-                env_transferred_value: HostFunctionV2::fixed(0),
                 transfer: HostFunctionV2::fixed(0),
                 env_balance: HostFunctionV2::fixed(0),
                 upgrade: HostFunctionV2::fixed(0),
                 call: HostFunctionV2::fixed(0),
                 print: HostFunctionV2::fixed(0),
                 emit: HostFunctionV2::fixed(0),
+                env_info: HostFunctionV2::fixed(0),
             },
         );
         let executor_config = ExecutorConfigBuilder::default()

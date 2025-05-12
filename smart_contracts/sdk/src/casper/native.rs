@@ -9,16 +9,18 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use crate::linkme::distributed_slice;
 use bytes::Bytes;
 use casper_executor_wasm_common::{
+    env_info::EnvInfo,
     error::{
         CALLEE_REVERTED, CALLEE_SUCCEEDED, CALLEE_TRAPPED, HOST_ERROR_INTERNAL,
         HOST_ERROR_NOT_FOUND, HOST_ERROR_SUCCESS,
     },
     flags::ReturnFlags,
 };
+#[cfg(not(target_arch = "wasm32"))]
 use rand::Rng;
-use crate::linkme::distributed_slice;
 
 use super::Entity;
 use crate::types::Address;
@@ -33,7 +35,8 @@ use crate::types::Address;
 /// * `TraitImpl` (if it's part of a `impl Trait for Contract` block),
 /// * `Function` (if it's a standalone function).
 ///
-/// This is used to dispatch exports under native code i.e. you want to write a test that calls "foobar" regardless of location.
+/// This is used to dispatch exports under native code i.e. you want to write a test that calls
+/// "foobar" regardless of location.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum EntryPointKind {
     /// Smart contract.
@@ -63,9 +66,7 @@ pub enum EntryPointKind {
     /// This is used to identify the function export and its name.
     ///
     /// The `name` is the name of the function that is being exported.
-    Function {
-        name: &'static str,
-    },
+    Function { name: &'static str },
 }
 
 impl EntryPointKind {
@@ -80,7 +81,8 @@ impl EntryPointKind {
 
 /// Export is a structure that contains information about the exported function.
 ///
-/// This is used to register the export and its name and physical location in the smart contract source code.
+/// This is used to register the export and its name and physical location in the smart contract
+/// source code.
 pub struct EntryPoint {
     /// The kind of entry point that is being registered.
     pub kind: EntryPointKind,
@@ -89,7 +91,6 @@ pub struct EntryPoint {
     pub file: &'static str,
     pub line: u32,
 }
-
 
 #[distributed_slice]
 #[linkme(crate = crate::linkme)]
@@ -117,14 +118,19 @@ impl fmt::Debug for EntryPoint {
 
 /// Invokes an export by its name.
 ///
-/// This function is used to invoke an export by its name regardless of its location in the smart contract.
+/// This function is used to invoke an export by its name regardless of its location in the smart
+/// contract.
 pub fn invoke_export_by_name(name: &str) {
     let exports_by_name: Vec<_> = ENTRY_POINTS
         .iter()
         .filter(|export| export.kind.name() == name)
         .collect();
 
-    assert_eq!(exports_by_name.len(), 1, "Expected exactly one export {name} found, but got {exports_by_name:?}");
+    assert_eq!(
+        exports_by_name.len(),
+        1,
+        "Expected exactly one export {name} found, but got {exports_by_name:?}"
+    );
 
     (exports_by_name[0].fptr)();
 }
@@ -509,7 +515,6 @@ impl Environment {
 
         let mut new_stub = with_current_environment(|stub| stub.clone());
         new_stub.input_data = Some(Bytes::copy_from_slice(input_data));
-        // new_stub.caller = Entity::Contract(address.try_into().expect("Size to match"));
         new_stub.caller = new_stub.callee;
         new_stub.callee = Entity::Contract(address.try_into().expect("Size to match"));
 
@@ -598,8 +603,21 @@ Example paths:
         Ok(unsafe { dest.add(32) })
     }
 
-    fn casper_env_transferred_value(&self) -> Result<u64, NativeTrap> {
-        Ok(0)
+    fn casper_env_info(&self, info_ptr: *const u8, info_size: u32) -> Result<u32, NativeTrap> {
+        assert_eq!(info_size as usize, size_of::<EnvInfo>());
+        let mut env_info = NonNull::new(info_ptr as *mut u8)
+            .expect("Valid ptr")
+            .cast::<EnvInfo>();
+        let env_info = unsafe { env_info.as_mut() };
+        *env_info = EnvInfo {
+            block_time: 0,
+            transferred_value: 0,
+            caller_addr: *self.caller.address(),
+            caller_kind: self.caller.tag().into(),
+            callee_addr: *self.callee.address(),
+            callee_kind: self.callee.tag().into(),
+        };
+        Ok(HOST_ERROR_SUCCESS)
     }
 }
 
@@ -753,7 +771,7 @@ mod symbols {
         crate::casper::native::handle_ret(_call_result);
     }
 
-    use casper_executor_wasm_common::error::HOST_ERROR_SUCCESS;
+    use casper_executor_wasm_common::{env_info::EnvInfo, error::HOST_ERROR_SUCCESS};
 
     use crate::casper::native::LAST_TRAP;
 
@@ -869,26 +887,6 @@ mod symbols {
         });
         crate::casper::native::handle_ret_with(_call_result, ptr::null_mut)
     }
-
-    #[no_mangle]
-    pub extern "C" fn casper_env_caller(
-        dest: *mut u8,
-        dest_len: usize,
-        entity: *mut u32,
-    ) -> *const u8 {
-        let _name = "casper_env_caller";
-        let _args = (&dest, &dest_len);
-        let _call_result =
-            with_current_environment(|stub| stub.casper_env_caller(dest, dest_len, entity));
-        crate::casper::native::handle_ret_with(_call_result, ptr::null)
-    }
-    #[no_mangle]
-    pub extern "C" fn casper_env_transferred_value() -> u64 {
-        let _name = "casper_env_transferred_value";
-        let _args = ();
-        let _call_result = with_current_environment(|stub| stub.casper_env_transferred_value());
-        crate::casper::native::handle_ret(_call_result)
-    }
     #[no_mangle]
     pub extern "C" fn casper_env_balance(
         _entity_kind: u32,
@@ -906,12 +904,6 @@ mod symbols {
     ) -> u32 {
         todo!()
     }
-
-    #[no_mangle]
-    pub extern "C" fn casper_env_block_time() -> u64 {
-        0
-    }
-
     #[no_mangle]
     pub extern "C" fn casper_emit(
         topic_ptr: *const u8,
@@ -924,6 +916,12 @@ mod symbols {
         let topic = std::str::from_utf8(topic).expect("Valid UTF-8 string");
         println!("Emitting event with topic: {topic:?} and data: {data:?}");
         HOST_ERROR_SUCCESS
+    }
+
+    #[no_mangle]
+    pub extern "C" fn casper_env_info(info_ptr: *const u8, info_size: u32) -> u32 {
+        let ret = with_current_environment(|env| env.casper_env_info(info_ptr, info_size));
+        crate::casper::native::handle_ret(ret)
     }
 }
 

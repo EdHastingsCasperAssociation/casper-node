@@ -159,11 +159,8 @@ const NOT_USED: Cost = 0;
 /// An arbitrary default fixed cost for host functions that were not researched yet.
 const DEFAULT_FIXED_COST: Cost = 200;
 
-const DEFAULT_CALL_COST: Cost = 10_000;
-const DEFAULT_ENV_TRANSFERRED_VALUE_COST: Cost = 10_000;
-const DEFAULT_ENV_BALANCE_COST: Cost = 100;
-const DEFAULT_ENV_BLOCK_TIME_COST: Cost = 100;
-const DEFAULT_GET_CALLER_COST: Cost = 100;
+const DEFAULT_CALL_COST: u64 = 10_000;
+const DEFAULT_ENV_BALANCE_COST: u64 = 100;
 
 const DEFAULT_PRINT_COST: Cost = 100;
 
@@ -193,6 +190,8 @@ const DEFAULT_EMIT_COST: Cost = 200;
 const DEFAULT_EMIT_TOPIC_SIZE_WEIGHT: Cost = 100;
 const DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT: Cost = 100;
 
+const DEFAULT_ENV_INFO_COST: Cost = 10_000;
+
 /// Definition of a host function cost table.
 #[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
@@ -210,12 +209,6 @@ pub struct HostFunctionCostsV2 {
     pub ret: HostFunctionV2<[Cost; 2]>,
     /// Cost of calling the `create` host function.
     pub create: HostFunctionV2<[Cost; 10]>,
-    /// Cost of calling the `env_caller` host function.
-    pub env_caller: HostFunctionV2<[Cost; 3]>,
-    /// Cost of calling the `env_block_time` host function.
-    pub env_block_time: HostFunctionV2<[Cost; 0]>,
-    /// Cost of calling the `env_transferred_value` host function.
-    pub env_transferred_value: HostFunctionV2<[Cost; 0]>,
     /// Cost of calling the `transfer` host function.
     pub transfer: HostFunctionV2<[Cost; 3]>,
     /// Cost of calling the `env_balance` host function.
@@ -228,6 +221,8 @@ pub struct HostFunctionCostsV2 {
     pub print: HostFunctionV2<[Cost; 2]>,
     /// Cost of calling the `emit` host function.
     pub emit: HostFunctionV2<[Cost; 4]>,
+    /// Cost of calling the `env_info` host function.
+    pub env_info: HostFunctionV2<[Cost; 2]>,
 }
 
 impl HostFunctionCostsV2 {
@@ -239,15 +234,13 @@ impl HostFunctionCostsV2 {
             copy_input: HostFunctionV2::zero(),
             ret: HostFunctionV2::zero(),
             create: HostFunctionV2::zero(),
-            env_caller: HostFunctionV2::zero(),
-            env_block_time: HostFunctionV2::zero(),
-            env_transferred_value: HostFunctionV2::zero(),
             transfer: HostFunctionV2::zero(),
             env_balance: HostFunctionV2::zero(),
             upgrade: HostFunctionV2::zero(),
             call: HostFunctionV2::zero(),
             print: HostFunctionV2::zero(),
             emit: HostFunctionV2::zero(),
+            env_info: HostFunctionV2::zero(),
         }
     }
 }
@@ -297,13 +290,7 @@ impl Default for HostFunctionCostsV2 {
                     NOT_USED,
                 ],
             ),
-            env_caller: HostFunctionV2::new(
-                DEFAULT_GET_CALLER_COST,
-                [NOT_USED, NOT_USED, NOT_USED],
-            ),
             env_balance: HostFunctionV2::fixed(DEFAULT_ENV_BALANCE_COST),
-            env_block_time: HostFunctionV2::fixed(DEFAULT_ENV_BLOCK_TIME_COST),
-            env_transferred_value: HostFunctionV2::fixed(DEFAULT_ENV_TRANSFERRED_VALUE_COST),
             transfer: HostFunctionV2::new(DEFAULT_TRANSFER_COST, [NOT_USED, NOT_USED, NOT_USED]),
             upgrade: HostFunctionV2::new(
                 DEFAULT_FIXED_COST,
@@ -326,6 +313,7 @@ impl Default for HostFunctionCostsV2 {
                     DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT,
                 ],
             ),
+            env_info: HostFunctionV2::new(DEFAULT_ENV_INFO_COST, [NOT_USED, NOT_USED]),
         }
     }
 }
@@ -339,15 +327,13 @@ impl ToBytes for HostFunctionCostsV2 {
         ret.append(&mut self.copy_input.to_bytes()?);
         ret.append(&mut self.ret.to_bytes()?);
         ret.append(&mut self.create.to_bytes()?);
-        ret.append(&mut self.env_caller.to_bytes()?);
-        ret.append(&mut self.env_block_time.to_bytes()?);
-        ret.append(&mut self.env_transferred_value.to_bytes()?);
         ret.append(&mut self.transfer.to_bytes()?);
         ret.append(&mut self.env_balance.to_bytes()?);
         ret.append(&mut self.upgrade.to_bytes()?);
         ret.append(&mut self.call.to_bytes()?);
         ret.append(&mut self.print.to_bytes()?);
         ret.append(&mut self.emit.to_bytes()?);
+        ret.append(&mut self.env_info.to_bytes()?);
         Ok(ret)
     }
 
@@ -358,15 +344,13 @@ impl ToBytes for HostFunctionCostsV2 {
             + self.copy_input.serialized_length()
             + self.ret.serialized_length()
             + self.create.serialized_length()
-            + self.env_caller.serialized_length()
-            + self.env_block_time.serialized_length()
-            + self.env_transferred_value.serialized_length()
             + self.transfer.serialized_length()
             + self.env_balance.serialized_length()
             + self.upgrade.serialized_length()
             + self.call.serialized_length()
             + self.print.serialized_length()
             + self.emit.serialized_length()
+            + self.env_info.serialized_length()
     }
 }
 
@@ -378,15 +362,13 @@ impl FromBytes for HostFunctionCostsV2 {
         let (copy_input, rem) = FromBytes::from_bytes(rem)?;
         let (ret, rem) = FromBytes::from_bytes(rem)?;
         let (create, rem) = FromBytes::from_bytes(rem)?;
-        let (env_caller, rem) = FromBytes::from_bytes(rem)?;
-        let (env_block_time, rem) = FromBytes::from_bytes(rem)?;
-        let (env_transferred_value, rem) = FromBytes::from_bytes(rem)?;
         let (transfer, rem) = FromBytes::from_bytes(rem)?;
         let (env_balance, rem) = FromBytes::from_bytes(rem)?;
         let (upgrade, rem) = FromBytes::from_bytes(rem)?;
         let (call, rem) = FromBytes::from_bytes(rem)?;
         let (print, rem) = FromBytes::from_bytes(rem)?;
         let (emit, rem) = FromBytes::from_bytes(rem)?;
+        let (env_info, rem) = FromBytes::from_bytes(rem)?;
         Ok((
             HostFunctionCostsV2 {
                 read,
@@ -395,15 +377,13 @@ impl FromBytes for HostFunctionCostsV2 {
                 copy_input,
                 ret,
                 create,
-                env_caller,
-                env_block_time,
-                env_transferred_value,
                 transfer,
                 env_balance,
                 upgrade,
                 call,
                 print,
                 emit,
+                env_info,
             },
             rem,
         ))
@@ -420,15 +400,13 @@ impl Distribution<HostFunctionCostsV2> for Standard {
             copy_input: rng.gen(),
             ret: rng.gen(),
             create: rng.gen(),
-            env_caller: rng.gen(),
-            env_block_time: rng.gen(),
-            env_transferred_value: rng.gen(),
             transfer: rng.gen(),
             env_balance: rng.gen(),
             upgrade: rng.gen(),
             call: rng.gen(),
             print: rng.gen(),
             emit: rng.gen(),
+            env_info: rng.gen(),
         }
     }
 }
@@ -455,15 +433,13 @@ pub mod gens {
             copy_input in host_function_cost_v2_arb(),
             ret in host_function_cost_v2_arb(),
             create in host_function_cost_v2_arb(),
-            env_caller in host_function_cost_v2_arb(),
-            env_block_time in host_function_cost_v2_arb(),
-            env_transferred_value in host_function_cost_v2_arb(),
             transfer in host_function_cost_v2_arb(),
             env_balance in host_function_cost_v2_arb(),
             upgrade in host_function_cost_v2_arb(),
             call in host_function_cost_v2_arb(),
             print in host_function_cost_v2_arb(),
             emit in host_function_cost_v2_arb(),
+            env_info in host_function_cost_v2_arb(),
         ) -> HostFunctionCostsV2 {
             HostFunctionCostsV2 {
                 read,
@@ -472,15 +448,13 @@ pub mod gens {
                 copy_input,
                 ret,
                 create,
-                env_caller,
-                env_block_time,
-                env_transferred_value,
                 transfer,
                 env_balance,
                 upgrade,
                 call,
                 print,
                 emit,
+                env_info
             }
         }
     }

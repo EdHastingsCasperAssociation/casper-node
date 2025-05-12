@@ -16,11 +16,12 @@ use crate::{
 };
 
 use casper_executor_wasm_common::{
+    env_info::EnvInfo,
     error::{result_from_code, CommonResult, HOST_ERROR_SUCCESS},
     flags::ReturnFlags,
     keyspace::{Keyspace, KeyspaceTag},
 };
-use casper_sdk_sys::casper_env_caller;
+use casper_sdk_sys::casper_env_info;
 
 /// Print a message.
 #[inline]
@@ -388,24 +389,28 @@ pub fn call<T: ToCallData>(
     }
 }
 
+/// Get the environment info.
+pub fn get_env_info() -> EnvInfo {
+    let mut info = MaybeUninit::<EnvInfo>::uninit();
+    let _dest = unsafe { NonNull::new_unchecked(info.as_mut_ptr() as *mut u8) };
+
+    let ret = unsafe { casper_env_info(info.as_mut_ptr().cast(), size_of::<EnvInfo>() as u32) };
+
+    if ret != HOST_ERROR_SUCCESS {
+        panic!("Host failure");
+    }
+
+    unsafe { info.assume_init() }
+}
+
 /// Get the caller.
 #[must_use]
 pub fn get_caller() -> Entity {
-    let mut addr = MaybeUninit::<Address>::uninit();
-    let _dest = unsafe { NonNull::new_unchecked(addr.as_mut_ptr() as *mut u8) };
+    let info = get_env_info();
 
-    let mut entity_kind = MaybeUninit::<u32>::uninit();
-
-    // Pointer to the end of written bytes
-    let _out_ptr =
-        unsafe { casper_env_caller(addr.as_mut_ptr().cast(), 32, entity_kind.as_mut_ptr()) };
-
-    // let address = unsafe { addr.assume_init() };
-    let entity_kind = unsafe { entity_kind.assume_init() };
-
-    match entity_kind {
-        0 => Entity::Account(unsafe { addr.assume_init() }),
-        1 => Entity::Contract(unsafe { addr.assume_init() }),
+    match info.caller_kind {
+        0 => Entity::Account(info.callee_addr),
+        1 => Entity::Contract(info.caller_addr),
         _ => panic!("Unknown entity kind"),
     }
 }
@@ -490,7 +495,8 @@ pub fn get_balance_of(entity_kind: &Entity) -> u64 {
 /// Get the transferred token value passed to the contract.
 #[must_use]
 pub fn transferred_value() -> u64 {
-    unsafe { casper_sdk_sys::casper_env_transferred_value() }
+    let info = get_env_info();
+    info.transferred_value
 }
 
 /// Transfer tokens from the current contract to another account or contract.
@@ -505,7 +511,8 @@ pub fn transfer(target_account: &Address, amount: u64) -> Result<(), CallError> 
 /// Get the current block time.
 #[inline]
 pub fn get_block_time() -> u64 {
-    unsafe { casper_sdk_sys::casper_env_block_time() }
+    let info = get_env_info();
+    info.block_time
 }
 
 #[doc(hidden)]

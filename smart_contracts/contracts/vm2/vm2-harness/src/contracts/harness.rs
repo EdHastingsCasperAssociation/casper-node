@@ -331,7 +331,7 @@ impl Harness {
         let caller = casper::get_caller();
         let value = casper::transferred_value();
 
-        if value == 0 {
+        if dbg!(value) == 0 {
             return Err(CustomError::WithBody(
                 "Value should be greater than 0".into(),
             ));

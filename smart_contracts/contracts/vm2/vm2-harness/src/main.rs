@@ -677,7 +677,7 @@ pub fn yet_another_exported_function(arg1: u64, arg2: String) {
 
 #[cfg(test)]
 mod tests {
-    use casper::native::{dispatch_with, Environment, EntryPointKind, ENTRY_POINTS};
+    use casper::native::{dispatch_with, EntryPointKind, Environment, ENTRY_POINTS};
     use casper_sdk::casper::native::{self, dispatch};
     use contracts::harness::{Harness, INITIAL_GREETING};
 

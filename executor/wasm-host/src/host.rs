@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cmp, num::NonZeroU32, sync::Arc};
+use std::{borrow::Cow, num::NonZeroU32, sync::Arc};
 
 use bytes::Bytes;
 use casper_executor_wasm_common::{
@@ -7,6 +7,7 @@ use casper_executor_wasm_common::{
         ENTRY_POINT_PAYMENT_CALLER, ENTRY_POINT_PAYMENT_DIRECT_INVOCATION_ONLY,
         ENTRY_POINT_PAYMENT_SELF_ONWARD,
     },
+    env_info::EnvInfo,
     error::{
         CallError, CALLEE_NOT_CALLABLE, CALLEE_SUCCEEDED, CALLEE_TRAPPED, HOST_ERROR_INVALID_DATA,
         HOST_ERROR_INVALID_INPUT, HOST_ERROR_MAX_MESSAGES_PER_BLOCK_EXCEEDED,
@@ -952,56 +953,6 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
     Ok(u32_from_host_result(host_result))
 }
 
-pub fn casper_env_caller<S: GlobalStateReader, E: Executor>(
-    mut caller: impl Caller<Context = Context<S, E>>,
-    dest_ptr: u32,
-    dest_len: u32,
-    entity_kind_ptr: u32,
-) -> VMResult<u32> {
-    let caller_cost = caller.context().config.host_function_costs().env_caller;
-    charge_host_function_call(
-        &mut caller,
-        &caller_cost,
-        [
-            u64::from(dest_ptr),
-            u64::from(dest_len),
-            u64::from(entity_kind_ptr),
-        ],
-    )?;
-
-    // TODO: Decide whether we want to return the full address and entity kind or just the 32 bytes
-    // "unified".
-    let (entity_kind, data) = match &caller.context().caller {
-        Key::Account(account_hash) => (0u32, account_hash.value()),
-        Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
-        other => panic!("Unexpected caller: {other:?}"),
-    };
-    let mut data = &data[..];
-    if dest_ptr == 0 {
-        Ok(dest_ptr)
-    } else {
-        let dest_len = dest_len as usize;
-        data = &data[0..cmp::min(32, dest_len)];
-        caller.memory_write(dest_ptr, data)?;
-        let entity_kind_bytes = entity_kind.to_le_bytes();
-        caller.memory_write(entity_kind_ptr, entity_kind_bytes.as_slice())?;
-        Ok(dest_ptr + (data.len() as u32))
-    }
-}
-
-pub fn casper_env_transferred_value<S: GlobalStateReader, E: Executor>(
-    mut caller: impl Caller<Context = Context<S, E>>,
-) -> VMResult<u64> {
-    let transferred_value_cost = caller
-        .context()
-        .config
-        .host_function_costs()
-        .env_transferred_value;
-    charge_host_function_call(&mut caller, &transferred_value_cost, [])?;
-
-    Ok(caller.context().transferred_value)
-}
-
 pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
     entity_kind: u32,
@@ -1024,7 +975,7 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
     let entity_key = match EntityKindTag::from_u32(entity_kind) {
         Some(EntityKindTag::Account) => {
             if entity_addr_len != 32 {
-                return Ok(0);
+                return Ok(HOST_ERROR_SUCCESS);
             }
             let entity_addr = caller.memory_read(entity_addr_ptr, entity_addr_len as usize)?;
             let account_hash: AccountHash = AccountHash::new(entity_addr.try_into().unwrap());
@@ -1061,7 +1012,6 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
                             let key = Key::AddressableEntity(EntityAddr::SmartContract(
                                 addressible_entity_hash.value(),
                             ));
-                            // Either::Right(Key::AddressableEntity(*addressible_entity_hash))
                             Either::Right(key)
                         }
                         None => {
@@ -1069,16 +1019,16 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
                                 ?smart_contract_key,
                                 "Unable to find latest addressible entity hash for contract"
                             );
-                            return Ok(0);
+                            return Ok(HOST_ERROR_SUCCESS);
                         }
                     }
                 }
                 Ok(Some(_)) => {
-                    return Ok(0);
+                    return Ok(HOST_ERROR_SUCCESS);
                 }
                 Ok(None) => {
                     // Not found, balance is 0
-                    return Ok(0);
+                    return Ok(HOST_ERROR_SUCCESS);
                 }
                 Err(error) => {
                     error!(
@@ -1090,7 +1040,7 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
                 }
             }
         }
-        None => return Ok(0),
+        None => return Ok(HOST_ERROR_SUCCESS),
     };
 
     let purse = match entity_key {
@@ -1492,16 +1442,49 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
     Ok(CALLEE_SUCCEEDED)
 }
 
-// TODO: Should this be blocktime instead of block_time? [Consistency]
-// If addressed, make sure to fix this in chainspec too
-pub fn casper_env_block_time<S: GlobalStateReader, E: Executor>(
+pub fn casper_env_info<S: GlobalStateReader, E: Executor>(
     mut caller: impl Caller<Context = Context<S, E>>,
-) -> VMResult<u64> {
-    let block_time_cost = caller.context().config.host_function_costs().env_block_time;
-    charge_host_function_call(&mut caller, &block_time_cost, [])?;
+    info_ptr: u32,
+    info_size: u32,
+) -> VMResult<u32> {
+    let block_time_cost = caller.context().config.host_function_costs().env_info;
+    charge_host_function_call(
+        &mut caller,
+        &block_time_cost,
+        [u64::from(info_ptr), u64::from(info_size)],
+    )?;
 
-    let block_time = caller.context().block_time;
-    Ok(block_time.value())
+    let (caller_kind, caller_addr) = match &caller.context().caller {
+        Key::Account(account_hash) => (0u32, account_hash.value()),
+        Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
+        other => panic!("Unexpected caller: {other:?}"),
+    };
+
+    let (callee_kind, callee_addr) = match &caller.context().callee {
+        Key::Account(initiator_addr) => (0u32, initiator_addr.value()),
+        Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
+        other => panic!("Unexpected callee: {other:?}"),
+    };
+
+    let transferred_value = caller.context().transferred_value;
+
+    let block_time = caller.context().block_time.value();
+
+    // `EnvInfo` in little-endian representation.
+    let env_info_le = EnvInfo {
+        caller_addr,
+        caller_kind: caller_kind.to_le(),
+        callee_addr,
+        callee_kind: callee_kind.to_le(),
+        transferred_value: transferred_value.to_le(),
+        block_time: block_time.to_le(),
+    };
+
+    let env_info_bytes = safe_transmute::transmute_one_to_bytes(&env_info_le);
+    let write_len = env_info_bytes.len().min(info_size as usize);
+    caller.memory_write(info_ptr, &env_info_bytes[..write_len])?;
+
+    Ok(HOST_ERROR_SUCCESS)
 }
 
 pub fn casper_emit<S: GlobalStateReader, E: Executor>(
