@@ -76,9 +76,8 @@ pub(crate) fn generate_casper_imports<S: GlobalStateReader + 'static, E: Executo
                             Ok(ret) => Ok(ret),
                             Err(error) => {
                                 warn!(
-                                    "Host function {} failed with error: {:?}",
+                                    "Host function {} failed with error: {error:?}",
                                     stringify!($name),
-                                    error
                                 );
                                 return Err(error);
                             }

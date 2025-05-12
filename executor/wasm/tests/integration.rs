@@ -784,6 +784,7 @@ fn call_dummy_host_fn_by_name(
                 call: HostFunction::fixed(1),
                 print: HostFunction::fixed(1),
                 emit: HostFunction::fixed(1),
+                env_info: HostFunction::fixed(1),
             },
         );
         let executor_config = ExecutorConfigBuilder::default()
@@ -879,6 +880,7 @@ fn write_n_bytes_at_limit(
                 call: HostFunction::fixed(0),
                 print: HostFunction::fixed(0),
                 emit: HostFunction::fixed(0),
+                env_info: HostFunction::fixed(0),
             },
         );
         let executor_config = ExecutorConfigBuilder::default()

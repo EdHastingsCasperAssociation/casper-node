@@ -225,8 +225,8 @@ extern "C" {
     /// * `action` - index representing the action threshold to set
     /// * `threshold` - new value of the threshold for performing this action
     pub fn casper_set_action_threshold(permission_level: u32, threshold: u32) -> i32;
-    /// Returns the caller of the current context, i.e. the [`AccountHash`] of the
-    /// account which made the transaction request. The value stored in the host
+    /// Returns the caller of the current context, i.e. the [`casper_types::account::AccountHash`]
+    /// of the account which made the transaction request. The value stored in the host
     /// buffer is always 32-bytes in length.
     ///
     /// # Arguments
