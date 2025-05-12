@@ -62,12 +62,9 @@ macro_rules! for_each_host_function {
                 input_ptr: *const u8,
                 input_size: usize,
             ) -> u32;
-            pub fn casper_env_caller(dest: *mut u8, dest_len: usize, entity_kind: *mut u32,) -> *const u8;
-            pub fn casper_env_transferred_value(dest: *mut core::ffi::c_void,);
             #[doc = r"Get balance of an entity by its address."]
             pub fn casper_env_balance(entity_kind: u32, entity_addr_ptr: *const u8, entity_addr_len: usize, output_ptr: *mut core::ffi::c_void,) -> u32;
-            pub fn casper_env_block_time() -> u64;
-
+            pub fn casper_env_info(info_ptr: *const u8, info_size: u32,) -> u32;
             pub fn casper_transfer(entity_addr_ptr: *const u8, entity_addr_len: usize, amount: *const core::ffi::c_void,) -> u32;
             pub fn casper_emit(topic_ptr: *const u8, topic_size: usize, payload_ptr: *const u8, payload_size: usize,) -> u32;
         }

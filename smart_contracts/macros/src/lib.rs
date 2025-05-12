@@ -85,8 +85,7 @@ fn generate_call_data_return(output: &syn::ReturnType) -> proc_macro2::TokenStre
 #[proc_macro_attribute]
 pub fn casper(attrs: TokenStream, item: TokenStream) -> TokenStream {
     // let attrs: Meta = parse_macro_input!(attrs as Meta);
-    let attrs2 = attrs.clone();
-    let attr_args = match ast::NestedMeta::parse_meta_list(attrs2.into()) {
+    let attr_args = match ast::NestedMeta::parse_meta_list(attrs.into()) {
         Ok(v) => v,
         Err(e) => {
             return TokenStream::from(e.to_compile_error());
@@ -98,21 +97,21 @@ pub fn casper(attrs: TokenStream, item: TokenStream) -> TokenStream {
     if let Ok(item_struct) = syn::parse::<ItemStruct>(item.clone()) {
         let struct_meta = StructMeta::from_list(&attr_args).unwrap();
         if struct_meta.message {
-            process_casper_message_for_struct(item_struct)
+            process_casper_message_for_struct(&item_struct)
         } else if struct_meta.contract_state {
             // #[casper(contract_state)]
-            process_casper_contract_state_for_struct(item_struct)
+            process_casper_contract_state_for_struct(&item_struct)
         } else {
             // For any other struct that will be part of a schema
             // #[casper]
-            let partial = generate_casper_state_for_struct(item_struct);
+            let partial = generate_casper_state_for_struct(&item_struct);
             quote! {
                 #partial
             }
             .into()
         }
     } else if let Ok(item_enum) = syn::parse::<ItemEnum>(item.clone()) {
-        let partial = generate_casper_state_for_enum(item_enum);
+        let partial = generate_casper_state_for_enum(&item_enum);
         quote! {
             #partial
         }
@@ -130,7 +129,7 @@ pub fn casper(attrs: TokenStream, item: TokenStream) -> TokenStream {
     } else if let Ok(func) = syn::parse::<ItemFn>(item.clone()) {
         let func_meta = ItemFnMeta::from_list(&attr_args).unwrap();
         match func_meta {
-            ItemFnMeta::Export => generate_export_function(func),
+            ItemFnMeta::Export => generate_export_function(&func),
         }
     } else {
         let err = syn::Error::new(
@@ -141,7 +140,7 @@ pub fn casper(attrs: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
-fn process_casper_message_for_struct(item_struct: ItemStruct) -> TokenStream {
+fn process_casper_message_for_struct(item_struct: &ItemStruct) -> TokenStream {
     let struct_name = &item_struct.ident;
 
     let maybe_derive_abi = get_maybe_derive_abi();
@@ -200,7 +199,7 @@ fn process_casper_message_for_struct(item_struct: ItemStruct) -> TokenStream {
     .into()
 }
 
-fn generate_export_function(func: ItemFn) -> TokenStream {
+fn generate_export_function(func: &ItemFn) -> TokenStream {
     let func_name = &func.sig.ident;
     let mut arg_names = Vec::new();
     let mut args_attrs = Vec::new();
@@ -435,7 +434,7 @@ fn generate_impl_for_contract(
                                 let _ = flags; // hide the warning
                             })
                         }
-                        _ => {
+                        syn::ReturnType::Type(..) => {
                             // There is a return value so call casper_return.
                             Some(quote! {
                                 let ret_bytes = casper_sdk::serializers::borsh::to_vec(&_ret).unwrap();
@@ -517,7 +516,7 @@ fn generate_impl_for_contract(
 
                 if method_attribute.fallback {
                     flag_value |= EntryPointFlags::FALLBACK;
-                };
+                }
 
                 let _bits = flag_value.bits();
 
@@ -949,22 +948,21 @@ fn casper_trait_definition(
 
                         quote! { <() as casper_sdk::abi::CasperABI>::declaration() }
                     }
-                    syn::ReturnType::Type(_, ty) => match ty.as_ref() {
-                        Type::Never(_) => {
+                    syn::ReturnType::Type(_, ty) => {
+                        if let Type::Never(_) = ty.as_ref() {
                             populate_definitions.push(quote! {
                                 definitions.populate_one::<()>();
                             });
 
                             quote! { <() as casper_sdk::abi::CasperABI>::declaration() }
-                        }
-                        _ => {
+                        } else {
                             populate_definitions.push(quote! {
                                 definitions.populate_one::<#ty>();
                             });
 
                             quote! { <#ty as casper_sdk::abi::CasperABI>::declaration() }
                         }
-                    },
+                    }
                 };
 
                 let call_data_return_lifetime = generate_call_data_return(&func.sig.output);
@@ -1170,7 +1168,7 @@ fn casper_trait_definition(
     .into()
 }
 
-fn generate_casper_state_for_struct(item_struct: ItemStruct) -> impl quote::ToTokens {
+fn generate_casper_state_for_struct(item_struct: &ItemStruct) -> impl quote::ToTokens {
     let maybe_derive_abi = get_maybe_derive_abi();
 
     quote! {
@@ -1181,7 +1179,7 @@ fn generate_casper_state_for_struct(item_struct: ItemStruct) -> impl quote::ToTo
     }
 }
 
-fn generate_casper_state_for_enum(item_enum: ItemEnum) -> impl quote::ToTokens {
+fn generate_casper_state_for_enum(item_enum: &ItemEnum) -> impl quote::ToTokens {
     let maybe_derive_abi = get_maybe_derive_abi();
 
     quote! {
@@ -1207,7 +1205,7 @@ fn get_maybe_derive_abi() -> impl ToTokens {
     }
 }
 
-fn process_casper_contract_state_for_struct(contract_struct: ItemStruct) -> TokenStream {
+fn process_casper_contract_state_for_struct(contract_struct: &ItemStruct) -> TokenStream {
     let struct_name = &contract_struct.ident;
     let ref_name = format_ident!("{struct_name}Ref");
     let vis = &contract_struct.vis;
@@ -1408,7 +1406,7 @@ pub fn derive_casper_abi(input: TokenStream) -> TokenStream {
                                 name: stringify!(#field_name).into(),
                                 decl: <#segment>::declaration(),
                             }
-                        })
+                        });
                     }
                 }
                 other_ty => todo!("Unsupported type {other_ty:?}"),

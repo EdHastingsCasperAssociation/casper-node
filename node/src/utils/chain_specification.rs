@@ -314,15 +314,13 @@ mod tests {
             copy_input: HostFunction::new(102, [0, 1]),
             ret: HostFunction::new(103, [0, 1]),
             create: HostFunction::new(104, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
-            env_caller: HostFunction::new(105, [0, 1, 2]),
-            env_block_time: HostFunction::new(106, []),
-            env_transferred_value: HostFunction::new(107, [0]),
             transfer: HostFunction::new(108, [0, 1, 2]),
             env_balance: HostFunction::new(109, [0, 1, 2, 3]),
             upgrade: HostFunction::new(110, [0, 1, 2, 3, 4, 5]),
             call: HostFunction::new(111, [0, 1, 2, 3, 4, 5, 6, 7, 8]),
             print: HostFunction::new(112, [0, 1]),
             emit: HostFunction::new(113, [0, 1, 2, 3]),
+            env_info: HostFunction::new(114, [0, 1]),
         });
     static EXPECTED_GENESIS_WASM_COSTS: Lazy<WasmConfig> = Lazy::new(|| {
         let wasm_v1_config = WasmV1Config::new(

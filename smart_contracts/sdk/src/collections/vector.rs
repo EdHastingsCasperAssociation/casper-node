@@ -42,7 +42,7 @@ impl<T> Vector<T>
 where
     T: BorshSerialize + BorshDeserialize,
 {
-    /// Constructs a new, empty Vector<T>.
+    /// Constructs a new, empty [`Vector<T>`].
     ///
     /// The vector header will not write itself to the GS, even if
     /// values are pushed onto it later.

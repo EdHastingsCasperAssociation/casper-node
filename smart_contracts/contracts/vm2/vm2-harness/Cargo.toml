@@ -3,14 +3,13 @@ name = "vm2-harness"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+casper-executor-wasm-common = { path = "../../../../executor/wasm-common" }
 casper-macros = { path = "../../../macros" }
 casper-sdk = { path = "../../../sdk" }
-
 impls = "1"
 thiserror = "2"
 
