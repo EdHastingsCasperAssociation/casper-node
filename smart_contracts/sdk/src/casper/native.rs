@@ -6,7 +6,7 @@ use std::{
     panic::{self, UnwindSafe},
     ptr::{self, NonNull},
     slice,
-    sync::{Arc, LazyLock, RwLock},
+    sync::{Arc, RwLock},
 };
 
 use bytes::Bytes;
@@ -18,62 +18,84 @@ use casper_executor_wasm_common::{
     flags::ReturnFlags,
 };
 use rand::Rng;
+use crate::linkme::distributed_slice;
 
 use super::Entity;
 use crate::types::Address;
 
+/// The kind of export that is being registered.
+///
+/// This is used to identify the type of export and its name.
+///
+/// Depending on the location of given function it may be registered as a:
+///
+/// * `SmartContract` (if it's part of a `impl Contract` block),
+/// * `TraitImpl` (if it's part of a `impl Trait for Contract` block),
+/// * `Function` (if it's a standalone function).
+///
+/// This is used to dispatch exports under native code i.e. you want to write a test that calls "foobar" regardless of location.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ExportKind {
+pub enum EntryPointKind {
+    /// Smart contract.
+    ///
+    /// This is used to identify the smart contract and its name.
+    ///
+    /// The `struct_name` is the name of the smart contract that is being registered.
+    /// The `name` is the name of the function that is being registered.
     SmartContract {
         struct_name: &'static str,
         name: &'static str,
     },
+    /// Trait implementation.
+    ///
+    /// This is used to identify the trait implementation and its name.
+    ///
+    /// The `trait_name` is the name of the trait that is being implemented.
+    /// The `impl_name` is the name of the implementation.
+    /// The `name` is the name of the function that is being implemented.
     TraitImpl {
         trait_name: &'static str,
         impl_name: &'static str,
         name: &'static str,
     },
+    /// Function export.
+    ///
+    /// This is used to identify the function export and its name.
+    ///
+    /// The `name` is the name of the function that is being exported.
     Function {
         name: &'static str,
     },
 }
 
-impl ExportKind {
+impl EntryPointKind {
     pub fn name(&self) -> &'static str {
         match self {
-            ExportKind::SmartContract { name, .. }
-            | ExportKind::TraitImpl { name, .. }
-            | ExportKind::Function { name } => name,
+            EntryPointKind::SmartContract { name, .. }
+            | EntryPointKind::TraitImpl { name, .. }
+            | EntryPointKind::Function { name } => name,
         }
     }
 }
 
-pub struct Export {
-    pub kind: ExportKind,
+/// Export is a structure that contains information about the exported function.
+///
+/// This is used to register the export and its name and physical location in the smart contract source code.
+pub struct EntryPoint {
+    /// The kind of entry point that is being registered.
+    pub kind: EntryPointKind,
     pub fptr: fn() -> (),
     pub module_path: &'static str,
     pub file: &'static str,
     pub line: u32,
 }
 
-#[doc(hidden)]
-pub mod private_exports {
-    use super::Export;
-    use linkme::distributed_slice;
 
-    #[distributed_slice]
-    #[linkme(crate = crate::linkme)]
-    pub static EXPORTS: [Export];
-}
+#[distributed_slice]
+#[linkme(crate = crate::linkme)]
+pub static ENTRY_POINTS: [EntryPoint];
 
-/// List of sorted exports gathered from the contracts code.
-pub static EXPORTS: LazyLock<Vec<&'static Export>> = LazyLock::new(|| {
-    let mut exports = private_exports::EXPORTS.into_iter().collect::<Vec<_>>();
-    exports.sort_by_key(|export| export.kind);
-    exports
-});
-
-impl fmt::Debug for Export {
+impl fmt::Debug for EntryPoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             kind,
@@ -93,15 +115,16 @@ impl fmt::Debug for Export {
     }
 }
 
-pub fn call_export(name: &str) {
-    let exports_by_name: Vec<_> = EXPORTS
+/// Invokes an export by its name.
+///
+/// This function is used to invoke an export by its name regardless of its location in the smart contract.
+pub fn invoke_export_by_name(name: &str) {
+    let exports_by_name: Vec<_> = ENTRY_POINTS
         .iter()
-        .filter(|export|
-            matches!(export.kind, ExportKind::Function { name: export_name } if export_name == name)
-        )
+        .filter(|export| export.kind.name() == name)
         .collect();
 
-    assert_eq!(exports_by_name.len(), 1);
+    assert_eq!(exports_by_name.len(), 1, "Expected exactly one export {name} found, but got {exports_by_name:?}");
 
     (exports_by_name[0].fptr)();
 }
@@ -412,7 +435,7 @@ impl Environment {
         contracts.insert(contract_address);
 
         if let Some(entry_point) = constructor {
-            let entry_point = EXPORTS
+            let entry_point = ENTRY_POINTS
                 .iter()
                 .find(|export| export.kind.name().as_bytes() == entry_point)
                 .expect("Entry point exists");
@@ -476,10 +499,10 @@ impl Environment {
             "Transferred value is not supported in native mode"
         );
 
-        let export = EXPORTS
+        let export = ENTRY_POINTS
             .iter()
             .find(|export|
-                matches!(export.kind, ExportKind::SmartContract { name, .. } | ExportKind::TraitImpl { name, .. }
+                matches!(export.kind, EntryPointKind::SmartContract { name, .. } | EntryPointKind::TraitImpl { name, .. }
                     if name == entry_point)
             )
             .expect("Existing entry point");

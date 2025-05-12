@@ -10,7 +10,7 @@ mod tests {
 
     use casper_macros::selector;
     use casper_sdk::{
-        casper::native::{self, dispatch, ExportKind},
+        casper::native::{self, dispatch, EntryPointKind},
         schema::CasperSchema,
     };
     use vm_common::{flags::EntryPointFlags, selector::Selector};
@@ -44,7 +44,7 @@ mod tests {
     #[test]
     fn test() {
         dispatch(|| {
-            native::call_export("call");
+            native::invoke_export_by_name("call");
         })
         .unwrap();
     }
@@ -54,9 +54,9 @@ mod tests {
         let exports = native::list_exports()
             .into_iter()
             .filter_map(|e| match e.kind {
-                ExportKind::SmartContract {} => None,
-                ExportKind::TraitImpl {} => None,
-                ExportKind::Function { name } => Some(name),
+                EntryPointKind::SmartContract {} => None,
+                EntryPointKind::TraitImpl {} => None,
+                EntryPointKind::Function { name } => Some(name),
             })
             .collect::<Vec<_>>();
         assert_eq!(exports, vec!["call"]);

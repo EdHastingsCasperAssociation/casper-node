@@ -279,10 +279,10 @@ fn generate_export_function(func: ItemFn) -> TokenStream {
 
         #[cfg(not(target_arch = "wasm32"))]
         const _: () = {
-            #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::private_exports::EXPORTS)]
+            #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::ENTRY_POINTS)]
             #[linkme(crate = casper_sdk::linkme)]
-            pub static EXPORTS: casper_sdk::casper::native::Export = casper_sdk::casper::native::Export {
-                kind: casper_sdk::casper::native::ExportKind::Function { name: stringify!(#func_name) },
+            pub static EXPORTS: casper_sdk::casper::native::EntryPoint = casper_sdk::casper::native::EntryPoint {
+                kind: casper_sdk::casper::native::EntryPointKind::Function { name: stringify!(#func_name) },
                 fptr: || { #exported_func_name(); },
                 module_path: module_path!(),
                 file: file!(),
@@ -579,10 +579,10 @@ fn generate_impl_for_contract(
 
                     #[cfg(not(target_arch = "wasm32"))]
                     const _: () = {
-                        #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::private_exports::EXPORTS)]
+                        #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::ENTRY_POINTS)]
                         #[linkme(crate = casper_sdk::linkme)]
-                        pub static EXPORTS: casper_sdk::casper::native::Export = casper_sdk::casper::native::Export {
-                            kind: casper_sdk::casper::native::ExportKind::SmartContract { name: stringify!(#export_name), struct_name: stringify!(#struct_name) },
+                        pub static EXPORTS: casper_sdk::casper::native::EntryPoint = casper_sdk::casper::native::EntryPoint {
+                            kind: casper_sdk::casper::native::EntryPointKind::SmartContract { name: stringify!(#export_name), struct_name: stringify!(#struct_name) },
                             fptr: || -> () { #extern_func_name(); },
                             module_path: module_path!(),
                             file: file!(),
@@ -921,10 +921,10 @@ fn generate_impl_trait_for_contract(
 
                             #[cfg(not(target_arch = "wasm32"))]
                             const _: () = {
-                                #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::private_exports::EXPORTS)]
+                                #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::ENTRY_POINTS)]
                                 #[linkme(crate = casper_sdk::linkme)]
-                                pub static EXPORTS: casper_sdk::casper::native::Export = casper_sdk::casper::native::Export {
-                                    kind: casper_sdk::casper::native::ExportKind::TraitImpl { trait_name: stringify!(#trait_name), impl_name: stringify!(#self_ty), name: stringify!($export_name) },
+                                pub static EXPORTS: casper_sdk::casper::native::EntryPoint = casper_sdk::casper::native::EntryPoint {
+                                    kind: casper_sdk::casper::native::EntryPointKind::TraitImpl { trait_name: stringify!(#trait_name), impl_name: stringify!(#self_ty), name: stringify!($export_name) },
                                     fptr: || -> () { $name(); },
                                     module_path: module_path!(),
                                     file: file!(),
