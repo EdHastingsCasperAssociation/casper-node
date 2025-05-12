@@ -988,8 +988,6 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
                 }
                 Ok(None) => return Ok(HOST_ERROR_SUCCESS),
                 Err(error) => {
-                    // TODO: Not sure if this is significant enough to crash a node, so for now, log
-                    // and return err
                     error!("Error while reading from storage; aborting key={account_key:?} error={error:?}");
                     return Err(InternalHostError::TrackingCopy.into());
                 }
@@ -1069,7 +1067,6 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
         .get_total_balance(Key::URef(purse))
         .map_err(|_| InternalHostError::TotalBalanceReadFailure)?;
 
-    // Note: This was adapted from an assertion. Not clear if still reasonable.
     if total_balance.value() > U512::from(u64::MAX) {
         return Err(InternalHostError::TotalBalanceOverflow.into());
     }
@@ -1209,8 +1206,6 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
         }
         Err(error) => {
             error!(?error, "Error while reading from storage; aborting");
-            // TODO: Is this panic-worthy?
-            // panic!("Error while reading from storage; aborting")
             return Err(InternalHostError::TrackingCopy)?;
         }
     };
@@ -1455,14 +1450,18 @@ pub fn casper_env_info<S: GlobalStateReader, E: Executor>(
     charge_host_function_call(&mut caller, &block_time_cost, [info_ptr, info_size])?;
 
     let (caller_kind, caller_addr) = match &caller.context().caller {
-        Key::Account(account_hash) => (0u32, account_hash.value()),
-        Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
+        Key::Account(account_hash) => (EntityKindTag::Account as u32, account_hash.value()),
+        Key::SmartContract(smart_contract_addr) => {
+            (EntityKindTag::Contract as u32, *smart_contract_addr)
+        }
         other => panic!("Unexpected caller: {other:?}"),
     };
 
     let (callee_kind, callee_addr) = match &caller.context().callee {
-        Key::Account(initiator_addr) => (0u32, initiator_addr.value()),
-        Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
+        Key::Account(initiator_addr) => (EntityKindTag::Account as u32, initiator_addr.value()),
+        Key::SmartContract(smart_contract_addr) => {
+            (EntityKindTag::Contract as u32, *smart_contract_addr)
+        }
         other => panic!("Unexpected callee: {other:?}"),
     };
 

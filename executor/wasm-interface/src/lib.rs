@@ -78,14 +78,6 @@ pub enum InternalHostError {
     ContractAlreadyExists,
     #[error("tracking copy error")]
     TrackingCopy,
-    #[error("no call table in wasm blob")]
-    MissingCallTable,
-    #[error("entry not found in call table")]
-    CallTableEntryNotFound,
-    #[error("call table entry is not a function pointer")]
-    CallTableEntryNotFunctionPtr,
-    #[error("function pointer is not valid")]
-    InvalidFunctionPtr,
     #[error("failed building execution request")]
     ExecuteRequestBuildFailure,
     #[error("unexpected entity kind")]
