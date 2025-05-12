@@ -71,6 +71,7 @@ pub enum MemoryError {
 }
 
 #[derive(Error, Debug)]
+/// Represents a catastrophic internal host error.
 pub enum InternalHostError {
     #[error("type conversion failure")]
     TypeConversion,
@@ -86,6 +87,8 @@ pub enum InternalHostError {
     TotalBalanceReadFailure,
     #[error("total balance exceeded u64::MAX")]
     TotalBalanceOverflow,
+    #[error("remaining gas exceeded the gas limit")]
+    RemainingGasExceedsGasLimit,
     #[error("account not found under key")]
     AccountRecordNotFound,
     #[error("message did not have a checksum")]

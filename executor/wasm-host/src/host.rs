@@ -944,7 +944,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
     let gas_spent = gas_usage
         .gas_limit()
         .checked_sub(gas_usage.remaining_points())
-        .ok_or(VMError::OutOfGas)?;
+        .ok_or(InternalHostError::RemainingGasExceedsGasLimit)?;
 
     caller.consume_gas(gas_spent)?;
 
