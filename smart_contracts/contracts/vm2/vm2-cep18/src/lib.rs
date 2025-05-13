@@ -1,6 +1,5 @@
 use casper_sdk::{
     contrib::access_control::{AccessControl, AccessControlExt, AccessControlState},
-    macros::PanicOnDefault,
     prelude::*,
     types::U256,
 };

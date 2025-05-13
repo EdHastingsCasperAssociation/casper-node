@@ -391,28 +391,33 @@ pub fn call<T: ToCallData>(
 
 /// Get the environment info.
 pub fn get_env_info() -> EnvInfo {
-    let mut info = MaybeUninit::<EnvInfo>::uninit();
-    let _dest = unsafe { NonNull::new_unchecked(info.as_mut_ptr() as *mut u8) };
+    let ret = {
+        let mut info = MaybeUninit::<EnvInfo>::uninit();
 
-    let ret = unsafe { casper_env_info(info.as_mut_ptr().cast(), size_of::<EnvInfo>() as u32) };
+        let ret = unsafe { casper_env_info(info.as_mut_ptr().cast(), size_of::<EnvInfo>() as u32) };
+        result_from_code(ret).map(|()| {
+            // SAFETY: The size of `EnvInfo` is known and the pointer is valid.
+            unsafe { info.assume_init() }
+        })
+    };
 
-    if ret != HOST_ERROR_SUCCESS {
-        panic!("Host failure");
+    match ret {
+        Ok(info) => info,
+        Err(err) => panic!("Failed to get environment info: {:?}", err),
     }
-
-    unsafe { info.assume_init() }
 }
 
 /// Get the caller.
 #[must_use]
 pub fn get_caller() -> Entity {
     let info = get_env_info();
+    Entity::from_parts(info.caller_kind, info.caller_addr).expect("Invalid caller kind")
+}
 
-    match info.caller_kind {
-        0 => Entity::Account(info.callee_addr),
-        1 => Entity::Contract(info.caller_addr),
-        _ => panic!("Unknown entity kind"),
-    }
+#[must_use]
+pub fn get_callee() -> Entity {
+    let info = get_env_info();
+    Entity::from_parts(info.callee_kind, info.callee_addr).expect("Invalid callee kind")
 }
 
 /// Enum representing either an account or a contract.
@@ -431,6 +436,15 @@ impl Entity {
         match self {
             Entity::Account(_) => 0,
             Entity::Contract(_) => 1,
+        }
+    }
+
+    #[must_use]
+    pub fn from_parts(tag: u32, address: [u8; 32]) -> Option<Self> {
+        match tag {
+            0 => Some(Self::Account(address)),
+            1 => Some(Self::Contract(address)),
+            _ => None,
         }
     }
 

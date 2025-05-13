@@ -576,33 +576,6 @@ Example paths:
         todo!()
     }
 
-    fn casper_env_caller(
-        &self,
-        dest: *mut u8,
-        dest_size: usize,
-        entity_kind: *mut u32,
-    ) -> Result<*const u8, NativeTrap> {
-        let dst = unsafe { slice::from_raw_parts_mut(dest, dest_size) };
-        let addr = match self.caller {
-            Entity::Account(addr) => {
-                unsafe {
-                    *entity_kind = 0;
-                }
-                addr
-            }
-            Entity::Contract(addr) => {
-                unsafe {
-                    *entity_kind = 1;
-                }
-                addr
-            }
-        };
-
-        dst.copy_from_slice(&addr);
-
-        Ok(unsafe { dest.add(32) })
-    }
-
     fn casper_env_info(&self, info_ptr: *const u8, info_size: u32) -> Result<u32, NativeTrap> {
         assert_eq!(info_size as usize, size_of::<EnvInfo>());
         let mut env_info = NonNull::new(info_ptr as *mut u8)
@@ -613,9 +586,9 @@ Example paths:
             block_time: 0,
             transferred_value: 0,
             caller_addr: *self.caller.address(),
-            caller_kind: self.caller.tag().into(),
+            caller_kind: self.caller.tag(),
             callee_addr: *self.callee.address(),
-            callee_kind: self.callee.tag().into(),
+            callee_kind: self.callee.tag(),
         };
         Ok(HOST_ERROR_SUCCESS)
     }
@@ -771,7 +744,7 @@ mod symbols {
         crate::casper::native::handle_ret(_call_result);
     }
 
-    use casper_executor_wasm_common::{env_info::EnvInfo, error::HOST_ERROR_SUCCESS};
+    use casper_executor_wasm_common::error::HOST_ERROR_SUCCESS;
 
     use crate::casper::native::LAST_TRAP;
 
