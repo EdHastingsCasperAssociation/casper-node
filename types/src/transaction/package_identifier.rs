@@ -42,12 +42,15 @@ pub enum PackageIdentifier {
         /// The hash of the contract package.
         package_hash: PackageHash,
         /// The version of the contract package.
+        ///
+        /// `None` implies latest version.
         version: Option<EntityVersion>,
     },
     /// The name and optional version identifying the contract package.
     Name {
         /// The name of the contract package.
         name: String,
+        /// The version of the contract package.
         ///
         /// `None` implies latest version.
         version: Option<EntityVersion>,
@@ -264,11 +267,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn json_serialization_roundtrip() {
+    fn bytesrepr_roundtrip() {
         let rng = &mut TestRng::new();
-        let p_id = PackageIdentifier::random(rng);
-        let json_str = serde_json::to_string(&p_id).unwrap();
-        let deserialized = serde_json::from_str::<PackageIdentifier>(&json_str).unwrap();
-        assert_eq!(p_id, deserialized);
+        bytesrepr::test_serialization_roundtrip(&PackageIdentifier::random(rng));
     }
 }

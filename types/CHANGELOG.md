@@ -14,6 +14,8 @@ All notable changes to this project will be documented in this file. The format 
 ### Added 
 - TransactionInvocationTarget::ByPackageHash::version_key field
 - TransactionInvocationTarget::ByPackageName::version_key field
+- New variant PackageIdentifier::HashWithVersion
+- New variant PackageIdentifier::NameWithVersion
 
 ## casper-types 5.0.0
 
