@@ -111,11 +111,15 @@ where
 impl<T> Distribution<HostFunctionV2<T>> for Standard
 where
     Standard: Distribution<T>,
-    T: AsRef<[Cost]>,
+    T: AsMut<[Cost]> + Default,
 {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HostFunctionV2<T> {
-        let cost = rng.gen::<Cost>();
-        let arguments = rng.gen();
+        let cost = rng.gen::<u32>() as u64;
+        let mut arguments = T::default();
+        for arg in arguments.as_mut() {
+            *arg = rng.gen::<u32>() as u64;
+        }
+
         HostFunctionV2::new(cost, arguments)
     }
 }
