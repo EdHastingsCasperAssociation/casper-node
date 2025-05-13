@@ -1,12 +1,14 @@
 use std::collections::BTreeSet;
 
 use casper_execution_engine::engine_state::{
-    BlockInfo, ExecutableItem, SessionInputData, WasmV1Request,
+    BlockInfo, ExecutableItem, SessionDataV1, SessionInputData, WasmV1Request,
 };
 use casper_types::{
     account::AccountHash, addressable_entity::DEFAULT_ENTRY_POINT_NAME, runtime_args,
-    AddressableEntityHash, BlockHash, BlockTime, Digest, EntityVersion, Gas, InitiatorAddr,
-    PackageHash, Phase, ProtocolVersion, RuntimeArgs, TransactionHash, TransactionV1Hash,
+    AddressableEntityHash, BlockHash, BlockTime, Digest, EntityVersion, EntityVersionKey, Gas,
+    InitiatorAddr, PackageHash, Phase, PricingMode, ProtocolVersion, RuntimeArgs,
+    TransactionEntryPoint, TransactionHash, TransactionInvocationTarget, TransactionRuntimeParams,
+    TransactionTarget, TransactionV1Hash,
 };
 
 use crate::{
@@ -258,6 +260,49 @@ impl ExecuteRequestBuilder {
 
     /// Returns an [`ExecuteRequest`] derived from a deploy with a session item that will call a
     /// versioned stored contract by hash.
+    pub fn key_versioned_contract_call_by_hash(
+        sender: AccountHash,
+        contract_package_hash: PackageHash,
+        version_key: Option<EntityVersionKey>,
+        entry_point_name: &str,
+        args: RuntimeArgs,
+    ) -> Self {
+        let initiator_addr = InitiatorAddr::AccountHash(sender);
+        let target = TransactionTarget::Stored {
+            id: TransactionInvocationTarget::ByPackageHash {
+                addr: contract_package_hash.value(),
+                version: None,
+                version_key,
+            },
+            runtime: TransactionRuntimeParams::VmCasperV1,
+        };
+        let entry_point = TransactionEntryPoint::Custom(entry_point_name.to_owned());
+        let hash = TransactionV1Hash::from_raw([1; 32]);
+        let pricing_mode = PricingMode::PaymentLimited {
+            payment_amount: DEFAULT_PAYMENT.as_u64(),
+            gas_price_tolerance: 1,
+            standard_payment: true,
+        };
+        let mut signers = BTreeSet::new();
+        signers.insert(sender);
+        let session_input_data = SessionInputData::SessionDataV1 {
+            data: SessionDataV1::new(
+                &args,
+                &target,
+                &entry_point,
+                false,
+                &hash,
+                &pricing_mode,
+                &initiator_addr,
+                signers,
+                pricing_mode.is_standard_payment(),
+            ),
+        };
+        Self::from_session_input_data(&session_input_data)
+    }
+
+    /// Returns an [`ExecuteRequest`] derived from a deploy with a session item that will call a
+    /// versioned stored contract by hash.
     pub fn versioned_contract_call_by_hash(
         sender: AccountHash,
         contract_package_hash: PackageHash,
@@ -277,6 +322,49 @@ impl ExecuteRequestBuilder {
             .with_authorization_keys(&[sender])
             .build();
         Self::from_deploy_item(&deploy_item)
+    }
+
+    /// Returns an [`ExecuteRequest`] derived from a deploy with a session item that will call a
+    /// versioned stored contract by name.
+    pub fn key_versioned_contract_call_by_name(
+        sender: AccountHash,
+        contract_name: &str,
+        version_key: Option<EntityVersionKey>,
+        entry_point_name: &str,
+        args: RuntimeArgs,
+    ) -> Self {
+        let initiator_addr = InitiatorAddr::AccountHash(sender);
+        let target = TransactionTarget::Stored {
+            id: TransactionInvocationTarget::ByPackageName {
+                name: contract_name.to_owned(),
+                version: None,
+                version_key,
+            },
+            runtime: TransactionRuntimeParams::VmCasperV1,
+        };
+        let entry_point = TransactionEntryPoint::Custom(entry_point_name.to_owned());
+        let hash = TransactionV1Hash::from_raw([1; 32]);
+        let pricing_mode = PricingMode::PaymentLimited {
+            payment_amount: DEFAULT_PAYMENT.as_u64(),
+            gas_price_tolerance: 1,
+            standard_payment: true,
+        };
+        let mut signers = BTreeSet::new();
+        signers.insert(sender);
+        let session_input_data = SessionInputData::SessionDataV1 {
+            data: SessionDataV1::new(
+                &args,
+                &target,
+                &entry_point,
+                false,
+                &hash,
+                &pricing_mode,
+                &initiator_addr,
+                signers,
+                pricing_mode.is_standard_payment(),
+            ),
+        };
+        Self::from_session_input_data(&session_input_data)
     }
 
     /// Returns an [`ExecuteRequest`] derived from a deploy with a session item that will call a

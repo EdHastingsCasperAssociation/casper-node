@@ -93,11 +93,34 @@ impl TransactionInvocationTarget {
     }
 
     /// Returns a new `TransactionInvocationTarget::Package`.
+    #[deprecated(since = "5.0.1", note = "please use `new_package_with_key` instead")]
+    pub fn new_package(hash: PackageHash, version: Option<EntityVersion>) -> Self {
+        TransactionInvocationTarget::ByPackageHash {
+            addr: hash.value(),
+            version,
+            version_key: None,
+        }
+    }
+
+    /// Returns a new `TransactionInvocationTarget::Package`.
     pub fn new_package_with_key(hash: PackageHash, version_key: Option<EntityVersionKey>) -> Self {
         TransactionInvocationTarget::ByPackageHash {
             addr: hash.value(),
             version: None,
             version_key,
+        }
+    }
+
+    /// Returns a new `TransactionInvocationTarget::PackageAlias`.
+    #[deprecated(
+        since = "5.0.1",
+        note = "please use `new_package_alias_with_key` instead"
+    )]
+    pub fn new_package_alias(alias: String, version: Option<EntityVersion>) -> Self {
+        TransactionInvocationTarget::ByPackageName {
+            name: alias,
+            version,
+            version_key: None,
         }
     }
 

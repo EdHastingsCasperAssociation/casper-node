@@ -344,6 +344,21 @@ impl TransactionAcceptor {
             | ExecutableDeployItemIdentifier::Package(PackageIdentifier::NameWithVersion {
                 ..
             }) => self.verify_body(effect_builder, event_metadata, block_header),
+            ExecutableDeployItemIdentifier::Package(PackageIdentifier::Name {
+                version, ..
+            }) => {
+                if version.is_some() {
+                    return self.reject_transaction(
+                        effect_builder,
+                        *event_metadata,
+                        Error::InvalidTransaction(InvalidTransaction::Deploy(
+                            InvalidDeploy::TargetingPackageVersionNotSupported,
+                        )),
+                    );
+                }
+                self.verify_body(effect_builder, event_metadata, block_header)
+            }
+
             ExecutableDeployItemIdentifier::AddressableEntity(
                 AddressableEntityIdentifier::Hash(contract_hash),
             ) => {
@@ -367,6 +382,30 @@ impl TransactionAcceptor {
                     block_header,
                     maybe_entity: result.into_option(),
                 }),
+            ExecutableDeployItemIdentifier::Package(PackageIdentifier::Hash {
+                package_hash,
+                version,
+            }) => {
+                if version.is_some() {
+                    return self.reject_transaction(
+                        effect_builder,
+                        *event_metadata,
+                        Error::InvalidTransaction(InvalidTransaction::Deploy(
+                            InvalidDeploy::TargetingPackageVersionNotSupported,
+                        )),
+                    );
+                }
+                effect_builder
+                    .get_package(*block_header.state_root_hash(), package_hash.value())
+                    .event(move |maybe_package| Event::GetPackageResult {
+                        event_metadata,
+                        block_header,
+                        is_payment: true,
+                        package_hash,
+                        maybe_package_version_key: None,
+                        maybe_package,
+                    })
+            }
             ExecutableDeployItemIdentifier::Package(
                 ref contract_package_identifier @ PackageIdentifier::HashWithVersion {
                     package_hash,
@@ -472,6 +511,21 @@ impl TransactionAcceptor {
             | ExecutableDeployItemIdentifier::Package(PackageIdentifier::NameWithVersion {
                 ..
             }) => self.validate_transaction_cryptography(effect_builder, event_metadata),
+            ExecutableDeployItemIdentifier::Package(PackageIdentifier::Name {
+                version, ..
+            }) => {
+                if version.is_some() {
+                    self.reject_transaction(
+                        effect_builder,
+                        *event_metadata,
+                        Error::InvalidTransaction(InvalidTransaction::Deploy(
+                            InvalidDeploy::TargetingPackageVersionNotSupported,
+                        )),
+                    )
+                } else {
+                    self.validate_transaction_cryptography(effect_builder, event_metadata)
+                }
+            }
             ExecutableDeployItemIdentifier::AddressableEntity(
                 AddressableEntityIdentifier::Hash(entity_hash),
             ) => {
@@ -495,6 +549,32 @@ impl TransactionAcceptor {
                     block_header,
                     maybe_entity: result.into_option(),
                 }),
+            ExecutableDeployItemIdentifier::Package(PackageIdentifier::Hash {
+                package_hash,
+                version,
+                ..
+            }) => {
+                if version.is_some() {
+                    self.reject_transaction(
+                        effect_builder,
+                        *event_metadata,
+                        Error::InvalidTransaction(InvalidTransaction::Deploy(
+                            InvalidDeploy::TargetingPackageVersionNotSupported,
+                        )),
+                    );
+                } else {
+                    effect_builder
+                        .get_package(*block_header.state_root_hash(), package_hash.value())
+                        .event(move |maybe_package| Event::GetPackageResult {
+                            event_metadata,
+                            block_header,
+                            is_payment: false,
+                            package_hash,
+                            maybe_package_version_key: None,
+                            maybe_package,
+                        })
+                }
+            }
             ExecutableDeployItemIdentifier::Package(
                 ref package_identifier @ PackageIdentifier::HashWithVersion { package_hash, .. },
             ) => {

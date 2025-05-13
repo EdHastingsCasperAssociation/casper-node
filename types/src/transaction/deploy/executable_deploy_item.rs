@@ -278,18 +278,18 @@ impl ExecutableDeployItem {
                     AddressableEntityIdentifier::Name(name.clone()),
                 )
             }
-            ExecutableDeployItem::StoredVersionedContractByHash {
-                hash, version: _, ..
-            } => ExecutableDeployItemIdentifier::Package(PackageIdentifier::HashWithVersion {
-                package_hash: PackageHash::new(hash.value()),
-                version_key: None,
-            }),
-            ExecutableDeployItem::StoredVersionedContractByName {
-                name, version: _, ..
-            } => ExecutableDeployItemIdentifier::Package(PackageIdentifier::NameWithVersion {
-                name: name.clone(),
-                version_key: None,
-            }),
+            ExecutableDeployItem::StoredVersionedContractByHash { hash, version, .. } => {
+                ExecutableDeployItemIdentifier::Package(PackageIdentifier::Hash {
+                    package_hash: PackageHash::new(hash.value()),
+                    version: *version,
+                })
+            }
+            ExecutableDeployItem::StoredVersionedContractByName { name, version, .. } => {
+                ExecutableDeployItemIdentifier::Package(PackageIdentifier::Name {
+                    name: name.clone(),
+                    version: *version,
+                })
+            }
             ExecutableDeployItem::Transfer { .. } => ExecutableDeployItemIdentifier::Transfer,
         }
     }
