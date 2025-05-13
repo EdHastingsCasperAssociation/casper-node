@@ -21,7 +21,7 @@ The Casper MainNet is live.
 
 ### Specification
 
-- [Platform Specification](https://docs.casperlabs.io/design/)
+- [Platform Specification](https://docs.casper.network/design)
 - [Highway Consensus Proofs](https://github.com/CasperLabs/highway/releases/latest)
 - [Zug Consensus Whitepaper](http://arxiv.org/pdf/2205.06314)
 
