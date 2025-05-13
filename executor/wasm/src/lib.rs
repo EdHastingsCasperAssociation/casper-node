@@ -644,6 +644,17 @@ impl ExecutorV2 {
                     messages: initial_tracking_copy.messages(),
                 })
             }
+            Err(VMError::Internal(host_error)) => {
+                error!(?host_error, "host error");
+                Ok(ExecuteResult {
+                    host_error: Some(CallError::InternalHost),
+                    output: None,
+                    gas_usage,
+                    effects: initial_tracking_copy.effects(),
+                    cache: initial_tracking_copy.cache(),
+                    messages: initial_tracking_copy.messages(),
+                })
+            }
         }
     }
 
