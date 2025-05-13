@@ -561,7 +561,7 @@ impl TransactionAcceptor {
                         Error::InvalidTransaction(InvalidTransaction::Deploy(
                             InvalidDeploy::TargetingPackageVersionNotSupported,
                         )),
-                    );
+                    )
                 } else {
                     effect_builder
                         .get_package(*block_header.state_root_hash(), package_hash.value())
