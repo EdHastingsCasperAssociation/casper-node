@@ -107,6 +107,7 @@ where
     }
 }
 
+#[cfg(any(feature = "testing", test))]
 impl<T> Distribution<HostFunctionV2<T>> for Standard
 where
     Standard: Distribution<T>,
