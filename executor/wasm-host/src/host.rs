@@ -1083,11 +1083,10 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
         .get_total_balance(Key::URef(purse))
         .map_err(|_| InternalHostError::TotalBalanceReadFailure)?;
 
-    if total_balance.value() > U512::from(u64::MAX) {
-        return Err(InternalHostError::TotalBalanceOverflow.into());
-    }
-
-    let total_balance = total_balance.value().as_u64();
+    let total_balance: u64 = total_balance
+        .value()
+        .try_into()
+        .map_err(|_| InternalHostError::TotalBalanceOverflow)?;
 
     caller.memory_write(output_ptr, &total_balance.to_le_bytes())?;
     Ok(HOST_ERROR_NOT_FOUND)
