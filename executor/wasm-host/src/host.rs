@@ -19,7 +19,7 @@ use casper_executor_wasm_common::{
 };
 use casper_executor_wasm_interface::{
     executor::{ExecuteError, ExecuteRequestBuilder, ExecuteResult, ExecutionKind, Executor},
-    u32_from_host_result, Caller, VMError, VMResult,
+    u32_from_host_result, Caller, InternalHostError, VMError, VMResult,
 };
 use casper_storage::{
     global_state::GlobalStateReader,
@@ -51,6 +51,19 @@ use crate::{
 enum EntityKindTag {
     Account = 0,
     Contract = 1,
+}
+
+pub trait FallibleInto<T> {
+    fn try_into_wrapped(self) -> VMResult<T>;
+}
+
+impl<From, To> FallibleInto<To> for From
+where
+    To: TryFrom<From>,
+{
+    fn try_into_wrapped(self) -> VMResult<To> {
+        To::try_from(self).map_err(|_| VMError::Internal(InternalHostError::TypeConversion))
+    }
 }
 
 /// Consumes a set amount of gas for the specified storage value.
@@ -125,7 +138,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
         }
     };
 
-    let key_payload_bytes = caller.memory_read(key_ptr, key_size.try_into().unwrap())?;
+    let key_payload_bytes = caller.memory_read(key_ptr, key_size.try_into_wrapped()?)?;
 
     let keyspace = match keyspace_tag {
         KeyspaceTag::State => Keyspace::State,
@@ -166,7 +179,7 @@ pub fn casper_write<S: GlobalStateReader, E: Executor>(
         }
     };
 
-    let value = caller.memory_read(value_ptr, value_size.try_into().unwrap())?;
+    let value = caller.memory_read(value_ptr, value_size.try_into_wrapped()?)?;
 
     let stored_value = match keyspace {
         Keyspace::State | Keyspace::Context(_) | Keyspace::NamedKey(_) => {
@@ -232,7 +245,7 @@ pub fn casper_remove<S: GlobalStateReader, E: Executor>(
         }
     };
 
-    let key_payload_bytes = caller.memory_read(key_ptr, key_size.try_into().unwrap())?;
+    let key_payload_bytes = caller.memory_read(key_ptr, key_size.try_into_wrapped()?)?;
 
     let keyspace = match keyspace_tag {
         KeyspaceTag::State => Keyspace::State,
@@ -313,7 +326,7 @@ pub fn casper_print<S: GlobalStateReader, E: Executor>(
         [u64::from(message_ptr), u64::from(message_size)],
     )?;
 
-    let vec = caller.memory_read(message_ptr, message_size.try_into().unwrap())?;
+    let vec = caller.memory_read(message_ptr, message_size.try_into_wrapped()?)?;
     let msg = String::from_utf8_lossy(&vec);
     eprintln!("⛓️ {msg}");
     Ok(())
@@ -353,7 +366,7 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
 
     // TODO: Opportunity for optimization: don't read data under key_ptr if given key space does not
     // require it.
-    let key_payload_bytes = caller.memory_read(key_ptr, key_size.try_into().unwrap())?;
+    let key_payload_bytes = caller.memory_read(key_ptr, key_size.try_into_wrapped()?)?;
 
     let keyspace = match keyspace_tag {
         KeyspaceTag::State => Keyspace::State,
@@ -433,7 +446,7 @@ pub fn casper_read<S: GlobalStateReader, E: Executor>(
 
     let read_info = ReadInfo {
         data: out_ptr,
-        data_size: global_state_raw_bytes.len().try_into().unwrap(),
+        data_size: global_state_raw_bytes.len().try_into_wrapped()?,
     };
 
     let read_info_bytes = safe_transmute::transmute_one_to_bytes(&read_info);
@@ -541,7 +554,7 @@ pub fn casper_return<S: GlobalStateReader, E: Executor>(
         None
     } else {
         let data = caller
-            .memory_read(data_ptr, data_len.try_into().unwrap())
+            .memory_read(data_ptr, data_len.try_into_wrapped()?)
             .map(Bytes::from)?;
         Some(data)
     };
@@ -642,11 +655,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
     let first_version =
         smart_contract_package.next_entity_version_for(protocol_version.value().major);
 
-    let callee_addr = match &caller.context().callee {
-        Key::Account(initiator_addr) => initiator_addr.value(),
-        Key::SmartContract(smart_contract_addr) => *smart_contract_addr,
-        other => panic!("Unexpected callee: {other:?}"),
-    };
+    let callee_addr = context_to_entity_addr(caller.context()).value();
 
     let smart_contract_addr: HashAddr = chain_utils::compute_predictable_address(
         caller.context().chain_name.as_bytes(),
@@ -663,15 +672,15 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
         EntityAddr::SmartContract(contract_hash),
     );
 
-    assert!(
-        caller
-            .context_mut()
-            .tracking_copy
-            .read(&Key::SmartContract(smart_contract_addr))
-            .unwrap()
-            .is_none(),
-        "TODO: Check if the contract already exists and fail"
-    );
+    if caller
+        .context_mut()
+        .tracking_copy
+        .read(&Key::SmartContract(smart_contract_addr))
+        .map_err(|_| VMError::Internal(InternalHostError::TrackingCopy))?
+        .is_some()
+    {
+        return VMResult::Err(VMError::Internal(InternalHostError::ContractAlreadyExists));
+    }
 
     metered_write(
         &mut caller,
@@ -731,7 +740,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
             let gas_limit = caller
                 .gas_consumed()
                 .try_into_remaining()
-                .expect("should be remaining");
+                .map_err(|_| InternalHostError::TypeConversion)?;
 
             let execute_request = ExecuteRequestBuilder::default()
                 .with_initiator(caller.context().initiator)
@@ -753,7 +762,7 @@ pub fn casper_create<S: GlobalStateReader + 'static, E: Executor + 'static>(
                 .with_block_height(1) // TODO: Carry on block height
                 .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on parent block hash
                 .build()
-                .expect("should build");
+                .map_err(|_| InternalHostError::ExecuteRequestBuildFailure)?;
 
             let tracking_copy_for_ctor = caller.context().tracking_copy.fork2();
 
@@ -852,7 +861,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
     // let vm = VM::new();
     // vm.
     let address = caller.memory_read(address_ptr, address_len as _)?;
-    let smart_contract_addr: HashAddr = address.try_into().unwrap(); // TODO: Error handling
+    let smart_contract_addr: HashAddr = address.try_into_wrapped()?;
 
     let input_data: Bytes = caller.memory_read(input_ptr, input_len as _)?.into();
 
@@ -873,7 +882,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
     let gas_limit = caller
         .gas_consumed()
         .try_into_remaining()
-        .expect("should be remaining");
+        .map_err(|_| InternalHostError::TypeConversion)?;
 
     let execute_request = ExecuteRequestBuilder::default()
         .with_initiator(caller.context().initiator)
@@ -895,7 +904,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
         .with_block_height(1) // TODO: Carry on block height
         .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on parent block hash
         .build()
-        .expect("should build");
+        .map_err(|_| InternalHostError::ExecuteRequestBuildFailure)?;
 
     let (gas_usage, host_result) = match caller
         .context()
@@ -946,7 +955,7 @@ pub fn casper_call<S: GlobalStateReader + 'static, E: Executor + 'static>(
     let gas_spent = gas_usage
         .gas_limit()
         .checked_sub(gas_usage.remaining_points())
-        .expect("remaining points always below or equal to the limit");
+        .ok_or(InternalHostError::RemainingGasExceedsGasLimit)?;
 
     caller.consume_gas(gas_spent)?;
 
@@ -978,23 +987,26 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
                 return Ok(HOST_ERROR_SUCCESS);
             }
             let entity_addr = caller.memory_read(entity_addr_ptr, entity_addr_len as usize)?;
-            let account_hash: AccountHash = AccountHash::new(entity_addr.try_into().unwrap());
+            let account_hash: AccountHash = AccountHash::new(entity_addr.try_into_wrapped()?);
 
             let account_key = Key::Account(account_hash);
             match caller.context_mut().tracking_copy.read(&account_key) {
                 Ok(Some(StoredValue::CLValue(clvalue))) => {
-
-                    let addressible_entity_key = clvalue.into_t::<Key>().expect("should be a key");
+                    let addressible_entity_key = clvalue
+                        .into_t::<Key>()
+                        .map_err(|_| InternalHostError::TypeConversion)?;
                     Either::Right(addressible_entity_key)
                 }
-                Ok(Some(StoredValue::Account(account))) => {
-                    Either::Left(account.main_purse())
-                }
+                Ok(Some(StoredValue::Account(account))) => Either::Left(account.main_purse()),
                 Ok(Some(other_entity)) => {
-                    panic!("Unexpected entity type: {other_entity:?}")
+                    error!("Unexpected entity type: {other_entity:?}");
+                    return Err(InternalHostError::UnexpectedEntityKind.into());
                 }
                 Ok(None) => return Ok(HOST_ERROR_SUCCESS),
-                Err(error) => panic!("Error while reading from storage; aborting key={account_key:?} error={error:?}"),
+                Err(error) => {
+                    error!("Error while reading from storage; aborting key={account_key:?} error={error:?}");
+                    return Err(InternalHostError::TrackingCopy.into());
+                }
             }
         }
         Some(EntityKindTag::Contract) => {
@@ -1069,9 +1081,14 @@ pub fn casper_env_balance<S: GlobalStateReader, E: Executor>(
         .context_mut()
         .tracking_copy
         .get_total_balance(Key::URef(purse))
-        .expect("Total balance");
-    assert!(total_balance.value() <= U512::from(u64::MAX));
-    let total_balance: u64 = total_balance.value().try_into().unwrap(); // SAFETY: We checked for overflow above.
+        .map_err(|_| InternalHostError::TotalBalanceReadFailure)?;
+
+    if total_balance.value() > U512::from(u64::MAX) {
+        return Err(InternalHostError::TotalBalanceOverflow.into());
+    }
+
+    let total_balance = total_balance.value().as_u64();
+
     caller.memory_write(output_ptr, &total_balance.to_le_bytes())?;
     Ok(HOST_ERROR_NOT_FOUND)
 }
@@ -1135,8 +1152,9 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
             match caller.context_mut().tracking_copy.read(&callee_account_key) {
                 Ok(Some(StoredValue::CLValue(indirect))) => {
                     // is it an account?
-
-                    indirect.into_t::<Key>().expect("should be key")
+                    indirect
+                        .into_t::<Key>()
+                        .map_err(|_| InternalHostError::TypeConversion)?
                 }
                 Ok(Some(other)) => panic!("should be cl value but got {other:?}"),
                 Ok(None) => return Ok(u32_from_host_result(Err(CallError::NotCallable))),
@@ -1185,11 +1203,11 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
         .context_mut()
         .tracking_copy
         .read(&callee_addressable_entity_key)
-        .expect("should read account")
-        .expect("should have account");
+        .map_err(|_| InternalHostError::TrackingCopy)?
+        .ok_or(InternalHostError::AccountRecordNotFound)?;
     let callee_addressable_entity = callee_stored_value
         .into_addressable_entity()
-        .expect("should be addressable entity");
+        .ok_or(InternalHostError::TypeConversion)?;
     let callee_purse = callee_addressable_entity.main_purse();
 
     let target_purse = match caller
@@ -1207,7 +1225,7 @@ pub fn casper_transfer<S: GlobalStateReader + 'static, E: Executor>(
         }
         Err(error) => {
             error!(?error, "Error while reading from storage; aborting");
-            panic!("Error while reading from storage; aborting")
+            return Err(InternalHostError::TrackingCopy)?;
         }
     };
     // We don't execute anything as it does not make sense to execute an account as there
@@ -1367,7 +1385,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
         let gas_limit = caller
             .gas_consumed()
             .try_into_remaining()
-            .expect("should be remaining");
+            .map_err(|_| InternalHostError::TypeConversion)?;
 
         let execute_request = ExecuteRequestBuilder::default()
             .with_initiator(caller.context().initiator)
@@ -1391,7 +1409,7 @@ pub fn casper_upgrade<S: GlobalStateReader + 'static, E: Executor>(
             .with_block_height(1) // TODO: Carry on block height
             .with_parent_block_hash(BlockHash::new(Digest::from_raw([0; 32]))) // TODO: Carry on parent block hash
             .build()
-            .expect("should build");
+            .map_err(|_| InternalHostError::ExecuteRequestBuildFailure)?;
 
         let tracking_copy_for_ctor = caller.context().tracking_copy.fork2();
 
@@ -1455,14 +1473,18 @@ pub fn casper_env_info<S: GlobalStateReader, E: Executor>(
     )?;
 
     let (caller_kind, caller_addr) = match &caller.context().caller {
-        Key::Account(account_hash) => (0u32, account_hash.value()),
-        Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
+        Key::Account(account_hash) => (EntityKindTag::Account as u32, account_hash.value()),
+        Key::SmartContract(smart_contract_addr) => {
+            (EntityKindTag::Contract as u32, *smart_contract_addr)
+        }
         other => panic!("Unexpected caller: {other:?}"),
     };
 
     let (callee_kind, callee_addr) = match &caller.context().callee {
-        Key::Account(initiator_addr) => (0u32, initiator_addr.value()),
-        Key::SmartContract(smart_contract_addr) => (1u32, *smart_contract_addr),
+        Key::Account(initiator_addr) => (EntityKindTag::Account as u32, initiator_addr.value()),
+        Key::SmartContract(smart_contract_addr) => {
+            (EntityKindTag::Contract as u32, *smart_contract_addr)
+        }
         other => panic!("Unexpected callee: {other:?}"),
     };
 
@@ -1595,7 +1617,7 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
                         .context_mut()
                         .tracking_copy
                         .read(&message_key)
-                        .unwrap()
+                        .map_err(|_| VMError::Internal(InternalHostError::TrackingCopy))?
                         .is_some()
                 },
                 "Message index is not continuous"
@@ -1619,7 +1641,7 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
     {
         Ok(Some(StoredValue::CLValue(value_pair))) => {
             let (prev_block_time, prev_count): MessageCountPair =
-                CLValue::into_t(value_pair).expect("Tuple");
+                CLValue::into_t(value_pair).map_err(|_| InternalHostError::TypeConversion)?;
             if prev_block_time == current_block_time {
                 prev_count
             } else {
@@ -1662,10 +1684,14 @@ pub fn casper_emit<S: GlobalStateReader, E: Executor>(
     ));
 
     let message_key = message.message_key();
-    let message_value = StoredValue::Message(message.checksum().expect("Checksum"));
+    let message_value = StoredValue::Message(
+        message
+            .checksum()
+            .map_err(|_| InternalHostError::MessageChecksumMissing)?,
+    );
     let message_count_pair: MessageCountPair = (current_block_time, block_message_count);
     let block_message_count_value = StoredValue::CLValue(
-        CLValue::from_t(message_count_pair).expect("Serialize block message pair"),
+        CLValue::from_t(message_count_pair).map_err(|_| InternalHostError::TypeConversion)?,
     );
 
     // Charge for amount as measured by serialized length
