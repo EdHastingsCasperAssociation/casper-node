@@ -32,7 +32,7 @@ macro_rules! for_each_host_function {
             pub fn casper_create(
                 code_ptr: *const u8,
                 code_size: usize,
-                value: *const core::ffi::c_void,
+                transferred_value: u64,
                 constructor_ptr: *const u8,
                 constructor_size: usize,
                 input_ptr: *const u8,
@@ -46,7 +46,7 @@ macro_rules! for_each_host_function {
             pub fn casper_call(
                 address_ptr: *const u8,
                 address_size: usize,
-                transferred_amount: *const core::ffi::c_void,
+                transferred_amount: u64,
                 entry_point_ptr: *const u8,
                 entry_point_size: usize,
                 input_ptr: *const u8,

@@ -35,7 +35,7 @@ pub use self::{
 pub use crate::{
     casper::{self, Entity},
     log,
-    macros::{self, casper},
+    macros::{self, casper, PanicOnDefault},
     revert,
 };
 

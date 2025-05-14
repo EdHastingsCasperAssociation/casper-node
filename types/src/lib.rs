@@ -128,13 +128,13 @@ pub use chainspec::{
     ControlFlowCosts, CoreConfig, DelegatorConfig, DeployConfig, FeeHandling, GenesisAccount,
     GenesisConfig, GenesisValidator, GlobalStateUpdate, GlobalStateUpdateConfig,
     GlobalStateUpdateError, HandlePaymentCosts, HighwayConfig, HoldBalanceHandling, HostFunction,
-    HostFunctionCost, HostFunctionCostsV1, HostFunctionCostsV2, LegacyRequiredFinality,
-    MessageLimits, MintCosts, NetworkConfig, NextUpgrade, OpcodeCosts, PricingHandling,
-    ProtocolConfig, ProtocolUpgradeConfig, RefundHandling, StandardPaymentCosts, StorageCosts,
-    SystemConfig, TransactionConfig, TransactionLaneDefinition, TransactionV1Config, VacancyConfig,
-    ValidatorConfig, WasmConfig, WasmV1Config, WasmV2Config, DEFAULT_BASELINE_MOTES_AMOUNT,
-    DEFAULT_GAS_HOLD_INTERVAL, DEFAULT_HOST_FUNCTION_NEW_DICTIONARY, DEFAULT_MINIMUM_BID_AMOUNT,
-    DEFAULT_REFUND_HANDLING,
+    HostFunctionCost, HostFunctionCostsV1, HostFunctionCostsV2, HostFunctionV2,
+    LegacyRequiredFinality, MessageLimits, MintCosts, NetworkConfig, NextUpgrade, OpcodeCosts,
+    PricingHandling, ProtocolConfig, ProtocolUpgradeConfig, RefundHandling, StandardPaymentCosts,
+    StorageCosts, SystemConfig, TransactionConfig, TransactionLaneDefinition, TransactionV1Config,
+    VacancyConfig, ValidatorConfig, WasmConfig, WasmV1Config, WasmV2Config,
+    DEFAULT_BASELINE_MOTES_AMOUNT, DEFAULT_GAS_HOLD_INTERVAL, DEFAULT_HOST_FUNCTION_NEW_DICTIONARY,
+    DEFAULT_MINIMUM_BID_AMOUNT, DEFAULT_REFUND_HANDLING,
 };
 #[cfg(any(all(feature = "std", feature = "testing"), test))]
 pub use chainspec::{

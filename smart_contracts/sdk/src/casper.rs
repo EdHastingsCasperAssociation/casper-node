@@ -185,7 +185,7 @@ pub fn remove(key: Keyspace) -> Result<(), CommonResult> {
 /// Create a new contract instance.
 pub fn create(
     code: Option<&[u8]>,
-    transferred_value: u128,
+    transferred_value: u64,
     constructor: Option<&str>,
     input_data: Option<&[u8]>,
     seed: Option<&[u8; 32]>,
@@ -197,13 +197,11 @@ pub fn create(
 
     let mut result = MaybeUninit::uninit();
 
-    let ptr = NonNull::from(&transferred_value);
-
     let call_error = unsafe {
         casper_sdk_sys::casper_create(
             code_ptr,
             code_size,
-            ptr.as_ptr() as *const c_void,
+            transferred_value,
             constructor.map(|s| s.as_ptr()).unwrap_or(ptr::null()),
             constructor.map(|s| s.len()).unwrap_or(0),
             input_data.map(|s| s.as_ptr()).unwrap_or(ptr::null()),
@@ -224,17 +222,16 @@ pub fn create(
 
 pub(crate) fn call_into<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
     address: &Address,
-    transferred_value: u128,
+    transferred_value: u64,
     entry_point: &str,
     input_data: &[u8],
     alloc: Option<F>,
 ) -> Result<(), CallError> {
-    let ptr = NonNull::from(&transferred_value);
     let result_code = unsafe {
         casper_sdk_sys::casper_call(
             address.as_ptr(),
             address.len(),
-            ptr.as_ptr() as *const c_void,
+            transferred_value,
             entry_point.as_ptr(),
             entry_point.len(),
             input_data.as_ptr(),
@@ -257,7 +254,7 @@ fn call_result_from_code(result_code: u32) -> Result<(), CallError> {
 /// Call a contract.
 pub fn casper_call(
     address: &Address,
-    transferred_value: u128,
+    transferred_value: u64,
     entry_point: &str,
     input_data: &[u8],
 ) -> (Option<Vec<u8>>, Result<(), CallError>) {
@@ -371,7 +368,7 @@ impl<T: ToCallData> CallResult<T> {
 /// Call a contract.
 pub fn call<T: ToCallData>(
     contract_address: &Address,
-    transferred_value: u128,
+    transferred_value: u64,
     call_data: T,
 ) -> Result<CallResult<T>, CallError> {
     let input_data = call_data.input_data().unwrap_or_default();
@@ -394,28 +391,33 @@ pub fn call<T: ToCallData>(
 
 /// Get the environment info.
 pub fn get_env_info() -> EnvInfo {
-    let mut info = MaybeUninit::<EnvInfo>::uninit();
-    let _dest = unsafe { NonNull::new_unchecked(info.as_mut_ptr() as *mut u8) };
+    let ret = {
+        let mut info = MaybeUninit::<EnvInfo>::uninit();
 
-    let ret = unsafe { casper_env_info(info.as_mut_ptr().cast(), size_of::<EnvInfo>() as u32) };
+        let ret = unsafe { casper_env_info(info.as_mut_ptr().cast(), size_of::<EnvInfo>() as u32) };
+        result_from_code(ret).map(|()| {
+            // SAFETY: The size of `EnvInfo` is known and the pointer is valid.
+            unsafe { info.assume_init() }
+        })
+    };
 
-    if ret != HOST_ERROR_SUCCESS {
-        panic!("Host failure");
+    match ret {
+        Ok(info) => info,
+        Err(err) => panic!("Failed to get environment info: {:?}", err),
     }
-
-    unsafe { info.assume_init() }
 }
 
 /// Get the caller.
 #[must_use]
 pub fn get_caller() -> Entity {
     let info = get_env_info();
+    Entity::from_parts(info.caller_kind, info.caller_addr).expect("Invalid caller kind")
+}
 
-    match info.caller_kind {
-        0 => Entity::Account(info.callee_addr),
-        1 => Entity::Contract(info.caller_addr),
-        _ => panic!("Unknown entity kind"),
-    }
+#[must_use]
+pub fn get_callee() -> Entity {
+    let info = get_env_info();
+    Entity::from_parts(info.callee_kind, info.callee_addr).expect("Invalid callee kind")
 }
 
 /// Enum representing either an account or a contract.
@@ -434,6 +436,15 @@ impl Entity {
         match self {
             Entity::Account(_) => 0,
             Entity::Contract(_) => 1,
+        }
+    }
+
+    #[must_use]
+    pub fn from_parts(tag: u32, address: [u8; 32]) -> Option<Self> {
+        match tag {
+            0 => Some(Self::Account(address)),
+            1 => Some(Self::Contract(address)),
+            _ => None,
         }
     }
 
@@ -474,12 +485,12 @@ impl CasperABI for Entity {
 
 /// Get the balance of an account or contract.
 #[must_use]
-pub fn get_balance_of(entity_kind: &Entity) -> u128 {
+pub fn get_balance_of(entity_kind: &Entity) -> u64 {
     let (kind, addr) = match entity_kind {
         Entity::Account(addr) => (0, addr),
         Entity::Contract(addr) => (1, addr),
     };
-    let mut output: MaybeUninit<u128> = MaybeUninit::uninit();
+    let mut output: MaybeUninit<u64> = MaybeUninit::uninit();
     let ret = unsafe {
         casper_sdk_sys::casper_env_balance(
             kind,
@@ -503,7 +514,7 @@ pub fn transferred_value() -> u64 {
 }
 
 /// Transfer tokens from the current contract to another account or contract.
-pub fn transfer(target_account: &Address, amount: u128) -> Result<(), CallError> {
+pub fn transfer(target_account: &Address, amount: u64) -> Result<(), CallError> {
     let amount: *const c_void = &amount as *const _ as *const c_void;
     let result_code = unsafe {
         casper_sdk_sys::casper_transfer(target_account.as_ptr(), target_account.len(), amount)

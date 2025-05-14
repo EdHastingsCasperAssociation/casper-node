@@ -195,8 +195,8 @@ mod tests {
     use casper_types::{
         bytesrepr::FromBytes, ActivationPoint, BrTableCost, ChainspecRawBytes, ControlFlowCosts,
         CoreConfig, EraId, GlobalStateUpdate, HighwayConfig, HostFunction, HostFunctionCostsV1,
-        HostFunctionCostsV2, MessageLimits, Motes, OpcodeCosts, ProtocolConfig, ProtocolVersion,
-        StoredValue, TestBlockBuilder, TimeDiff, Timestamp, TransactionConfig,
+        HostFunctionCostsV2, HostFunctionV2, MessageLimits, Motes, OpcodeCosts, ProtocolConfig,
+        ProtocolVersion, StoredValue, TestBlockBuilder, TimeDiff, Timestamp, TransactionConfig,
         TransactionLaneDefinition, TransactionV1Config, WasmConfig, WasmV1Config, WasmV2Config,
         MINT_LANE_ID,
     };
@@ -308,19 +308,19 @@ mod tests {
         });
     static EXPECTED_GENESIS_HOST_FUNCTION_COSTS_V2: Lazy<HostFunctionCostsV2> =
         Lazy::new(|| HostFunctionCostsV2 {
-            read: HostFunction::new(100, [0, 1, 2, 3, 4, 5]),
-            write: HostFunction::new(101, [0, 1, 2, 3, 4]),
-            remove: HostFunction::new(114, [0, 1, 2]),
-            copy_input: HostFunction::new(102, [0, 1]),
-            ret: HostFunction::new(103, [0, 1]),
-            create: HostFunction::new(104, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
-            transfer: HostFunction::new(108, [0, 1, 2]),
-            env_balance: HostFunction::new(109, [0, 1, 2, 3]),
-            upgrade: HostFunction::new(110, [0, 1, 2, 3, 4, 5]),
-            call: HostFunction::new(111, [0, 1, 2, 3, 4, 5, 6, 7, 8]),
-            print: HostFunction::new(112, [0, 1]),
-            emit: HostFunction::new(113, [0, 1, 2, 3]),
-            env_info: HostFunction::new(114, [0, 1]),
+            read: HostFunctionV2::new(100, [0, 1, 2, 3, 4, 5]),
+            write: HostFunctionV2::new(101, [0, 1, 2, 3, 4]),
+            remove: HostFunctionV2::new(114, [0, 1, 2]),
+            copy_input: HostFunctionV2::new(102, [0, 1]),
+            ret: HostFunctionV2::new(103, [0, 1]),
+            create: HostFunctionV2::new(104, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+            transfer: HostFunctionV2::new(108, [0, 1, 2]),
+            env_balance: HostFunctionV2::new(109, [0, 1, 2, 3]),
+            upgrade: HostFunctionV2::new(110, [0, 1, 2, 3, 4, 5]),
+            call: HostFunctionV2::new(111, [0, 1, 2, 3, 4, 5, 6, 7, 8]),
+            print: HostFunctionV2::new(112, [0, 1]),
+            emit: HostFunctionV2::new(113, [0, 1, 2, 3]),
+            env_info: HostFunctionV2::new(114, [0, 1]),
         });
     static EXPECTED_GENESIS_WASM_COSTS: Lazy<WasmConfig> = Lazy::new(|| {
         let wasm_v1_config = WasmV1Config::new(

@@ -1,145 +1,259 @@
 #[cfg(feature = "datasize")]
 use datasize::DataSize;
-use derive_more::Add;
-use num_traits::Zero;
 #[cfg(any(feature = "testing", test))]
 use rand::{distributions::Standard, prelude::Distribution, Rng};
 use serde::{Deserialize, Serialize};
 
-use crate::bytesrepr::{self, FromBytes, ToBytes};
-
-use super::HostFunction;
+use crate::{
+    bytesrepr::{self, FromBytes, ToBytes, U64_SERIALIZED_LENGTH},
+    Gas,
+};
 
 /// Representation of argument's cost.
-pub type Cost = u32;
+pub type Cost = u64;
 
+/// Representation of a host function cost.
+///
+/// The total gas cost is equal to `cost` + sum of each argument weight multiplied by the byte size
+/// of the data.
+///
+/// NOTE: This is duplicating the `HostFunction` struct from the `casper-types` crate
+/// but to avoid changing the public API of that crate, we are creating a new struct
+/// with the same name and fields.
+///
+/// There is some opportunity to unify the code to turn [`HostFunction`] into a generic struct
+/// that generalizes over the cost type, but that would require a lot of work and
+/// is not worth it at this time.
+#[derive(Copy, Clone, PartialEq, Eq, Deserialize, Serialize, Debug)]
+#[cfg_attr(feature = "datasize", derive(DataSize))]
+#[serde(deny_unknown_fields)]
+pub struct HostFunctionV2<T> {
+    /// How much the user is charged for calling the host function.
+    cost: Cost,
+    /// Weights of the function arguments.
+    arguments: T,
+}
+
+impl<T> Default for HostFunctionV2<T>
+where
+    T: Default,
+{
+    fn default() -> Self {
+        Self {
+            cost: DEFAULT_FIXED_COST,
+            arguments: T::default(),
+        }
+    }
+}
+
+impl<T> HostFunctionV2<T> {
+    /// Creates a new instance of `HostFunction` with a fixed call cost and argument weights.
+    pub const fn new(cost: Cost, arguments: T) -> Self {
+        Self { cost, arguments }
+    }
+
+    pub fn with_new_static_cost(self, cost: Cost) -> Self {
+        Self {
+            cost,
+            arguments: self.arguments,
+        }
+    }
+
+    /// Returns the base gas fee for calling the host function.
+    pub fn cost(&self) -> Cost {
+        self.cost
+    }
+}
+
+impl<T> HostFunctionV2<T>
+where
+    T: Default,
+{
+    /// Creates a new fixed host function cost with argument weights of zero.
+    pub fn fixed(cost: Cost) -> Self {
+        Self {
+            cost,
+            ..Default::default()
+        }
+    }
+
+    pub fn zero() -> Self {
+        Self {
+            cost: Default::default(),
+            arguments: Default::default(),
+        }
+    }
+}
+
+impl<T> HostFunctionV2<T>
+where
+    T: AsRef<[Cost]>,
+{
+    /// Returns a slice containing the argument weights.
+    pub fn arguments(&self) -> &[Cost] {
+        self.arguments.as_ref()
+    }
+
+    /// Calculate gas cost for a host function
+    pub fn calculate_gas_cost(&self, weights: T) -> Option<Gas> {
+        let mut gas = Gas::new(self.cost);
+        for (argument, weight) in self.arguments.as_ref().iter().zip(weights.as_ref()) {
+            let lhs = Gas::new(*argument);
+            let rhs = Gas::new(*weight);
+            let product = lhs.checked_mul(rhs)?;
+            gas = gas.checked_add(product)?;
+        }
+        Some(gas)
+    }
+}
+
+#[cfg(any(feature = "testing", test))]
+impl<T> Distribution<HostFunctionV2<T>> for Standard
+where
+    Standard: Distribution<T>,
+    T: AsMut<[Cost]> + Default,
+{
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> HostFunctionV2<T> {
+        let cost = rng.gen::<u32>() as u64;
+        let mut arguments = T::default();
+        for arg in arguments.as_mut() {
+            *arg = rng.gen::<u32>() as u64;
+        }
+
+        HostFunctionV2::new(cost, arguments)
+    }
+}
+
+impl<T> ToBytes for HostFunctionV2<T>
+where
+    T: AsRef<[Cost]>,
+{
+    fn to_bytes(&self) -> Result<Vec<u8>, bytesrepr::Error> {
+        let mut ret = bytesrepr::unchecked_allocate_buffer(self);
+        ret.append(&mut self.cost.to_bytes()?);
+        for value in self.arguments.as_ref().iter() {
+            ret.append(&mut value.to_bytes()?);
+        }
+        Ok(ret)
+    }
+
+    fn serialized_length(&self) -> usize {
+        self.cost.serialized_length() + (U64_SERIALIZED_LENGTH * self.arguments.as_ref().len())
+    }
+}
+
+impl<T> FromBytes for HostFunctionV2<T>
+where
+    T: Default + AsMut<[Cost]>,
+{
+    fn from_bytes(bytes: &[u8]) -> Result<(Self, &[u8]), bytesrepr::Error> {
+        let (cost, mut bytes) = FromBytes::from_bytes(bytes)?;
+        let mut arguments = T::default();
+        let arguments_mut = arguments.as_mut();
+        for ith_argument in arguments_mut {
+            let (cost, rem) = FromBytes::from_bytes(bytes)?;
+            *ith_argument = cost;
+            bytes = rem;
+        }
+        Ok((Self { cost, arguments }, bytes))
+    }
+}
 /// An identifier that represents an unused argument.
 const NOT_USED: Cost = 0;
 
 /// An arbitrary default fixed cost for host functions that were not researched yet.
 const DEFAULT_FIXED_COST: Cost = 200;
 
-const DEFAULT_CALL_COST: u32 = 10_000;
-const DEFAULT_ENV_BALANCE_COST: u32 = 100;
+const DEFAULT_CALL_COST: u64 = 10_000;
+const DEFAULT_ENV_BALANCE_COST: u64 = 100;
 
-const DEFAULT_PRINT_COST: u32 = 100;
+const DEFAULT_PRINT_COST: Cost = 100;
 
-const DEFAULT_READ_COST: u32 = 1_000;
-const DEFAULT_READ_KEY_SIZE_WEIGHT: u32 = 100;
+const DEFAULT_READ_COST: Cost = 1_000;
+const DEFAULT_READ_KEY_SIZE_WEIGHT: Cost = 100;
 
-const DEFAULT_RET_COST: u32 = 300;
-const DEFAULT_RET_VALUE_SIZE_WEIGHT: u32 = 100;
+const DEFAULT_RET_COST: Cost = 300;
+const DEFAULT_RET_VALUE_SIZE_WEIGHT: Cost = 100;
 
-const DEFAULT_TRANSFER_COST: u32 = 2_500_000_000;
+const DEFAULT_TRANSFER_COST: Cost = 2_500_000_000;
 
-const DEFAULT_WRITE_COST: u32 = 25_000;
-const DEFAULT_WRITE_SIZE_WEIGHT: u32 = 100_000;
+const DEFAULT_WRITE_COST: Cost = 25_000;
+const DEFAULT_WRITE_SIZE_WEIGHT: Cost = 100_000;
 
-const DEFAULT_REMOVE_COST: u32 = 15_000;
+const DEFAULT_REMOVE_COST: Cost = 15_000;
 
-const DEFAULT_COPY_INPUT_COST: u32 = 300;
-const DEFAULT_COPY_INPUT_VALUE_SIZE_WEIGHT: u32 = 0;
+const DEFAULT_COPY_INPUT_COST: Cost = 300;
+const DEFAULT_COPY_INPUT_VALUE_SIZE_WEIGHT: Cost = 0;
 
-const DEFAULT_CREATE_COST: u32 = 0;
-const DEFAULT_CREATE_CODE_SIZE_WEIGHT: u32 = 0;
-const DEFAULT_CREATE_ENTRYPOINT_SIZE_WEIGHT: u32 = 0;
-const DEFAULT_CREATE_INPUT_SIZE_WEIGHT: u32 = 0;
-const DEFAULT_CREATE_SEED_SIZE_WEIGHT: u32 = 0;
+const DEFAULT_CREATE_COST: Cost = 0;
+const DEFAULT_CREATE_CODE_SIZE_WEIGHT: Cost = 0;
+const DEFAULT_CREATE_ENTRYPOINT_SIZE_WEIGHT: Cost = 0;
+const DEFAULT_CREATE_INPUT_SIZE_WEIGHT: Cost = 0;
+const DEFAULT_CREATE_SEED_SIZE_WEIGHT: Cost = 0;
 
-const DEFAULT_EMIT_COST: u32 = 200;
-const DEFAULT_EMIT_TOPIC_SIZE_WEIGHT: u32 = 100;
-const DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT: u32 = 100;
+const DEFAULT_EMIT_COST: Cost = 200;
+const DEFAULT_EMIT_TOPIC_SIZE_WEIGHT: Cost = 100;
+const DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT: Cost = 100;
 
-const DEFAULT_ENV_INFO_COST: u32 = 10_000;
+const DEFAULT_ENV_INFO_COST: Cost = 10_000;
 
 /// Definition of a host function cost table.
-#[derive(Add, Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[serde(deny_unknown_fields)]
 pub struct HostFunctionCostsV2 {
     /// Cost of calling the `read` host function.
-    pub read: HostFunction<[Cost; 6]>,
+    pub read: HostFunctionV2<[Cost; 6]>,
     /// Cost of calling the `write` host function.
-    pub write: HostFunction<[Cost; 5]>,
+    pub write: HostFunctionV2<[Cost; 5]>,
     /// Cost of calling the `remove` host function.
-    pub remove: HostFunction<[Cost; 3]>,
+    pub remove: HostFunctionV2<[Cost; 3]>,
     /// Cost of calling the `copy_input` host function.
-    pub copy_input: HostFunction<[Cost; 2]>,
+    pub copy_input: HostFunctionV2<[Cost; 2]>,
     /// Cost of calling the `ret` host function.
-    pub ret: HostFunction<[Cost; 2]>,
+    pub ret: HostFunctionV2<[Cost; 2]>,
     /// Cost of calling the `create` host function.
-    pub create: HostFunction<[Cost; 10]>,
+    pub create: HostFunctionV2<[Cost; 10]>,
     /// Cost of calling the `transfer` host function.
-    pub transfer: HostFunction<[Cost; 3]>,
+    pub transfer: HostFunctionV2<[Cost; 3]>,
     /// Cost of calling the `env_balance` host function.
-    pub env_balance: HostFunction<[Cost; 4]>,
+    pub env_balance: HostFunctionV2<[Cost; 4]>,
     /// Cost of calling the `upgrade` host function.
-    pub upgrade: HostFunction<[Cost; 6]>,
+    pub upgrade: HostFunctionV2<[Cost; 6]>,
     /// Cost of calling the `call` host function.
-    pub call: HostFunction<[Cost; 9]>,
+    pub call: HostFunctionV2<[Cost; 9]>,
     /// Cost of calling the `print` host function.
-    pub print: HostFunction<[Cost; 2]>,
+    pub print: HostFunctionV2<[Cost; 2]>,
     /// Cost of calling the `emit` host function.
-    pub emit: HostFunction<[Cost; 4]>,
+    pub emit: HostFunctionV2<[Cost; 4]>,
     /// Cost of calling the `env_info` host function.
-    pub env_info: HostFunction<[Cost; 2]>,
+    pub env_info: HostFunctionV2<[Cost; 2]>,
 }
 
-impl Zero for HostFunctionCostsV2 {
-    fn zero() -> Self {
+impl HostFunctionCostsV2 {
+    pub fn zero() -> Self {
         Self {
-            read: HostFunction::zero(),
-            write: HostFunction::zero(),
-            remove: HostFunction::zero(),
-            copy_input: HostFunction::zero(),
-            ret: HostFunction::zero(),
-            create: HostFunction::zero(),
-            transfer: HostFunction::zero(),
-            env_balance: HostFunction::zero(),
-            upgrade: HostFunction::zero(),
-            call: HostFunction::zero(),
-            print: HostFunction::zero(),
-            emit: HostFunction::zero(),
-            env_info: HostFunction::zero(),
+            read: HostFunctionV2::zero(),
+            write: HostFunctionV2::zero(),
+            remove: HostFunctionV2::zero(),
+            copy_input: HostFunctionV2::zero(),
+            ret: HostFunctionV2::zero(),
+            create: HostFunctionV2::zero(),
+            transfer: HostFunctionV2::zero(),
+            env_balance: HostFunctionV2::zero(),
+            upgrade: HostFunctionV2::zero(),
+            call: HostFunctionV2::zero(),
+            print: HostFunctionV2::zero(),
+            emit: HostFunctionV2::zero(),
+            env_info: HostFunctionV2::zero(),
         }
-    }
-
-    fn is_zero(&self) -> bool {
-        let HostFunctionCostsV2 {
-            read,
-            write,
-            remove,
-            copy_input,
-            ret,
-            create,
-            transfer,
-            env_balance,
-            upgrade,
-            call,
-            print,
-            emit,
-            env_info,
-        } = self;
-        read.is_zero()
-            && write.is_zero()
-            && remove.is_zero()
-            && copy_input.is_zero()
-            && ret.is_zero()
-            && create.is_zero()
-            && transfer.is_zero()
-            && env_balance.is_zero()
-            && upgrade.is_zero()
-            && call.is_zero()
-            && print.is_zero()
-            && emit.is_zero()
-            && env_info.is_zero()
     }
 }
 
 impl Default for HostFunctionCostsV2 {
     fn default() -> Self {
         Self {
-            read: HostFunction::new(
+            read: HostFunctionV2::new(
                 DEFAULT_READ_COST,
                 [
                     NOT_USED,
@@ -150,7 +264,7 @@ impl Default for HostFunctionCostsV2 {
                     NOT_USED,
                 ],
             ),
-            write: HostFunction::new(
+            write: HostFunctionV2::new(
                 DEFAULT_WRITE_COST,
                 [
                     NOT_USED,
@@ -160,13 +274,13 @@ impl Default for HostFunctionCostsV2 {
                     DEFAULT_WRITE_SIZE_WEIGHT,
                 ],
             ),
-            remove: HostFunction::new(DEFAULT_REMOVE_COST, [NOT_USED, NOT_USED, NOT_USED]),
-            copy_input: HostFunction::new(
+            remove: HostFunctionV2::new(DEFAULT_REMOVE_COST, [NOT_USED, NOT_USED, NOT_USED]),
+            copy_input: HostFunctionV2::new(
                 DEFAULT_COPY_INPUT_COST,
                 [NOT_USED, DEFAULT_COPY_INPUT_VALUE_SIZE_WEIGHT],
             ),
-            ret: HostFunction::new(DEFAULT_RET_COST, [NOT_USED, DEFAULT_RET_VALUE_SIZE_WEIGHT]),
-            create: HostFunction::new(
+            ret: HostFunctionV2::new(DEFAULT_RET_COST, [NOT_USED, DEFAULT_RET_VALUE_SIZE_WEIGHT]),
+            create: HostFunctionV2::new(
                 DEFAULT_CREATE_COST,
                 [
                     NOT_USED,
@@ -181,21 +295,21 @@ impl Default for HostFunctionCostsV2 {
                     NOT_USED,
                 ],
             ),
-            env_balance: HostFunction::fixed(DEFAULT_ENV_BALANCE_COST),
-            transfer: HostFunction::new(DEFAULT_TRANSFER_COST, [NOT_USED, NOT_USED, NOT_USED]),
-            upgrade: HostFunction::new(
+            env_balance: HostFunctionV2::fixed(DEFAULT_ENV_BALANCE_COST),
+            transfer: HostFunctionV2::new(DEFAULT_TRANSFER_COST, [NOT_USED, NOT_USED, NOT_USED]),
+            upgrade: HostFunctionV2::new(
                 DEFAULT_FIXED_COST,
                 [NOT_USED, NOT_USED, NOT_USED, NOT_USED, NOT_USED, NOT_USED],
             ),
-            call: HostFunction::new(
+            call: HostFunctionV2::new(
                 DEFAULT_CALL_COST,
                 [
                     NOT_USED, NOT_USED, NOT_USED, NOT_USED, NOT_USED, NOT_USED, NOT_USED, NOT_USED,
                     NOT_USED,
                 ],
             ),
-            print: HostFunction::new(DEFAULT_PRINT_COST, [NOT_USED, NOT_USED]),
-            emit: HostFunction::new(
+            print: HostFunctionV2::new(DEFAULT_PRINT_COST, [NOT_USED, NOT_USED]),
+            emit: HostFunctionV2::new(
                 DEFAULT_EMIT_COST,
                 [
                     NOT_USED,
@@ -204,7 +318,7 @@ impl Default for HostFunctionCostsV2 {
                     DEFAULT_EMIT_PAYLOAD_SIZE_HEIGHT,
                 ],
             ),
-            env_info: HostFunction::new(DEFAULT_ENV_INFO_COST, [NOT_USED, NOT_USED]),
+            env_info: HostFunctionV2::new(DEFAULT_ENV_INFO_COST, [NOT_USED, NOT_USED]),
         }
     }
 }
@@ -307,13 +421,13 @@ impl Distribution<HostFunctionCostsV2> for Standard {
 pub mod gens {
     use proptest::prelude::*;
 
-    use crate::{HostFunction, HostFunctionCost, HostFunctionCostsV2};
+    use super::*;
 
     #[allow(unused)]
-    pub fn host_function_cost_v2_arb<T: Copy + Arbitrary>() -> impl Strategy<Value = HostFunction<T>>
-    {
-        (any::<HostFunctionCost>(), any::<T>())
-            .prop_map(|(cost, arguments)| HostFunction::new(cost, arguments))
+    pub fn host_function_cost_v2_arb<const N: usize>(
+    ) -> impl Strategy<Value = HostFunctionV2<[Cost; N]>> {
+        (any::<u64>(), any::<[u64; N]>())
+            .prop_map(|(cost, arguments)| HostFunctionV2::new(cost, arguments))
     }
 
     prop_compose! {
@@ -359,15 +473,15 @@ mod tests {
 
     const COST: Cost = 42;
     const ARGUMENT_COSTS: [Cost; 3] = [123, 456, 789];
-    const WEIGHTS: [Cost; 3] = [1000, 1100, 1200];
+    const WEIGHTS: [u64; 3] = [1000, 1000, 1000];
 
     #[test]
     fn calculate_gas_cost_for_host_function() {
-        let host_function = HostFunction::new(COST, ARGUMENT_COSTS);
+        let host_function = HostFunctionV2::new(COST, ARGUMENT_COSTS);
         let expected_cost = COST
-            + (ARGUMENT_COSTS[0] * WEIGHTS[0])
-            + (ARGUMENT_COSTS[1] * WEIGHTS[1])
-            + (ARGUMENT_COSTS[2] * WEIGHTS[2]);
+            + (ARGUMENT_COSTS[0] * Cost::from(WEIGHTS[0]))
+            + (ARGUMENT_COSTS[1] * Cost::from(WEIGHTS[1]))
+            + (ARGUMENT_COSTS[2] * Cost::from(WEIGHTS[2]));
         assert_eq!(
             host_function.calculate_gas_cost(WEIGHTS),
             Some(Gas::new(expected_cost))
@@ -378,7 +492,7 @@ mod tests {
     fn calculate_gas_cost_would_overflow() {
         let large_value = Cost::MAX;
 
-        let host_function = HostFunction::new(
+        let host_function = HostFunctionV2::new(
             large_value,
             [large_value, large_value, large_value, large_value],
         );
@@ -391,6 +505,16 @@ mod tests {
 
         assert_eq!(lhs, Some(Gas::new(rhs)));
     }
+    #[test]
+    fn calculate_large_gas_cost() {
+        let hf = HostFunctionV2::new(1, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        assert_eq!(
+            hf.calculate_gas_cost([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+            Some(Gas::new(
+                1 + (1 + 2 * 2 + 3 * 3 + 4 * 4 + 5 * 5 + 6 * 6 + 7 * 7 + 8 * 8 + 9 * 9 + 10 * 10)
+            ))
+        );
+    }
 }
 
 #[cfg(test)]
@@ -401,11 +525,9 @@ mod proptests {
 
     use super::*;
 
-    type Signature = [Cost; 10];
-
     proptest! {
         #[test]
-        fn test_host_function(host_function in gens::host_function_cost_v2_arb::<Signature>()) {
+        fn test_host_function(host_function in gens::host_function_cost_v2_arb::<10>()) {
             bytesrepr::test_serialization_roundtrip(&host_function);
         }
 

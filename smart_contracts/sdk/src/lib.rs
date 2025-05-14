@@ -10,10 +10,11 @@ pub mod serializers;
 #[cfg(not(target_arch = "wasm32"))]
 pub use linkme;
 
-#[cfg(feature = "__abi_generator")]
+#[cfg(not(target_arch = "wasm32"))]
 pub mod abi_generator;
 pub mod casper;
 pub mod collections;
+pub mod contrib;
 #[cfg(feature = "std")]
 pub mod schema;
 pub mod types;
@@ -209,14 +210,14 @@ impl<T: ContractRef> ContractHandle<T> {
 
     /// Returns the balance of the contract.
     #[must_use]
-    pub fn balance(&self) -> u128 {
+    pub fn balance(&self) -> u64 {
         casper::get_balance_of(&Entity::Contract(self.contract_address))
     }
 }
 
 pub struct CallBuilder<T: ContractRef> {
     address: Address,
-    transferred_value: Option<u128>,
+    transferred_value: Option<u64>,
     marker: PhantomData<T>,
 }
 
@@ -231,7 +232,7 @@ impl<T: ContractRef> CallBuilder<T> {
     }
 
     #[must_use]
-    pub fn with_transferred_value(mut self, transferred_value: u128) -> Self {
+    pub fn with_transferred_value(mut self, transferred_value: u64) -> Self {
         self.transferred_value = Some(transferred_value);
         self
     }
@@ -278,7 +279,7 @@ impl<T: ContractRef> CallBuilder<T> {
 }
 
 pub struct ContractBuilder<'a, T: ContractRef> {
-    transferred_value: Option<u128>,
+    transferred_value: Option<u64>,
     code: Option<&'a [u8]>,
     seed: Option<&'a [u8; 32]>,
     marker: PhantomData<T>,
@@ -302,7 +303,7 @@ impl<'a, T: ContractRef> ContractBuilder<'a, T> {
     }
 
     #[must_use]
-    pub fn with_transferred_value(mut self, transferred_value: u128) -> Self {
+    pub fn with_transferred_value(mut self, transferred_value: u64) -> Self {
         self.transferred_value = Some(transferred_value);
         self
     }

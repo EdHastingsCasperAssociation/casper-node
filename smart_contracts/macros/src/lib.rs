@@ -34,6 +34,8 @@ struct MethodAttribute {
 
 #[derive(Debug, FromMeta)]
 struct StructMeta {
+    #[darling(default)]
+    path: Option<syn::Path>,
     /// Contract state is a special struct that is used to store the state of the contract.
     #[darling(default)]
     contract_state: bool,
@@ -43,7 +45,16 @@ struct StructMeta {
 }
 
 #[derive(Debug, FromMeta)]
-struct TraitMeta {}
+struct EnumMeta {
+    #[darling(default)]
+    path: Option<syn::Path>,
+}
+
+#[derive(Debug, FromMeta)]
+struct TraitMeta {
+    path: Option<syn::Path>,
+    export: Option<bool>,
+}
 
 #[derive(Debug, FromMeta)]
 enum ItemFnMeta {
@@ -92,33 +103,34 @@ pub fn casper(attrs: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    let mut has_fallback_selector = false;
+    let has_fallback_selector = false;
 
     if let Ok(item_struct) = syn::parse::<ItemStruct>(item.clone()) {
         let struct_meta = StructMeta::from_list(&attr_args).unwrap();
         if struct_meta.message {
-            process_casper_message_for_struct(&item_struct)
+            process_casper_message_for_struct(&item_struct, struct_meta)
         } else if struct_meta.contract_state {
             // #[casper(contract_state)]
-            process_casper_contract_state_for_struct(&item_struct)
+            process_casper_contract_state_for_struct(&item_struct, struct_meta)
         } else {
             // For any other struct that will be part of a schema
             // #[casper]
-            let partial = generate_casper_state_for_struct(&item_struct);
+            let partial = generate_casper_state_for_struct(&item_struct, struct_meta);
             quote! {
                 #partial
             }
             .into()
         }
     } else if let Ok(item_enum) = syn::parse::<ItemEnum>(item.clone()) {
-        let partial = generate_casper_state_for_enum(&item_enum);
+        let enum_meta = EnumMeta::from_list(&attr_args).unwrap();
+        let partial = generate_casper_state_for_enum(&item_enum, enum_meta);
         quote! {
             #partial
         }
         .into()
     } else if let Ok(item_trait) = syn::parse::<ItemTrait>(item.clone()) {
         let trait_meta = TraitMeta::from_list(&attr_args).unwrap();
-        casper_trait_definition(item_trait, trait_meta, &mut has_fallback_selector)
+        casper_trait_definition(item_trait, trait_meta)
     } else if let Ok(entry_points) = syn::parse::<ItemImpl>(item.clone()) {
         if let Some((_not, trait_path, _for)) = entry_points.trait_.as_ref() {
             let impl_meta = ImplTraitForContractMeta::from_list(&attr_args).unwrap();
@@ -140,10 +152,29 @@ pub fn casper(attrs: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
-fn process_casper_message_for_struct(item_struct: &ItemStruct) -> TokenStream {
+fn process_casper_message_for_struct(
+    item_struct: &ItemStruct,
+    struct_meta: StructMeta,
+) -> TokenStream {
     let struct_name = &item_struct.ident;
 
-    let maybe_derive_abi = get_maybe_derive_abi();
+    let crate_path = match &struct_meta.path {
+        Some(path) => quote! { #path },
+        None => quote! { casper_sdk },
+    };
+
+    let borsh_path = {
+        let crate_path_str = match &struct_meta.path {
+            Some(path) => path.to_token_stream().to_string(),
+            None => "casper_sdk".to_string(),
+        };
+        syn::LitStr::new(
+            &format!("{}::serializers::borsh", crate_path_str),
+            Span::call_site(),
+        )
+    };
+
+    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone());
 
     let maybe_abi_collectors;
     let maybe_entrypoint_defs;
@@ -151,21 +182,21 @@ fn process_casper_message_for_struct(item_struct: &ItemStruct) -> TokenStream {
     #[cfg(feature = "__abi_generator")]
     {
         maybe_abi_collectors = quote! {
-                const _: () = {
-                    #[casper_sdk::linkme::distributed_slice(casper_sdk::abi_generator::ABI_COLLECTORS)]
-                    #[linkme(crate = casper_sdk::linkme)]
-                    static COLLECTOR: fn(&mut casper_sdk::abi::Definitions) = |defs| {
-                        defs.populate_one::<#struct_name>();
-                    };
+            const _: () = {
+                #[#crate_path::linkme::distributed_slice(#crate_path::abi_generator::ABI_COLLECTORS)]
+                #[linkme(crate = #crate_path::linkme)]
+                static COLLECTOR: fn(&mut #crate_path::abi::Definitions) = |defs| {
+                    defs.populate_one::<#struct_name>();
                 };
+            };
         };
 
         maybe_entrypoint_defs = quote! {
             const _: () = {
-                #[casper_sdk::linkme::distributed_slice(casper_sdk::abi_generator::MESSAGES)]
-                #[linkme(crate = casper_sdk::linkme)]
-                static MESSAGE: casper_sdk::abi_generator::Message = casper_sdk::abi_generator::Message {
-                    name: <#struct_name as casper_sdk::Message>::TOPIC,
+                #[#crate_path::linkme::distributed_slice(#crate_path::abi_generator::MESSAGES)]
+                #[linkme(crate = #crate_path::linkme)]
+                static MESSAGE: #crate_path::abi_generator::Message = #crate_path::abi_generator::Message {
+                    name: <#struct_name as #crate_path::Message>::TOPIC,
                     decl: concat!(module_path!(), "::", stringify!(#struct_name)),
                  };
             };
@@ -178,17 +209,17 @@ fn process_casper_message_for_struct(item_struct: &ItemStruct) -> TokenStream {
     }
 
     quote! {
-        #[derive(casper_sdk::serializers::borsh::BorshSerialize)]
-        #[borsh(crate = "casper_sdk::serializers::borsh")]
+        #[derive(#crate_path::serializers::borsh::BorshSerialize)]
+        #[borsh(crate = #borsh_path)]
         #maybe_derive_abi
         #item_struct
 
-        impl casper_sdk::Message for #struct_name {
+        impl #crate_path::Message for #struct_name {
             const TOPIC: &'static str = stringify!(#struct_name);
 
             #[inline]
             fn payload(&self) -> Vec<u8> {
-                casper_sdk::serializers::borsh::to_vec(self).unwrap()
+                #crate_path::serializers::borsh::to_vec(self).unwrap()
             }
         }
 
@@ -247,10 +278,10 @@ fn generate_export_function(func: &ItemFn) -> TokenStream {
 
         #[cfg(not(target_arch = "wasm32"))]
         const _: () = {
-            #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::private_exports::EXPORTS)]
+            #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::ENTRY_POINTS)]
             #[linkme(crate = casper_sdk::linkme)]
-            pub static EXPORTS: casper_sdk::casper::native::Export = casper_sdk::casper::native::Export {
-                kind: casper_sdk::casper::native::ExportKind::Function { name: stringify!(#func_name) },
+            pub static EXPORTS: casper_sdk::casper::native::EntryPoint = casper_sdk::casper::native::EntryPoint {
+                kind: casper_sdk::casper::native::EntryPointKind::Function { name: stringify!(#func_name) },
                 fptr: || { #exported_func_name(); },
                 module_path: module_path!(),
                 file: file!(),
@@ -547,10 +578,10 @@ fn generate_impl_for_contract(
 
                     #[cfg(not(target_arch = "wasm32"))]
                     const _: () = {
-                        #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::private_exports::EXPORTS)]
+                        #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::ENTRY_POINTS)]
                         #[linkme(crate = casper_sdk::linkme)]
-                        pub static EXPORTS: casper_sdk::casper::native::Export = casper_sdk::casper::native::Export {
-                            kind: casper_sdk::casper::native::ExportKind::SmartContract { name: stringify!(#export_name), struct_name: stringify!(#struct_name) },
+                        pub static EXPORTS: casper_sdk::casper::native::EntryPoint = casper_sdk::casper::native::EntryPoint {
+                            kind: casper_sdk::casper::native::EntryPointKind::SmartContract { name: stringify!(#export_name), struct_name: stringify!(#struct_name) },
                             fptr: || -> () { #extern_func_name(); },
                             module_path: module_path!(),
                             file: file!(),
@@ -762,6 +793,7 @@ fn generate_impl_for_contract(
 
         maybe_entrypoint_defs = quote! {
             #(
+
                 const _: () = {
                     #[casper_sdk::linkme::distributed_slice(casper_sdk::abi_generator::ENTRYPOINTS)]
                     #[linkme(crate = casper_sdk::linkme)]
@@ -821,15 +853,43 @@ fn generate_impl_trait_for_contract(
     };
     let self_ty = quote! { #self_ty };
     let mut code = Vec::new();
-    let trait_name = quote! { #trait_path };
-    let macro_name = format_ident!("enumerate_{trait_name}_symbols");
 
-    let path_to_macro = match impl_meta.path {
+    let trait_name = trait_path
+        .segments
+        .last()
+        .expect("Expected non-empty path")
+        .ident
+        .clone();
+
+    let path_to_macro = match &impl_meta.path {
         Some(path) => quote! { #path },
         None => {
             quote! { self }
         }
     };
+
+    let path_to_crate: proc_macro2::TokenStream = match &impl_meta.path {
+        Some(path) => {
+            let crate_name = path
+                .segments
+                .first()
+                .expect("Expected non-empty path")
+                .ident
+                .clone();
+
+            if crate_name == "crate" {
+                // This is local, can't refer by absolute path
+                quote! { #path }
+            } else {
+                quote! { #crate_name }
+            }
+        }
+        None => {
+            quote! { self }
+        }
+    };
+
+    let macro_name = format_ident!("enumerate_{trait_name}_symbols");
 
     let visitor = if impl_meta.compile_as_dependency {
         quote! {
@@ -844,7 +904,7 @@ fn generate_impl_trait_for_contract(
                     }
                 }
 
-                #path_to_macro::#macro_name!(visitor);
+                #path_to_crate::#macro_name!(visitor);
             };
         }
     } else {
@@ -860,10 +920,10 @@ fn generate_impl_trait_for_contract(
 
                             #[cfg(not(target_arch = "wasm32"))]
                             const _: () = {
-                                #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::private_exports::EXPORTS)]
+                                #[casper_sdk::linkme::distributed_slice(casper_sdk::casper::native::ENTRY_POINTS)]
                                 #[linkme(crate = casper_sdk::linkme)]
-                                pub static EXPORTS: casper_sdk::casper::native::Export = casper_sdk::casper::native::Export {
-                                    kind: casper_sdk::casper::native::ExportKind::TraitImpl { trait_name: stringify!(#trait_name), impl_name: stringify!(#self_ty), name: stringify!($export_name) },
+                                pub static EXPORTS: casper_sdk::casper::native::EntryPoint = casper_sdk::casper::native::EntryPoint {
+                                    kind: casper_sdk::casper::native::EntryPointKind::TraitImpl { trait_name: stringify!(#trait_name), impl_name: stringify!(#self_ty), name: stringify!($export_name) },
                                     fptr: || -> () { $name(); },
                                     module_path: module_path!(),
                                     file: file!(),
@@ -874,7 +934,7 @@ fn generate_impl_trait_for_contract(
                     }
                 }
 
-                #path_to_macro::#macro_name!(visitor);
+                #path_to_crate::#macro_name!(visitor);
             };
         }
     };
@@ -897,11 +957,23 @@ fn generate_impl_trait_for_contract(
     .into()
 }
 
-fn casper_trait_definition(
-    mut item_trait: ItemTrait,
-    _trait_meta: TraitMeta,
-    _has_fallback_selector: &mut bool,
-) -> TokenStream {
+fn casper_trait_definition(mut item_trait: ItemTrait, trait_meta: TraitMeta) -> TokenStream {
+    let crate_path = match &trait_meta.path {
+        Some(path) => quote! { #path },
+        None => quote! { casper_sdk },
+    };
+
+    let borsh_path = {
+        let crate_path_str = match &trait_meta.path {
+            Some(path) => path.to_token_stream().to_string(),
+            None => "casper_sdk".to_string(),
+        };
+        syn::LitStr::new(
+            &format!("{}::serializers::borsh", crate_path_str),
+            Span::call_site(),
+        )
+    };
+
     let trait_name = &item_trait.ident;
     let vis = &item_trait.vis;
     let mut dispatch_functions = Vec::new();
@@ -946,7 +1018,7 @@ fn casper_trait_definition(
                             definitions.populate_one::<()>();
                         });
 
-                        quote! { <() as casper_sdk::abi::CasperABI>::declaration() }
+                        quote! { <() as #crate_path::abi::CasperABI>::declaration() }
                     }
                     syn::ReturnType::Type(_, ty) => {
                         if let Type::Never(_) = ty.as_ref() {
@@ -954,13 +1026,13 @@ fn casper_trait_definition(
                                 definitions.populate_one::<()>();
                             });
 
-                            quote! { <() as casper_sdk::abi::CasperABI>::declaration() }
+                            quote! { <() as #crate_path::abi::CasperABI>::declaration() }
                         } else {
                             populate_definitions.push(quote! {
                                 definitions.populate_one::<#ty>();
                             });
 
-                            quote! { <#ty as casper_sdk::abi::CasperABI>::declaration() }
+                            quote! { <#ty as #crate_path::abi::CasperABI>::declaration() }
                         }
                     }
                 };
@@ -1003,7 +1075,7 @@ fn casper_trait_definition(
                     args.push(quote! {
                         casper_sdk::schema::SchemaArgument {
                             name: stringify!(#name).into(),
-                            decl: <#ty as casper_sdk::abi::CasperABI>::declaration(),
+                            decl: <#ty as #crate_path::abi::CasperABI>::declaration(),
                         }
                     });
                 }
@@ -1019,24 +1091,30 @@ fn casper_trait_definition(
                             "can't make dispatcher for private method"
                         );
                         quote! {
-                            #vis extern "C" fn #dispatch_func_name<T: #trait_name + casper_sdk::serializers::borsh::BorshDeserialize + casper_sdk::serializers::borsh::BorshSerialize + Default>() {
-                                #[derive(casper_sdk::serializers::borsh::BorshDeserialize)]
-                                #[borsh(crate = "casper_sdk::serializers::borsh")]
+                            #vis extern "C" fn #dispatch_func_name<T>()
+                            where
+                                T: #trait_name
+                                    + #crate_path::serializers::borsh::BorshDeserialize
+                                    + #crate_path::serializers::borsh::BorshSerialize
+                                    + Default
+                            {
+                                #[derive(#crate_path::serializers::borsh::BorshDeserialize)]
+                                #[borsh(crate = #borsh_path)]
                                 struct Arguments {
                                     #(#args_attrs,)*
                                 }
 
-                                let mut flags = casper_sdk::casper_executor_wasm_common::flags::ReturnFlags::empty();
-                                let mut instance: T = casper_sdk::casper::read_state().unwrap();
-                                let input = casper_sdk::prelude::casper::copy_input();
-                                let args: Arguments = casper_sdk::serializers::borsh::from_slice(&input).unwrap();
+                                let mut flags = #crate_path::casper_executor_wasm_common::flags::ReturnFlags::empty();
+                                let mut instance: T = #crate_path::casper::read_state().unwrap();
+                                let input = #crate_path::prelude::casper::copy_input();
+                                let args: Arguments = #crate_path::serializers::borsh::from_slice(&input).unwrap();
 
                                 let ret = instance.#func_name(#(args.#arg_names,)*);
 
-                                casper_sdk::casper::write_state(&instance).unwrap();
+                                #crate_path::casper::write_state(&instance).unwrap();
 
-                                let ret_bytes = casper_sdk::serializers::borsh::to_vec(&ret).unwrap();
-                                casper_sdk::casper::ret(flags, Some(&ret_bytes));
+                                let ret_bytes = #crate_path::serializers::borsh::to_vec(&ret).unwrap();
+                                #crate_path::casper::ret(flags, Some(&ret_bytes));
                             }
                         }
                     }
@@ -1048,15 +1126,15 @@ fn casper_trait_definition(
                         );
                         quote! {
                             #vis extern "C"  fn #dispatch_func_name<T: #trait_name>() {
-                                #[derive(casper_sdk::serializers::borsh::BorshDeserialize)]
-                                #[borsh(crate = "casper_sdk::serializers::borsh")]
+                                #[derive(#crate_path::serializers::borsh::BorshDeserialize)]
+                                #[borsh(crate = #borsh_path)]
                                 struct Arguments {
                                     #(#args_attrs,)*
                                 }
 
 
-                                let input = casper_sdk::prelude::casper::copy_input();
-                                let args: Arguments = casper_sdk::serializers::borsh::from_slice(&input).unwrap();
+                                let input = #crate_path::prelude::casper::copy_input();
+                                let args: Arguments = #crate_path::serializers::borsh::from_slice(&input).unwrap();
 
 
                                 let _ret = <T as #trait_name>::#func_name(#(args.#arg_names,)*);
@@ -1077,7 +1155,7 @@ fn casper_trait_definition(
                     }
                 } else {
                     quote! {
-                        Some(casper_sdk::serializers::borsh::to_vec(&self).expect("Serialization to succeed"))
+                        Some(#crate_path::serializers::borsh::to_vec(&self).expect("Serialization to succeed"))
                     }
                 };
                 let self_ty = if method_attribute.constructor || method_attribute.ignore_state {
@@ -1092,14 +1170,14 @@ fn casper_trait_definition(
 
                 if !is_fallback {
                     extra_code.push(quote! {
-                    fn #func_name<'a>(#self_ty #(#arg_names: #arg_types,)*) -> impl casper_sdk::ToCallData<Return<'a> = #call_data_return_lifetime> {
-                        #[derive(casper_sdk::serializers::borsh::BorshSerialize)]
-                        #[borsh(crate = "casper_sdk::serializers::borsh")]
+                    fn #func_name<'a>(#self_ty #(#arg_names: #arg_types,)*) -> impl #crate_path::ToCallData<Return<'a> = #call_data_return_lifetime> {
+                        #[derive(#crate_path::serializers::borsh::BorshSerialize)]
+                        #[borsh(crate = #borsh_path)]
                         struct CallData {
                             #(pub #arg_names: #arg_types,)*
                         }
 
-                        impl casper_sdk::ToCallData for CallData {
+                        impl #crate_path::ToCallData for CallData {
                             // const SELECTOR: vm_common::selector::Selector = vm_common::selector::Selector::new(#selector_value);
 
                             type Return<'a> = #call_data_return_lifetime;
@@ -1117,7 +1195,11 @@ fn casper_trait_definition(
                 });
                 }
             }
-            syn::TraitItem::Type(_) => todo!("Type"),
+            syn::TraitItem::Type(_) => {
+                return syn::Error::new(Span::call_site(), "Unsupported generic associated types")
+                    .to_compile_error()
+                    .into();
+            }
             syn::TraitItem::Macro(_) => todo!("Macro"),
             syn::TraitItem::Verbatim(_) => todo!("Verbatim"),
             other => todo!("Other {other:?}"),
@@ -1127,6 +1209,32 @@ fn casper_trait_definition(
     let ref_struct_trait = format_ident!("{trait_name}Ext");
 
     let macro_name = format_ident!("enumerate_{trait_name}_symbols");
+
+    let maybe_exported_macro = if !trait_meta.export.unwrap_or(false) {
+        quote! {
+            #[allow(non_snake_case, unused_macros)]
+            macro_rules! #macro_name {
+                ($mac:ident) => {
+                    $mac! {
+                        #(#macro_symbols,)*
+                    }
+                }
+            }
+            pub(crate) use #macro_name;
+        }
+    } else {
+        quote! {
+            #[allow(non_snake_case, unused_macros)]
+            #[macro_export]
+            macro_rules! #macro_name {
+                ($mac:ident) => {
+                    $mac! {
+                        #(#macro_symbols,)*
+                    }
+                }
+            }
+        }
+    };
 
     let extension_struct = quote! {
         #vis trait #ref_struct_trait: Sized {
@@ -1139,22 +1247,13 @@ fn casper_trait_definition(
 
         }
 
-        #[allow(non_snake_case, unused_macros)]
-        macro_rules! #macro_name {
-            ($mac:ident) => {
-                $mac! {
-                    #(#macro_symbols,)*
-                }
-            }
-        }
-
-        pub(crate) use #macro_name;
+        #maybe_exported_macro
 
         #(#dispatch_functions)*
 
         // TODO: Rename Ext with Ref, since Ref struct can be pub(crate)'d
         impl #ref_struct_trait for #ref_struct {}
-            impl casper_sdk::ContractRef for #ref_struct {
+            impl #crate_path::ContractRef for #ref_struct {
                 fn new() -> Self {
                     #ref_struct
                 }
@@ -1168,34 +1267,71 @@ fn casper_trait_definition(
     .into()
 }
 
-fn generate_casper_state_for_struct(item_struct: &ItemStruct) -> impl quote::ToTokens {
-    let maybe_derive_abi = get_maybe_derive_abi();
+fn generate_casper_state_for_struct(
+    item_struct: &ItemStruct,
+    struct_meta: StructMeta,
+) -> impl quote::ToTokens {
+    let crate_path = match &struct_meta.path {
+        Some(path) => quote! { #path },
+        None => quote! { casper_sdk },
+    };
+
+    let borsh_path = {
+        let crate_path_str = match &struct_meta.path {
+            Some(path) => path.to_token_stream().to_string(),
+            None => "casper_sdk".to_string(),
+        };
+        syn::LitStr::new(
+            &format!("{}::serializers::borsh", crate_path_str),
+            Span::call_site(),
+        )
+    };
+    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone());
 
     quote! {
-        #[derive(casper_sdk::serializers::borsh::BorshSerialize, casper_sdk::serializers::borsh::BorshDeserialize)]
-        #[borsh(crate = "casper_sdk::serializers::borsh")]
+        #[derive(#crate_path::serializers::borsh::BorshSerialize, #crate_path::serializers::borsh::BorshDeserialize)]
+        #[borsh(crate = #borsh_path)]
         #maybe_derive_abi
         #item_struct
     }
 }
 
-fn generate_casper_state_for_enum(item_enum: &ItemEnum) -> impl quote::ToTokens {
-    let maybe_derive_abi = get_maybe_derive_abi();
+fn generate_casper_state_for_enum(
+    item_enum: &ItemEnum,
+    enum_meta: EnumMeta,
+) -> impl quote::ToTokens {
+    let crate_path = match &enum_meta.path {
+        Some(path) => quote! { #path },
+        None => quote! { casper_sdk },
+    };
+
+    let borsh_path = {
+        let crate_path_str = match &enum_meta.path {
+            Some(path) => path.to_token_stream().to_string(),
+            None => "casper_sdk".to_string(),
+        };
+        syn::LitStr::new(
+            &format!("{}::serializers::borsh", crate_path_str),
+            Span::call_site(),
+        )
+    };
+
+    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone());
 
     quote! {
-        #[derive(casper_sdk::serializers::borsh::BorshSerialize, casper_sdk::serializers::borsh::BorshDeserialize)]
-        #[borsh(use_discriminant = true, crate = "casper_sdk::serializers::borsh")]
+        #[derive(#crate_path::serializers::borsh::BorshSerialize, #crate_path::serializers::borsh::BorshDeserialize)]
+        #[borsh(use_discriminant = true, crate = #borsh_path)]
         #[repr(u32)]
         #maybe_derive_abi
         #item_enum
     }
 }
 
-fn get_maybe_derive_abi() -> impl ToTokens {
+fn get_maybe_derive_abi(_crate_path: impl ToTokens) -> impl ToTokens {
     #[cfg(feature = "__abi_generator")]
     {
         quote! {
-            #[derive(casper_sdk::macros::CasperABI)]
+            #[derive(#_crate_path::macros::CasperABI)]
         }
     }
 
@@ -1205,29 +1341,43 @@ fn get_maybe_derive_abi() -> impl ToTokens {
     }
 }
 
-fn process_casper_contract_state_for_struct(contract_struct: &ItemStruct) -> TokenStream {
+fn process_casper_contract_state_for_struct(
+    contract_struct: &ItemStruct,
+    struct_meta: StructMeta,
+) -> TokenStream {
     let struct_name = &contract_struct.ident;
     let ref_name = format_ident!("{struct_name}Ref");
     let vis = &contract_struct.vis;
 
-    let maybe_derive_abi = get_maybe_derive_abi();
+    let crate_path = match &struct_meta.path {
+        Some(path) => quote! { #path },
+        None => quote! { casper_sdk },
+    };
+    let borsh_path = {
+        let crate_path_str = match &struct_meta.path {
+            Some(path) => path.to_token_stream().to_string(),
+            None => "casper_sdk".to_string(),
+        };
+        syn::LitStr::new(
+            &format!("{}::serializers::borsh", crate_path_str),
+            Span::call_site(),
+        )
+    };
+
+    let maybe_derive_abi = get_maybe_derive_abi(crate_path.clone());
 
     // Optionally, generate a schema export if the appropriate flag
     // is set.
     let maybe_casper_schema = {
         #[cfg(feature = "__embed_schema")]
         quote! {
+            const SCHEMA: Option<&str> = option_env!("__CARGO_CASPER_INJECT_SCHEMA_MARKER");
+
             #[no_mangle]
             pub extern "C" fn __casper_schema() {
-                use casper_sdk::casper::ret;
-                use casper_sdk::casper_executor_wasm_common::flags::ReturnFlags;
-
-                const SCHEMA: &str = match option_env!("__CARGO_CASPER_INJECT_SCHEMA_MARKER") {
-                    Some(schema) => schema,
-                    None => "{}",
-                };
-
-                let bytes = SCHEMA.as_bytes();
+                use #crate_path::casper::ret;
+                use #crate_path::casper_executor_wasm_common::flags::ReturnFlags;
+                let bytes = SCHEMA.unwrap_or_default().as_bytes();
                 ret(ReturnFlags::empty(), Some(bytes));
             }
         }
@@ -1236,14 +1386,14 @@ fn process_casper_contract_state_for_struct(contract_struct: &ItemStruct) -> Tok
     };
 
     quote! {
-        #[derive(casper_sdk::serializers::borsh::BorshSerialize, casper_sdk::serializers::borsh::BorshDeserialize)]
-        #[borsh(crate = "casper_sdk::serializers::borsh")]
+        #[derive(#crate_path::serializers::borsh::BorshSerialize, #crate_path::serializers::borsh::BorshDeserialize)]
+        #[borsh(crate = #borsh_path)]
         #maybe_derive_abi
         #contract_struct
 
         #vis struct #ref_name;
 
-        impl casper_sdk::ContractRef for #ref_name {
+        impl #crate_path::ContractRef for #ref_name {
             fn new() -> Self {
                 #ref_name
             }
