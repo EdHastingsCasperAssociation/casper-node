@@ -107,7 +107,6 @@ impl ExecutionEngineV1 {
             &named_keys,
             &executable_item,
             entry_point,
-            protocol_version,
         ) {
             Ok(execution_kind) => execution_kind,
             Err(ese) => return WasmV1Result::precondition_failure(gas_limit, ese),
@@ -180,7 +179,6 @@ impl ExecutionEngineV1 {
             &named_keys,
             &executable_item,
             entry_point,
-            protocol_version,
         ) {
             Ok(execution_kind) => execution_kind,
             Err(ese) => return WasmV1Result::precondition_failure(gas_limit, ese),

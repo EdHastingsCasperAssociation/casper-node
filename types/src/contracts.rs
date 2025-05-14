@@ -218,7 +218,7 @@ pub const CONTRACT_INITIAL_VERSION: ContractVersion = 1;
 pub type ProtocolVersionMajor = u32;
 
 /// Major element of `ProtocolVersion` combined with `ContractVersion`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 pub struct ContractVersionKey(ProtocolVersionMajor, ContractVersion);

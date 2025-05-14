@@ -38,17 +38,9 @@ fn should_run_regression() {
         .exec(exec_request)
         .expect_success()
         .commit();
-
     let account = builder
         .get_entity_with_named_keys_by_account_hash(*DEFAULT_ACCOUNT_ADDR)
         .expect("should have account");
-    let disabled_contract_hash = account
-        .named_keys()
-        .get(DISABLED_CONTRACT_HASH_KEY)
-        .unwrap()
-        .into_entity_hash_addr()
-        .map(AddressableEntityHash::new)
-        .unwrap();
     let enabled_contract_hash = account
         .named_keys()
         .get(ENABLED_CONTRACT_HASH_KEY)
@@ -74,20 +66,27 @@ fn should_run_regression() {
         RuntimeArgs::new(),
     )
     .build();
-
-    let direct_call_v2_request = ExecuteRequestBuilder::versioned_contract_call_by_name(
+    let direct_call_v2_request = ExecuteRequestBuilder::key_versioned_contract_call_by_name(
         *DEFAULT_ACCOUNT_ADDR,
         PACKAGE_HASH_NAME,
-        Some(2),
+        Some(EntityVersionKey::new(2, 2)),
         DO_SOMETHING_ENTRYPOINT,
         RuntimeArgs::new(),
     )
     .build();
 
-    let direct_call_v1_request = ExecuteRequestBuilder::versioned_contract_call_by_name(
+    let disabled_contract_hash = account
+        .named_keys()
+        .get(DISABLED_CONTRACT_HASH_KEY)
+        .unwrap()
+        .into_entity_hash_addr()
+        .map(AddressableEntityHash::new)
+        .unwrap();
+
+    let direct_call_v1_request = ExecuteRequestBuilder::key_versioned_contract_call_by_name(
         *DEFAULT_ACCOUNT_ADDR,
         PACKAGE_HASH_NAME,
-        Some(1),
+        Some(EntityVersionKey::new(2, 1)),
         DO_SOMETHING_ENTRYPOINT,
         RuntimeArgs::new(),
     )
@@ -132,19 +131,19 @@ fn should_run_regression() {
     )
     .build();
 
-    let direct_call_v2_request = ExecuteRequestBuilder::versioned_contract_call_by_hash(
+    let direct_call_v2_request = ExecuteRequestBuilder::key_versioned_contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
         contract_package_hash,
-        Some(2),
+        Some(EntityVersionKey::new(2, 2)),
         DO_SOMETHING_ENTRYPOINT,
         RuntimeArgs::new(),
     )
     .build();
 
-    let direct_call_v1_request = ExecuteRequestBuilder::versioned_contract_call_by_hash(
+    let direct_call_v1_request = ExecuteRequestBuilder::key_versioned_contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
         contract_package_hash,
-        Some(1),
+        Some(EntityVersionKey::new(2, 1)),
         DO_SOMETHING_ENTRYPOINT,
         RuntimeArgs::new(),
     )
@@ -159,7 +158,6 @@ fn should_run_regression() {
         .exec(direct_call_v2_request)
         .expect_success()
         .commit();
-
     builder
         .exec(direct_call_v1_request)
         .expect_failure()
@@ -243,13 +241,14 @@ fn should_run_regression() {
 
     // Call by contract hashes
 
-    let call_by_hash_v2_request = ExecuteRequestBuilder::contract_call_by_hash(
-        *DEFAULT_ACCOUNT_ADDR,
-        enabled_contract_hash,
-        DO_SOMETHING_ENTRYPOINT,
-        RuntimeArgs::new(),
-    )
-    .build();
+    let call_by_hash_v2_request: casper_engine_test_support::ExecuteRequest =
+        ExecuteRequestBuilder::contract_call_by_hash(
+            *DEFAULT_ACCOUNT_ADDR,
+            enabled_contract_hash,
+            DO_SOMETHING_ENTRYPOINT,
+            RuntimeArgs::new(),
+        )
+        .build();
 
     builder
         .exec(call_by_hash_v2_request)
@@ -359,7 +358,6 @@ fn should_run_regression() {
         "Expected invalid contract version, found {:?}",
         error,
     );
-
     builder
         .exec(session_call_hash_v2_request)
         .expect_success()
