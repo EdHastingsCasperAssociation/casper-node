@@ -868,37 +868,44 @@ impl Deploy {
     /// Returns a random `Deploy` with custom payment specified as a stored versioned contract by
     /// name.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
-    pub fn random_with_valid_custom_payment_package_by_name(rng: &mut TestRng) -> Self {
+    pub fn random_with_versioned_payment_package_by_name(
+        version: Option<u32>,
+        rng: &mut TestRng,
+    ) -> Self {
         let payment = ExecutableDeployItem::StoredVersionedContractByName {
             name: "Test".to_string(),
-            version: None,
+            version,
             entry_point: "call".to_string(),
             args: Default::default(),
         };
         Self::random_transfer_with_payment(rng, payment)
+    }
+
+    /// Returns a random `Deploy` with custom payment specified as a stored versioned contract by
+    /// name.
+    #[cfg(any(all(feature = "std", feature = "testing"), test))]
+    pub fn random_with_valid_custom_payment_package_by_name(rng: &mut TestRng) -> Self {
+        Self::random_with_versioned_payment_package_by_name(None, rng)
     }
 
     /// Returns a random invalid `Deploy` with custom payment specified as a stored versioned
     /// contract by hash, but missing the runtime args.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
     pub fn random_with_missing_payment_package_by_hash(rng: &mut TestRng) -> Self {
-        let payment = ExecutableDeployItem::StoredVersionedContractByHash {
-            hash: Default::default(),
-            version: None,
-            entry_point: "call".to_string(),
-            args: Default::default(),
-        };
-        Self::random_transfer_with_payment(rng, payment)
+        Self::random_with_payment_package_version_by_hash(None, rng)
     }
 
     /// Returns a random invalid `Deploy` with custom payment specified as a stored versioned
-    /// contract by hash, but calling an invalid entry point.
+    /// contract by hash, but missing the runtime args.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
-    pub fn random_with_nonexistent_contract_version_in_payment_package(rng: &mut TestRng) -> Self {
+    pub fn random_with_payment_package_version_by_hash(
+        version: Option<u32>,
+        rng: &mut TestRng,
+    ) -> Self {
         let payment = ExecutableDeployItem::StoredVersionedContractByHash {
-            hash: [19; 32].into(),
-            version: Some(6u32),
-            entry_point: "non-existent-entry-point".to_string(),
+            hash: Default::default(),
+            version,
+            entry_point: "call".to_string(),
             args: Default::default(),
         };
         Self::random_transfer_with_payment(rng, payment)
@@ -971,9 +978,19 @@ impl Deploy {
     /// name.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
     pub fn random_with_valid_session_package_by_name(rng: &mut TestRng) -> Self {
+        Self::random_with_versioned_session_package_by_name(None, rng)
+    }
+
+    /// Returns a random `Deploy` with custom session specified as a stored versioned contract by
+    /// name.
+    #[cfg(any(all(feature = "std", feature = "testing"), test))]
+    pub fn random_with_versioned_session_package_by_name(
+        version: Option<u32>,
+        rng: &mut TestRng,
+    ) -> Self {
         let session = ExecutableDeployItem::StoredVersionedContractByName {
             name: "Test".to_string(),
-            version: None,
+            version,
             entry_point: "call".to_string(),
             args: Default::default(),
         };
@@ -1032,23 +1049,18 @@ impl Deploy {
     /// contract by hash, but missing the runtime args.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
     pub fn random_with_missing_session_package_by_hash(rng: &mut TestRng) -> Self {
-        let session = ExecutableDeployItem::StoredVersionedContractByHash {
-            hash: Default::default(),
-            version: None,
-            entry_point: "call".to_string(),
-            args: Default::default(),
-        };
-        Self::random_transfer_with_session(rng, session)
+        Self::random_with_versioned_session_package_by_hash(None, rng)
     }
 
-    /// Returns a random invalid `Deploy` with custom session specified as a stored versioned
-    /// contract by hash, but calling an invalid entry point.
     #[cfg(any(all(feature = "std", feature = "testing"), test))]
-    pub fn random_with_nonexistent_contract_version_in_session_package(rng: &mut TestRng) -> Self {
+    pub fn random_with_versioned_session_package_by_hash(
+        version: Option<u32>,
+        rng: &mut TestRng,
+    ) -> Self {
         let session = ExecutableDeployItem::StoredVersionedContractByHash {
-            hash: [19; 32].into(),
-            version: Some(6u32),
-            entry_point: "non-existent-entry-point".to_string(),
+            hash: Default::default(),
+            version,
+            entry_point: "call".to_string(),
             args: Default::default(),
         };
         Self::random_transfer_with_session(rng, session)

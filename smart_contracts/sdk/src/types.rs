@@ -9,6 +9,7 @@ use crate::{
 };
 
 pub type Address = [u8; 32];
+pub use bnum::types::U256;
 
 // Keep in sync with [`casper_executor_wasm_common::error::CallError`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]

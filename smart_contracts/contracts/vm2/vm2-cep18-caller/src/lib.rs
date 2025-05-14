@@ -1,12 +1,13 @@
 #![cfg_attr(target_family = "wasm", no_main)]
 
 pub mod exports {
-    use casper_sdk::{prelude::*, types::Address, ContractHandle};
-
-    use vm2_cep18::{
-        contract::TokenContractRef,
-        traits::{CEP18Ext, MintableExt},
+    use casper_sdk::{
+        contrib::cep18::{CEP18Ext, MintableExt},
+        prelude::*,
+        types::{Address, U256},
+        ContractHandle,
     };
+    use vm2_cep18::TokenContractRef;
 
     #[casper(export)]
     pub fn call(address: Address) -> String {
@@ -17,7 +18,7 @@ pub mod exports {
 
         // Mint tokens, then check the balance of the account that called this contract
         handle
-            .call(|contract| contract.mint(Entity::Account([99; 32]), 100))
+            .call(|contract| contract.mint(Entity::Account([99; 32]), U256::from(100u64)))
             .expect("Should call")
             .expect("Should mint");
 
@@ -25,14 +26,14 @@ pub mod exports {
             .call(|contract| contract.balance_of(Entity::Account([99; 32])))
             .expect("Should call");
 
-        assert_eq!(balance_result, 100);
+        assert_eq!(balance_result, U256::from(100u64));
 
         let name_result = handle
             .call(|contract| contract.name())
             .expect("Should call");
         log!("Name: {name_result:?}");
         let transfer_result = handle
-            .call(|contract| contract.transfer(Entity::Account([100; 32]), 100))
+            .call(|contract| contract.transfer(Entity::Account([100; 32]), U256::from(100u64)))
             .expect("Should call");
 
         log!("Transfer: {transfer_result:?}");

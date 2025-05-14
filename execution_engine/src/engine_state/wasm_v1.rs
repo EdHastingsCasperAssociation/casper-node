@@ -10,9 +10,8 @@ use casper_types::{
     contract_messages::Messages,
     execution::{Effects, TransformKindV2},
     BlockHash, BlockTime, CLValue, DeployHash, Digest, ExecutableDeployItem, Gas, InitiatorAddr,
-    Key, PackageHash, Phase, PricingMode, ProtocolVersion, RuntimeArgs, TransactionEntryPoint,
-    TransactionHash, TransactionInvocationTarget, TransactionTarget, TransactionV1Hash, Transfer,
-    URefAddr, U512,
+    Key, Phase, PricingMode, ProtocolVersion, RuntimeArgs, TransactionEntryPoint, TransactionHash,
+    TransactionInvocationTarget, TransactionTarget, TransactionV1Hash, Transfer, URefAddr, U512,
 };
 
 use crate::engine_state::Error as EngineError;
@@ -756,10 +755,11 @@ fn build_session_info_for_executable_item(
             entry_point,
             args,
         } => {
-            session = ExecutableItem::Invocation(TransactionInvocationTarget::new_package(
-                PackageHash::new(hash.value()),
-                *version,
-            ));
+            session = ExecutableItem::Invocation(TransactionInvocationTarget::ByPackageHash {
+                addr: hash.value(),
+                version: *version,
+                version_key: None,
+            });
             session_entry_point = entry_point.clone();
             session_args = args.clone();
         }
@@ -769,10 +769,11 @@ fn build_session_info_for_executable_item(
             entry_point,
             args,
         } => {
-            session = ExecutableItem::Invocation(TransactionInvocationTarget::new_package_alias(
-                name.clone(),
-                *version,
-            ));
+            session = ExecutableItem::Invocation(TransactionInvocationTarget::ByPackageName {
+                name: name.to_owned(),
+                version: *version,
+                version_key: None,
+            });
             session_entry_point = entry_point.clone();
             session_args = args.clone();
         }
@@ -923,6 +924,7 @@ fn build_payment_info_for_executable_item(
             item: ExecutableItem::Invocation(TransactionInvocationTarget::ByPackageHash {
                 addr: hash.value(),
                 version: *version,
+                version_key: None,
             }),
             entry_point: entry_point.clone(),
             args: args.clone(),
@@ -936,6 +938,7 @@ fn build_payment_info_for_executable_item(
             item: ExecutableItem::Invocation(TransactionInvocationTarget::ByPackageName {
                 name: name.clone(),
                 version: *version,
+                version_key: None,
             }),
             entry_point: entry_point.clone(),
             args: args.clone(),

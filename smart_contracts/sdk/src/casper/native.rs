@@ -3,15 +3,16 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     convert::Infallible,
     fmt,
-    os::raw::c_void,
     panic::{self, UnwindSafe},
     ptr::{self, NonNull},
     slice,
-    sync::{Arc, LazyLock, RwLock},
+    sync::{Arc, RwLock},
 };
 
+use crate::linkme::distributed_slice;
 use bytes::Bytes;
 use casper_executor_wasm_common::{
+    env_info::EnvInfo,
     error::{
         CALLEE_REVERTED, CALLEE_SUCCEEDED, CALLEE_TRAPPED, HOST_ERROR_INTERNAL,
         HOST_ERROR_NOT_FOUND, HOST_ERROR_SUCCESS,
@@ -24,58 +25,78 @@ use rand::Rng;
 use super::Entity;
 use crate::types::Address;
 
+/// The kind of export that is being registered.
+///
+/// This is used to identify the type of export and its name.
+///
+/// Depending on the location of given function it may be registered as a:
+///
+/// * `SmartContract` (if it's part of a `impl Contract` block),
+/// * `TraitImpl` (if it's part of a `impl Trait for Contract` block),
+/// * `Function` (if it's a standalone function).
+///
+/// This is used to dispatch exports under native code i.e. you want to write a test that calls
+/// "foobar" regardless of location.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ExportKind {
+pub enum EntryPointKind {
+    /// Smart contract.
+    ///
+    /// This is used to identify the smart contract and its name.
+    ///
+    /// The `struct_name` is the name of the smart contract that is being registered.
+    /// The `name` is the name of the function that is being registered.
     SmartContract {
         struct_name: &'static str,
         name: &'static str,
     },
+    /// Trait implementation.
+    ///
+    /// This is used to identify the trait implementation and its name.
+    ///
+    /// The `trait_name` is the name of the trait that is being implemented.
+    /// The `impl_name` is the name of the implementation.
+    /// The `name` is the name of the function that is being implemented.
     TraitImpl {
         trait_name: &'static str,
         impl_name: &'static str,
         name: &'static str,
     },
-    Function {
-        name: &'static str,
-    },
+    /// Function export.
+    ///
+    /// This is used to identify the function export and its name.
+    ///
+    /// The `name` is the name of the function that is being exported.
+    Function { name: &'static str },
 }
 
-impl ExportKind {
+impl EntryPointKind {
     pub fn name(&self) -> &'static str {
         match self {
-            ExportKind::SmartContract { name, .. }
-            | ExportKind::TraitImpl { name, .. }
-            | ExportKind::Function { name } => name,
+            EntryPointKind::SmartContract { name, .. }
+            | EntryPointKind::TraitImpl { name, .. }
+            | EntryPointKind::Function { name } => name,
         }
     }
 }
 
-pub struct Export {
-    pub kind: ExportKind,
+/// Export is a structure that contains information about the exported function.
+///
+/// This is used to register the export and its name and physical location in the smart contract
+/// source code.
+pub struct EntryPoint {
+    /// The kind of entry point that is being registered.
+    pub kind: EntryPointKind,
     pub fptr: fn() -> (),
     pub module_path: &'static str,
     pub file: &'static str,
     pub line: u32,
 }
 
-#[doc(hidden)]
-pub mod private_exports {
-    use super::Export;
-    use linkme::distributed_slice;
+#[distributed_slice]
+#[linkme(crate = crate::linkme)]
+pub static ENTRY_POINTS: [EntryPoint];
 
-    #[distributed_slice]
-    #[linkme(crate = crate::linkme)]
-    pub static EXPORTS: [Export];
-}
-
-/// List of sorted exports gathered from the contracts code.
-pub static EXPORTS: LazyLock<Vec<&'static Export>> = LazyLock::new(|| {
-    let mut exports = private_exports::EXPORTS.into_iter().collect::<Vec<_>>();
-    exports.sort_by_key(|export| export.kind);
-    exports
-});
-
-impl fmt::Debug for Export {
+impl fmt::Debug for EntryPoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self {
             kind,
@@ -95,15 +116,21 @@ impl fmt::Debug for Export {
     }
 }
 
-pub fn call_export(name: &str) {
-    let exports_by_name: Vec<_> = EXPORTS
+/// Invokes an export by its name.
+///
+/// This function is used to invoke an export by its name regardless of its location in the smart
+/// contract.
+pub fn invoke_export_by_name(name: &str) {
+    let exports_by_name: Vec<_> = ENTRY_POINTS
         .iter()
-        .filter(|export|
-            matches!(export.kind, ExportKind::Function { name: export_name } if export_name == name)
-        )
+        .filter(|export| export.kind.name() == name)
         .collect();
 
-    assert_eq!(exports_by_name.len(), 1);
+    assert_eq!(
+        exports_by_name.len(),
+        1,
+        "Expected exactly one export {name} found, but got {exports_by_name:?}"
+    );
 
     (exports_by_name[0].fptr)();
 }
@@ -135,8 +162,8 @@ pub struct Environment {
     contracts: Arc<RwLock<BTreeSet<Address>>>,
     // input_data: Arc<RwLock<Option<Bytes>>>,
     input_data: Option<Bytes>,
-    contract_address: Option<Address>,
     caller: Entity,
+    callee: Entity,
 }
 
 impl Default for Environment {
@@ -145,8 +172,8 @@ impl Default for Environment {
             db: Default::default(),
             contracts: Default::default(),
             input_data: Default::default(),
-            contract_address: Default::default(),
             caller: DEFAULT_ADDRESS,
+            callee: DEFAULT_ADDRESS,
         }
     }
 }
@@ -160,8 +187,8 @@ impl Environment {
             db: Arc::new(RwLock::new(db)),
             contracts: Default::default(),
             input_data: Default::default(),
-            contract_address: None,
             caller,
+            callee: caller,
         }
     }
 
@@ -173,26 +200,39 @@ impl Environment {
     }
 
     #[must_use]
+    pub fn smart_contract(&self, callee: Entity) -> Self {
+        let mut env = self.clone();
+        env.caller = self.callee;
+        env.callee = callee;
+        env
+    }
+
+    #[must_use]
+    pub fn session(&self, callee: Entity) -> Self {
+        let mut env = self.clone();
+        env.caller = callee;
+        env.callee = callee;
+        env
+    }
+
+    #[must_use]
+    pub fn with_callee(&self, callee: Entity) -> Self {
+        let mut env = self.clone();
+        env.callee = callee;
+        env
+    }
+
+    #[must_use]
     pub fn with_input_data(&self, input_data: Vec<u8>) -> Self {
         let mut env = self.clone();
         env.input_data = Some(Bytes::from(input_data));
         env
     }
-
-    fn casper_env_transferred_value(&self, dest: *mut core::ffi::c_void) -> Result<(), NativeTrap> {
-        let dest_ptr = NonNull::new(dest).expect("Valid pointer");
-        let value = 0u128;
-        let src_ptr = NonNull::from(&value);
-        unsafe {
-            ptr::copy_nonoverlapping(src_ptr.as_ptr() as *const c_void, dest_ptr.as_ptr(), 16);
-        }
-        Ok(())
-    }
 }
 
 impl Environment {
     fn key_prefix(&self, key: &[u8]) -> Vec<u8> {
-        let entity = self.contract_address.map_or(self.caller, Entity::Contract);
+        let entity = self.callee;
 
         let mut bytes = Vec::new();
         bytes.extend(entity.tag().to_le_bytes());
@@ -304,8 +344,11 @@ impl Environment {
         data_len: usize,
     ) -> Result<Infallible, NativeTrap> {
         let return_flags = ReturnFlags::from_bits_truncate(flags);
-        let data = unsafe { slice::from_raw_parts(data_ptr, data_len) };
-        let data = Bytes::copy_from_slice(data);
+        let data = if data_ptr.is_null() {
+            Bytes::new()
+        } else {
+            Bytes::copy_from_slice(unsafe { slice::from_raw_parts(data_ptr, data_len) })
+        };
         Err(NativeTrap::Return(return_flags, data))
     }
 
@@ -340,11 +383,13 @@ impl Environment {
         &self,
         code_ptr: *const u8,
         code_size: usize,
-        transferred_value_ptr: *const c_void,
+        transferred_value: u64,
         constructor_ptr: *const u8,
         constructor_size: usize,
         input_ptr: *const u8,
         input_size: usize,
+        seed_ptr: *const u8,
+        seed_size: usize,
         result_ptr: *mut casper_sdk_sys::CreateResult,
     ) -> Result<u32, NativeTrap> {
         // let manifest =
@@ -372,9 +417,10 @@ impl Environment {
             Some(unsafe { slice::from_raw_parts(input_ptr, input_size) })
         };
 
-        let transferred_value = {
-            let value_ptr = NonNull::new(transferred_value_ptr as *mut u64).expect("Valid pointer");
-            unsafe { *value_ptr.as_ptr() }
+        let _seed = if seed_ptr.is_null() {
+            None
+        } else {
+            Some(unsafe { slice::from_raw_parts(seed_ptr, seed_size) })
         };
 
         assert_eq!(
@@ -395,15 +441,18 @@ impl Environment {
         contracts.insert(contract_address);
 
         if let Some(entry_point) = constructor {
-            let entry_point = EXPORTS
+            let entry_point = ENTRY_POINTS
                 .iter()
                 .find(|export| export.kind.name().as_bytes() == entry_point)
                 .expect("Entry point exists");
 
             let mut stub = with_current_environment(|stub| stub);
-            stub.contract_address = Some(contract_address);
             stub.input_data = input_data.map(Bytes::copy_from_slice);
 
+            stub.caller = stub.callee;
+            stub.callee = Entity::Contract(package_address);
+
+            // stub.callee
             // Call constructor, expect a trap
             let result = dispatch_with(stub, || {
                 // TODO: Handle panic inside constructor
@@ -432,7 +481,7 @@ impl Environment {
         &self,
         address_ptr: *const u8,
         address_size: usize,
-        value: *const core::ffi::c_void,
+        transferred_value: u64,
         entry_point_ptr: *const u8,
         entry_point_size: usize,
         input_ptr: *const u8,
@@ -451,27 +500,23 @@ impl Environment {
             entry_point.to_string()
         };
 
-        let value: u128 = {
-            let value_ptr = NonNull::new(value as *mut u128).expect("Valid pointer");
-            unsafe { *value_ptr.as_ptr() }
-        };
-
         assert_eq!(
-            value, 0,
+            transferred_value, 0,
             "Transferred value is not supported in native mode"
         );
 
-        let export = EXPORTS
+        let export = ENTRY_POINTS
             .iter()
             .find(|export|
-                matches!(export.kind, ExportKind::SmartContract { name, .. } | ExportKind::TraitImpl { name, .. }
+                matches!(export.kind, EntryPointKind::SmartContract { name, .. } | EntryPointKind::TraitImpl { name, .. }
                     if name == entry_point)
             )
             .expect("Existing entry point");
 
         let mut new_stub = with_current_environment(|stub| stub.clone());
         new_stub.input_data = Some(Bytes::copy_from_slice(input_data));
-        new_stub.contract_address = Some(address.try_into().expect("Size to match"));
+        new_stub.caller = new_stub.callee;
+        new_stub.callee = Entity::Contract(address.try_into().expect("Size to match"));
 
         let ret = dispatch_with(new_stub, || {
             // We need to convert any panic inside the entry point into a native trap. This probably
@@ -531,31 +576,21 @@ Example paths:
         todo!()
     }
 
-    fn casper_env_caller(
-        &self,
-        dest: *mut u8,
-        dest_size: usize,
-        entity_kind: *mut u32,
-    ) -> Result<*const u8, NativeTrap> {
-        let dst = unsafe { slice::from_raw_parts_mut(dest, dest_size) };
-        let addr = match self.caller {
-            Entity::Account(addr) => {
-                unsafe {
-                    *entity_kind = 0;
-                }
-                addr
-            }
-            Entity::Contract(addr) => {
-                unsafe {
-                    *entity_kind = 1;
-                }
-                addr
-            }
+    fn casper_env_info(&self, info_ptr: *const u8, info_size: u32) -> Result<u32, NativeTrap> {
+        assert_eq!(info_size as usize, size_of::<EnvInfo>());
+        let mut env_info = NonNull::new(info_ptr as *mut u8)
+            .expect("Valid ptr")
+            .cast::<EnvInfo>();
+        let env_info = unsafe { env_info.as_mut() };
+        *env_info = EnvInfo {
+            block_time: 0,
+            transferred_value: 0,
+            caller_addr: *self.caller.address(),
+            caller_kind: self.caller.tag(),
+            callee_addr: *self.callee.address(),
+            callee_kind: self.callee.tag(),
         };
-
-        dst.copy_from_slice(&addr);
-
-        Ok(unsafe { dest.add(32) })
+        Ok(HOST_ERROR_SUCCESS)
     }
 }
 
@@ -709,6 +744,8 @@ mod symbols {
         crate::casper::native::handle_ret(_call_result);
     }
 
+    use casper_executor_wasm_common::error::HOST_ERROR_SUCCESS;
+
     use crate::casper::native::LAST_TRAP;
 
     #[no_mangle]
@@ -737,22 +774,26 @@ mod symbols {
     pub extern "C" fn casper_create(
         code_ptr: *const u8,
         code_size: usize,
-        value: *const core::ffi::c_void,
+        transferred_value: u64,
         constructor_ptr: *const u8,
         constructor_size: usize,
         input_ptr: *const u8,
         input_size: usize,
-        result_ptr: *mut ::casper_sdk_sys::CreateResult,
+        seed_ptr: *const u8,
+        seed_size: usize,
+        result_ptr: *mut casper_sdk_sys::CreateResult,
     ) -> u32 {
         let _call_result = with_current_environment(|stub| {
             stub.casper_create(
                 code_ptr,
                 code_size,
-                value,
+                transferred_value,
                 constructor_ptr,
                 constructor_size,
                 input_ptr,
                 input_size,
+                seed_ptr,
+                seed_size,
                 result_ptr,
             )
         });
@@ -763,7 +804,7 @@ mod symbols {
     pub extern "C" fn casper_call(
         address_ptr: *const u8,
         address_size: usize,
-        value: *const core::ffi::c_void,
+        transferred_value: u64,
         entry_point_ptr: *const u8,
         entry_point_size: usize,
         input_ptr: *const u8,
@@ -776,7 +817,7 @@ mod symbols {
             stub.casper_call(
                 address_ptr,
                 address_size,
-                value,
+                transferred_value,
                 entry_point_ptr,
                 entry_point_size,
                 input_ptr,
@@ -800,6 +841,7 @@ mod symbols {
         todo!()
     }
 
+    use core::slice;
     use std::ptr;
 
     use super::with_current_environment;
@@ -818,26 +860,6 @@ mod symbols {
         });
         crate::casper::native::handle_ret_with(_call_result, ptr::null_mut)
     }
-
-    #[no_mangle]
-    pub extern "C" fn casper_env_caller(
-        dest: *mut u8,
-        dest_len: usize,
-        entity: *mut u32,
-    ) -> *const u8 {
-        let _name = "casper_env_caller";
-        let _args = (&dest, &dest_len);
-        let _call_result =
-            with_current_environment(|stub| stub.casper_env_caller(dest, dest_len, entity));
-        crate::casper::native::handle_ret_with(_call_result, ptr::null)
-    }
-    #[no_mangle]
-    pub extern "C" fn casper_env_transferred_value(dest: *mut core::ffi::c_void) {
-        let _name = "casper_env_transferred_value";
-        let _args = ();
-        let _call_result = with_current_environment(|stub| stub.casper_env_transferred_value(dest));
-        crate::casper::native::handle_ret(_call_result);
-    }
     #[no_mangle]
     pub extern "C" fn casper_env_balance(
         _entity_kind: u32,
@@ -855,27 +877,72 @@ mod symbols {
     ) -> u32 {
         todo!()
     }
-
     #[no_mangle]
-    pub extern "C" fn casper_env_block_time() -> u64 {
-        0
+    pub extern "C" fn casper_emit(
+        topic_ptr: *const u8,
+        topic_size: usize,
+        data_ptr: *const u8,
+        data_size: usize,
+    ) -> u32 {
+        let topic = unsafe { slice::from_raw_parts(topic_ptr, topic_size) };
+        let data = unsafe { slice::from_raw_parts(data_ptr, data_size) };
+        let topic = std::str::from_utf8(topic).expect("Valid UTF-8 string");
+        println!("Emitting event with topic: {topic:?} and data: {data:?}");
+        HOST_ERROR_SUCCESS
     }
 
     #[no_mangle]
-    pub extern "C" fn casper_emit(
-        _topic_ptr: *const u8,
-        _topic_size: usize,
-        _data_ptr: *const u8,
-        _data_size: usize,
-    ) -> u32 {
-        todo!()
+    pub extern "C" fn casper_env_info(info_ptr: *const u8, info_size: u32) -> u32 {
+        let ret = with_current_environment(|env| env.casper_env_info(info_ptr, info_size));
+        crate::casper::native::handle_ret(ret)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use casper_executor_wasm_common::keyspace::Keyspace;
+
+    use crate::casper;
+
     use super::*;
 
+    #[test]
+    fn foo() {
+        dispatch(|| {
+            casper::print("Hello");
+            casper::write(Keyspace::Context(b"test"), b"value 1").unwrap();
+
+            let change_context_1 =
+                with_current_environment(|stub| stub.smart_contract(Entity::Contract([1; 32])));
+
+            dispatch_with(change_context_1, || {
+                casper::write(Keyspace::Context(b"test"), b"value 2").unwrap();
+                casper::write(Keyspace::State, b"state").unwrap();
+            })
+            .unwrap();
+
+            let change_context_1 =
+                with_current_environment(|stub| stub.smart_contract(Entity::Contract([1; 32])));
+            dispatch_with(change_context_1, || {
+                assert_eq!(
+                    casper::read_into_vec(Keyspace::Context(b"test")),
+                    Ok(Some(b"value 2".to_vec()))
+                );
+                assert_eq!(
+                    casper::read_into_vec(Keyspace::State),
+                    Ok(Some(b"state".to_vec()))
+                );
+            })
+            .unwrap();
+
+            assert_eq!(casper::get_caller(), DEFAULT_ADDRESS);
+            assert_eq!(
+                casper::read_into_vec(Keyspace::Context(b"test")),
+                Ok(Some(b"value 1".to_vec()))
+            );
+        })
+        .unwrap();
+    }
     #[test]
     fn test() {
         dispatch_with(Environment::default(), || {
@@ -886,7 +953,6 @@ mod tests {
         .unwrap();
     }
 
-    #[ignore]
     #[test]
     fn test_returns() {
         dispatch_with(Environment::default(), || {

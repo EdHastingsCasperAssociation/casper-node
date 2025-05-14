@@ -201,7 +201,7 @@ impl ExecutableDeployItem {
         }
     }
 
-    /// Returns a new `ExecutableDeployItem::StoredVersionedContractByName`.
+    /// Returns a new `ExecutableDeployItem::StoredVersionedKeyContractByName`.
     pub fn new_stored_versioned_contract_by_name(
         name: String,
         version: Option<ContractVersion>,
@@ -318,18 +318,18 @@ impl ExecutableDeployItem {
             | ExecutableDeployItem::StoredContractByName { .. }
             | ExecutableDeployItem::Transfer { .. } => None,
 
-            ExecutableDeployItem::StoredVersionedContractByHash { hash, version, .. } => {
-                Some(PackageIdentifier::Hash {
-                    package_hash: PackageHash::new(hash.value()),
-                    version: *version,
-                })
-            }
-            ExecutableDeployItem::StoredVersionedContractByName { name, version, .. } => {
-                Some(PackageIdentifier::Name {
-                    name: name.clone(),
-                    version: *version,
-                })
-            }
+            ExecutableDeployItem::StoredVersionedContractByHash {
+                hash, version: _, ..
+            } => Some(PackageIdentifier::HashWithVersion {
+                package_hash: PackageHash::new(hash.value()),
+                version_key: None,
+            }),
+            ExecutableDeployItem::StoredVersionedContractByName {
+                name, version: _, ..
+            } => Some(PackageIdentifier::NameWithVersion {
+                name: name.clone(),
+                version_key: None,
+            }),
         }
     }
 

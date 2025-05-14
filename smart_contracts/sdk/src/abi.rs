@@ -1,3 +1,5 @@
+use core::mem;
+
 use crate::prelude::{
     collections,
     collections::{BTreeMap, BTreeSet, HashMap, LinkedList},
@@ -502,5 +504,53 @@ impl<T: CasperABI> CasperABI for BTreeSet<T> {
         Definition::Sequence {
             decl: T::declaration(),
         }
+    }
+}
+
+impl<const N: usize> CasperABI for bnum::BUint<N> {
+    fn populate_definitions(definitions: &mut Definitions) {
+        definitions.populate_one::<u64>();
+    }
+
+    fn declaration() -> Declaration {
+        let width_bytes: usize = mem::size_of::<bnum::BUint<N>>();
+        let width_bits: usize = width_bytes * 8;
+        format!("U{width_bits}")
+    }
+
+    fn definition() -> Definition {
+        let length: u32 = N.try_into().expect("N is too big");
+        Definition::FixedSequence {
+            length,
+            decl: u64::declaration(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        abi::{CasperABI, Definition},
+        types::U256,
+    };
+
+    #[test]
+    fn u256_schema() {
+        assert_eq!(U256::declaration(), "U256");
+        assert_eq!(
+            U256::definition(),
+            Definition::FixedSequence {
+                length: 4,
+                decl: u64::declaration()
+            }
+        );
+
+        let mut value = U256::from(u128::MAX);
+        value += U256::from(1u64);
+        let bytes = borsh::to_vec(&value).unwrap();
+        // Ensure bnum's borsh serialize/deserialize is what we consider "FixedSequence"
+        let bytes_back: [u64; 4] = borsh::from_slice(&bytes).unwrap();
+        let value_back = U256::from_digits(bytes_back);
+        assert_eq!(value, value_back);
     }
 }

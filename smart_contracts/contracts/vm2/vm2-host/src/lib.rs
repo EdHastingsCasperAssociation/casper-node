@@ -99,11 +99,11 @@ impl MinHostWrapper {
         casper::get_block_time()
     }
 
-    pub fn get_transferred_value(&self) -> u128 {
+    pub fn get_transferred_value(&self) -> u64 {
         casper::transferred_value()
     }
 
-    pub fn get_balance_of(&self) -> u128 {
+    pub fn get_balance_of(&self) -> u64 {
         casper::get_balance_of(&Entity::Account([0u8; 32]))
     }
 

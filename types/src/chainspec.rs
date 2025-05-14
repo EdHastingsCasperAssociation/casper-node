@@ -72,9 +72,9 @@ pub use upgrade_config::ProtocolUpgradeConfig;
 pub use vacancy_config::VacancyConfig;
 pub use vm_config::{
     AuctionCosts, BrTableCost, ChainspecRegistry, ControlFlowCosts, HandlePaymentCosts,
-    HostFunction, HostFunctionCost, HostFunctionCostsV1, HostFunctionCostsV2, MessageLimits,
-    MintCosts, OpcodeCosts, StandardPaymentCosts, StorageCosts, SystemConfig, WasmConfig,
-    WasmV1Config, WasmV2Config, DEFAULT_HOST_FUNCTION_NEW_DICTIONARY,
+    HostFunction, HostFunctionCost, HostFunctionCostsV1, HostFunctionCostsV2, HostFunctionV2,
+    MessageLimits, MintCosts, OpcodeCosts, StandardPaymentCosts, StorageCosts, SystemConfig,
+    WasmConfig, WasmV1Config, WasmV2Config, DEFAULT_HOST_FUNCTION_NEW_DICTIONARY,
 };
 #[cfg(any(feature = "testing", test))]
 pub use vm_config::{

@@ -5,8 +5,8 @@ use casper_storage::{
     tracking_copy::{TrackingCopy, TrackingCopyExt},
 };
 use casper_types::{
-    bytesrepr::Bytes, contracts::NamedKeys, AddressableEntityHash, EntityVersionKey, Key,
-    PackageHash, ProtocolVersion, StoredValue, TransactionInvocationTarget,
+    bytesrepr::Bytes, contracts::NamedKeys, AddressableEntityHash, Key, PackageHash, StoredValue,
+    TransactionInvocationTarget,
 };
 
 use super::{wasm_v1::SessionKind, Error, ExecutableItem};
@@ -39,19 +39,14 @@ impl<'a> ExecutionKind<'a> {
         named_keys: &NamedKeys,
         executable_item: &'a ExecutableItem,
         entry_point: String,
-        protocol_version: ProtocolVersion,
     ) -> Result<Self, Error>
     where
         R: StateReader<Key, StoredValue, Error = GlobalStateError>,
     {
         match executable_item {
-            ExecutableItem::Invocation(target) => Self::new_direct_invocation(
-                tracking_copy,
-                named_keys,
-                target,
-                entry_point,
-                protocol_version,
-            ),
+            ExecutableItem::Invocation(target) => {
+                Self::new_direct_invocation(tracking_copy, named_keys, target, entry_point)
+            }
             ExecutableItem::PaymentBytes(module_bytes)
             | ExecutableItem::SessionBytes {
                 kind: SessionKind::GenericBytecode,
@@ -70,7 +65,6 @@ impl<'a> ExecutionKind<'a> {
         named_keys: &NamedKeys,
         target: &TransactionInvocationTarget,
         entry_point: String,
-        protocol_version: ProtocolVersion,
     ) -> Result<Self, Error>
     where
         R: StateReader<Key, StoredValue, Error = GlobalStateError>,
@@ -90,12 +84,15 @@ impl<'a> ExecutionKind<'a> {
                     _ => return Err(Error::InvalidKeyVariant(*entity_key)),
                 }
             }
-            TransactionInvocationTarget::ByPackageHash { addr, version } => {
+            TransactionInvocationTarget::ByPackageHash {
+                addr,
+                version_key,
+                version: _, // version is defunct and should not be used
+            } => {
                 let package_hash = PackageHash::from(*addr);
                 let package = tracking_copy.get_package(*addr)?;
 
-                let maybe_version_key =
-                    version.map(|ver| EntityVersionKey::new(protocol_version.value().major, ver));
+                let maybe_version_key = version_key;
 
                 let entity_version_key = maybe_version_key
                     .or_else(|| package.current_entity_version())
@@ -124,7 +121,8 @@ impl<'a> ExecutionKind<'a> {
             }
             TransactionInvocationTarget::ByPackageName {
                 name: alias,
-                version,
+                version_key,
+                version: _, // version is defunct and should not be used
             } => {
                 let package_key = named_keys
                     .get(alias)
@@ -137,12 +135,10 @@ impl<'a> ExecutionKind<'a> {
 
                 let package = tracking_copy.get_package(package_hash.value())?;
 
-                let maybe_version_key =
-                    version.map(|ver| EntityVersionKey::new(protocol_version.value().major, ver));
-
-                let entity_version_key = maybe_version_key
-                    .or_else(|| package.current_entity_version())
-                    .ok_or(Error::Exec(ExecError::NoActiveEntityVersions(package_hash)))?;
+                let entity_version_key =
+                    version_key
+                        .or_else(|| package.current_entity_version())
+                        .ok_or(Error::Exec(ExecError::NoActiveEntityVersions(package_hash)))?;
 
                 if package.is_version_missing(entity_version_key) {
                     return Err(Error::Exec(ExecError::MissingEntityVersion(

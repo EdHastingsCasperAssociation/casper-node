@@ -35,10 +35,10 @@ use casper_types::{
     global_state::TrieMerkleProof,
     testing::TestRng,
     Block, BlockV2, CLValue, Chainspec, ChainspecRawBytes, Contract, Deploy, EraId, HashAddr,
-    InvalidDeploy, InvalidTransaction, InvalidTransactionV1, Key, PricingHandling, PricingMode,
-    ProtocolVersion, PublicKey, SecretKey, StoredValue, TestBlockBuilder, TimeDiff, Timestamp,
-    Transaction, TransactionArgs, TransactionConfig, TransactionRuntimeParams, TransactionV1, URef,
-    DEFAULT_BASELINE_MOTES_AMOUNT,
+    InvalidDeploy, InvalidTransaction, InvalidTransactionV1, Key, PackageAddr, PricingHandling,
+    PricingMode, ProtocolVersion, PublicKey, SecretKey, StoredValue, TestBlockBuilder, TimeDiff,
+    Timestamp, Transaction, TransactionArgs, TransactionConfig, TransactionRuntimeParams,
+    TransactionV1, URef, DEFAULT_BASELINE_MOTES_AMOUNT,
 };
 
 use super::*;
@@ -226,6 +226,12 @@ enum TestScenario {
     WasmDeployWithTooBigPayment,
     RedelegateExceedingMaximumDelegation,
     DelegateExceedingMaximumDelegation,
+    V1ByPackageHashTargetsVersion,
+    V1ByPackageNameTargetsVersion,
+    DeployPaymentStoredVersionedContractByHashTargetsVersion,
+    DeployPaymentStoredVersionedContractByNameTargetsVersion,
+    DeploySessionStoredVersionedContractByHashTargetsVersion,
+    DeploySessionStoredVersionedContractByNameTargetsVersion,
 }
 
 impl TestScenario {
@@ -279,7 +285,15 @@ impl TestScenario {
             | TestScenario::WasmTransactionWithTooBigPayment
             | TestScenario::WasmDeployWithTooBigPayment
             | TestScenario::RedelegateExceedingMaximumDelegation
-            | TestScenario::DelegateExceedingMaximumDelegation => Source::Client,
+            | TestScenario::DelegateExceedingMaximumDelegation
+            | TestScenario::V1ByPackageHashTargetsVersion
+            | TestScenario::V1ByPackageNameTargetsVersion
+            | TestScenario::DeployPaymentStoredVersionedContractByHashTargetsVersion
+            | TestScenario::DeployPaymentStoredVersionedContractByNameTargetsVersion
+            | TestScenario::DeploySessionStoredVersionedContractByHashTargetsVersion
+            | TestScenario::DeploySessionStoredVersionedContractByNameTargetsVersion => {
+                Source::Client
+            }
         }
     }
 
@@ -428,7 +442,7 @@ impl TestScenario {
             TestScenario::TransactionWithPaymentOne => {
                 let timestamp = Timestamp::now()
                     + Config::default().timestamp_leeway
-                    + TimeDiff::from_millis(100);
+                    + TimeDiff::from_millis(1000);
                 let ttl = TimeDiff::from_seconds(300);
                 let txn = TransactionV1Builder::new_session(
                     false,
@@ -475,9 +489,14 @@ impl TestScenario {
                     ContractPackageScenario::MissingPackageAtHash => {
                         Transaction::from(Deploy::random_with_missing_payment_package_by_hash(rng))
                     }
-                    ContractPackageScenario::MissingContractVersion => Transaction::from(
-                        Deploy::random_with_nonexistent_contract_version_in_payment_package(rng),
-                    ),
+                    ContractPackageScenario::MissingContractVersion => {
+                        //Keeping this enum because the Transaction::V1 version of this test is
+                        // still valid,
+                        // still FromPeerCustomPaymentContractPackage(MissingContractVersion) and
+                        // FromClientCustomPaymentContractPackage(MissingContractVersion) should not
+                        // be called
+                        todo!("This scenario is no longer valid and is not called")
+                    }
                 }
             }
             TestScenario::FromPeerSessionContract(TxnType::Deploy, contract_scenario)
@@ -552,9 +571,13 @@ impl TestScenario {
                 ContractPackageScenario::MissingPackageAtHash => {
                     Transaction::from(Deploy::random_with_missing_session_package_by_hash(rng))
                 }
-                ContractPackageScenario::MissingContractVersion => Transaction::from(
-                    Deploy::random_with_nonexistent_contract_version_in_session_package(rng),
-                ),
+                ContractPackageScenario::MissingContractVersion => {
+                    //Keeping this enum because the Transaction::V1 version of this test is still
+                    // valid,
+                    // still FromPeerSessionContractPackage(MissingContractVersion) and
+                    // FromClientSessionContractPackage(MissingContractVersion) should not be called
+                    todo!("This scenario is no longer valid and is not called")
+                }
             },
             TestScenario::FromPeerSessionContractPackage(
                 TxnType::V1,
@@ -595,7 +618,7 @@ impl TestScenario {
                 ContractPackageScenario::MissingContractVersion => {
                     let txn = TransactionV1Builder::new_targeting_package(
                         PackageHash::new(PackageAddr::default()),
-                        Some(6),
+                        Some(EntityVersionKey::new(2, 6)),
                         "call",
                         TransactionRuntimeParams::VmCasperV1,
                     )
@@ -641,7 +664,7 @@ impl TestScenario {
             TestScenario::FromClientFutureDatedTransaction(txn_type) => {
                 let timestamp = Timestamp::now()
                     + Config::default().timestamp_leeway
-                    + TimeDiff::from_millis(100);
+                    + TimeDiff::from_millis(1000);
                 let ttl = TimeDiff::from_seconds(300);
                 match txn_type {
                     TxnType::Deploy => Transaction::from(
@@ -714,7 +737,7 @@ impl TestScenario {
             TestScenario::InvalidArgumentsKind => {
                 let timestamp = Timestamp::now()
                     + Config::default().timestamp_leeway
-                    + TimeDiff::from_millis(100);
+                    + TimeDiff::from_millis(1000);
                 let ttl = TimeDiff::from_seconds(300);
                 let txn = TransactionV1Builder::new_session(
                     false,
@@ -789,6 +812,62 @@ impl TestScenario {
                 .unwrap();
                 Transaction::from(txn)
             }
+            TestScenario::V1ByPackageHashTargetsVersion => {
+                let txn = TransactionV1Builder::new_targeting_stored(
+                    TransactionInvocationTarget::ByPackageHash {
+                        addr: [1; 32],
+                        version: Some(1),
+                        version_key: None,
+                    },
+                    "x",
+                    TransactionRuntimeParams::VmCasperV1,
+                )
+                .with_chain_name("casper-example")
+                .with_secret_key(&secret_key)
+                .build()
+                .unwrap();
+                Transaction::from(txn)
+            }
+            TestScenario::V1ByPackageNameTargetsVersion => {
+                let txn = TransactionV1Builder::new_targeting_stored(
+                    TransactionInvocationTarget::ByPackageName {
+                        name: "xyz".to_string(),
+                        version: Some(1),
+                        version_key: None,
+                    },
+                    "x",
+                    TransactionRuntimeParams::VmCasperV1,
+                )
+                .with_chain_name("casper-example")
+                .with_secret_key(&secret_key)
+                .build()
+                .unwrap();
+                Transaction::from(txn)
+            }
+            TestScenario::DeployPaymentStoredVersionedContractByHashTargetsVersion => {
+                Transaction::from(Deploy::random_with_payment_package_version_by_hash(
+                    Some(10),
+                    rng,
+                ))
+            }
+            TestScenario::DeployPaymentStoredVersionedContractByNameTargetsVersion => {
+                Transaction::from(Deploy::random_with_versioned_payment_package_by_name(
+                    Some(10),
+                    rng,
+                ))
+            }
+            TestScenario::DeploySessionStoredVersionedContractByHashTargetsVersion => {
+                Transaction::from(Deploy::random_with_versioned_session_package_by_hash(
+                    Some(10),
+                    rng,
+                ))
+            }
+            TestScenario::DeploySessionStoredVersionedContractByNameTargetsVersion => {
+                Transaction::from(Deploy::random_with_versioned_session_package_by_name(
+                    Some(10),
+                    rng,
+                ))
+            }
         }
     }
 
@@ -854,8 +933,14 @@ impl TestScenario {
             | TestScenario::InvalidArgumentsKind
             | TestScenario::WasmTransactionWithTooBigPayment
             | TestScenario::WasmDeployWithTooBigPayment
-            | TestScenario::RedelegateExceedingMaximumDelegation {.. }
-            | TestScenario::DelegateExceedingMaximumDelegation {..} => false,
+            | TestScenario::RedelegateExceedingMaximumDelegation { .. }
+            | TestScenario::DelegateExceedingMaximumDelegation { .. }
+            | TestScenario::V1ByPackageHashTargetsVersion
+            | TestScenario::V1ByPackageNameTargetsVersion
+            | TestScenario::DeployPaymentStoredVersionedContractByHashTargetsVersion
+            | TestScenario::DeployPaymentStoredVersionedContractByNameTargetsVersion
+            | TestScenario::DeploySessionStoredVersionedContractByHashTargetsVersion
+            | TestScenario::DeploySessionStoredVersionedContractByNameTargetsVersion=> false,
         }
     }
 
@@ -1430,7 +1515,13 @@ async fn run_transaction_acceptor_without_timeout(
             | TestScenario::WasmTransactionWithTooBigPayment
             | TestScenario::WasmDeployWithTooBigPayment
             | TestScenario::RedelegateExceedingMaximumDelegation { .. }
-            | TestScenario::DelegateExceedingMaximumDelegation { .. } => {
+            | TestScenario::DelegateExceedingMaximumDelegation { .. }
+            | TestScenario::V1ByPackageHashTargetsVersion
+            | TestScenario::V1ByPackageNameTargetsVersion
+            | TestScenario::DeployPaymentStoredVersionedContractByHashTargetsVersion
+            | TestScenario::DeployPaymentStoredVersionedContractByNameTargetsVersion
+            | TestScenario::DeploySessionStoredVersionedContractByHashTargetsVersion
+            | TestScenario::DeploySessionStoredVersionedContractByNameTargetsVersion => {
                 matches!(
                     event,
                     Event::TransactionAcceptorAnnouncement(
@@ -2037,21 +2128,6 @@ async fn should_reject_deploy_with_missing_payment_contract_package_at_hash_from
 }
 
 #[tokio::test]
-async fn should_reject_deploy_with_missing_version_in_payment_contract_package_from_client() {
-    let test_scenario = TestScenario::FromClientCustomPaymentContractPackage(
-        ContractPackageScenario::MissingContractVersion,
-    );
-    let result = run_transaction_acceptor(test_scenario).await;
-    assert!(matches!(
-        result,
-        Err(super::Error::Parameters {
-            failure: ParameterFailure::MissingEntityAtVersion { .. },
-            ..
-        })
-    ))
-}
-
-#[tokio::test]
 async fn should_accept_deploy_with_valid_session_contract_from_client() {
     let test_scenario =
         TestScenario::FromClientSessionContract(TxnType::Deploy, ContractScenario::Valid);
@@ -2220,22 +2296,6 @@ async fn should_reject_transaction_v1_with_missing_session_contract_package_at_h
 }
 
 #[tokio::test]
-async fn should_reject_deploy_with_missing_version_in_session_contract_package_from_client() {
-    let test_scenario = TestScenario::FromClientSessionContractPackage(
-        TxnType::Deploy,
-        ContractPackageScenario::MissingContractVersion,
-    );
-    let result = run_transaction_acceptor(test_scenario).await;
-    assert!(matches!(
-        result,
-        Err(super::Error::Parameters {
-            failure: ParameterFailure::MissingEntityAtVersion { .. },
-            ..
-        })
-    ))
-}
-
-#[tokio::test]
 async fn should_reject_transaction_v1_with_missing_version_in_session_contract_package_from_client()
 {
     let test_scenario = TestScenario::FromClientSessionContractPackage(
@@ -2322,21 +2382,6 @@ async fn should_reject_deploy_with_missing_payment_contract_package_at_hash_from
         result,
         Err(super::Error::Parameters {
             failure: ParameterFailure::NoSuchPackageAtHash { .. },
-            ..
-        })
-    ))
-}
-
-#[tokio::test]
-async fn should_reject_deploy_with_missing_version_in_payment_contract_package_from_peer() {
-    let test_scenario = TestScenario::FromPeerCustomPaymentContractPackage(
-        ContractPackageScenario::MissingContractVersion,
-    );
-    let result = run_transaction_acceptor(test_scenario).await;
-    assert!(matches!(
-        result,
-        Err(super::Error::Parameters {
-            failure: ParameterFailure::MissingEntityAtVersion { .. },
             ..
         })
     ))
@@ -2498,22 +2543,6 @@ async fn should_reject_transaction_v1_with_missing_session_contract_package_at_h
         result,
         Err(super::Error::Parameters {
             failure: ParameterFailure::NoSuchPackageAtHash { .. },
-            ..
-        })
-    ))
-}
-
-#[tokio::test]
-async fn should_reject_deploy_with_missing_version_in_session_contract_package_from_peer() {
-    let test_scenario = TestScenario::FromPeerSessionContractPackage(
-        TxnType::Deploy,
-        ContractPackageScenario::MissingContractVersion,
-    );
-    let result = run_transaction_acceptor(test_scenario).await;
-    assert!(matches!(
-        result,
-        Err(super::Error::Parameters {
-            failure: ParameterFailure::MissingEntityAtVersion { .. },
             ..
         })
     ))
@@ -2808,5 +2837,80 @@ async fn should_reject_native_redelegate_with_exceeding_amount() {
         Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
             InvalidTransactionV1::InvalidDelegationAmount { .. }
         )))
+    ));
+}
+#[tokio::test]
+async fn should_reject_transactions_targets_package_version() {
+    let result = run_transaction_acceptor(TestScenario::V1ByPackageHashTargetsVersion).await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
+            InvalidTransactionV1::TargetingPackageVersionNotSupported
+        )))
+    ));
+}
+#[tokio::test]
+async fn should_reject_transactions_targets_package_version_2() {
+    let result = run_transaction_acceptor(TestScenario::V1ByPackageNameTargetsVersion).await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(InvalidTransaction::V1(
+            InvalidTransactionV1::TargetingPackageVersionNotSupported
+        )))
+    ));
+}
+
+#[tokio::test]
+async fn should_reject_transactions_targets_package_version_3() {
+    let result = run_transaction_acceptor(
+        TestScenario::DeployPaymentStoredVersionedContractByHashTargetsVersion,
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(
+            InvalidTransaction::Deploy(InvalidDeploy::TargetingPackageVersionNotSupported)
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn should_reject_transactions_targets_package_version_4() {
+    let result = run_transaction_acceptor(
+        TestScenario::DeployPaymentStoredVersionedContractByNameTargetsVersion,
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(
+            InvalidTransaction::Deploy(InvalidDeploy::TargetingPackageVersionNotSupported)
+        ))
+    ));
+}
+
+#[tokio::test]
+async fn should_reject_transactions_targets_package_version_5() {
+    let result = run_transaction_acceptor(
+        TestScenario::DeploySessionStoredVersionedContractByHashTargetsVersion,
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(
+            InvalidTransaction::Deploy(InvalidDeploy::TargetingPackageVersionNotSupported)
+        ))
+    ));
+}
+#[tokio::test]
+async fn should_reject_transactions_targets_package_version_6() {
+    let result = run_transaction_acceptor(
+        TestScenario::DeploySessionStoredVersionedContractByNameTargetsVersion,
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(super::Error::InvalidTransaction(
+            InvalidTransaction::Deploy(InvalidDeploy::TargetingPackageVersionNotSupported)
+        ))
     ));
 }
