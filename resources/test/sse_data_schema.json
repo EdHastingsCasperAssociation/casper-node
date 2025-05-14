@@ -1270,10 +1270,9 @@
       "additionalProperties": false
     },
     "CLType": {
-      "description": "Casper types, i.e. types which can be stored and manipulated by smart contracts.\n\nProvides a description of the underlying data type of a [`CLValue`](crate::CLValue).",
+      "description": "Casper types, i.e. types which can be stored and manipulated by smart contracts.\n\nProvides a description of the underlying data type of a [`CLValue`](crate::CLValue). `bool` primitive.",
       "oneOf": [
         {
-          "description": "`bool` primitive.",
           "type": "string",
           "enum": [
             "Bool"
