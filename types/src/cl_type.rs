@@ -52,8 +52,8 @@ const CL_TYPE_TAG_PUBLIC_KEY: u8 = 22;
 #[cfg_attr(feature = "datasize", derive(DataSize))]
 #[cfg_attr(feature = "json-schema", derive(JsonSchema))]
 #[serde(deny_unknown_fields)]
-/// `bool` primitive.
 pub enum CLType {
+    /// `bool` primitive.
     Bool,
     /// `i32` primitive.
     I32,
@@ -92,10 +92,7 @@ pub enum CLType {
     /// `Result` with `Ok` and `Err` variants of `CLType`s.
     #[allow(missing_docs)] // generated docs are explicit enough.
     #[cfg_attr(feature = "datasize", data_size(skip))]
-    Result {
-        ok: Box<CLType>,
-        err: Box<CLType>,
-    },
+    Result { ok: Box<CLType>, err: Box<CLType> },
     /// Map with keys of a single `CLType` and values of a single `CLType`.
     #[allow(missing_docs)] // generated docs are explicit enough.
     #[cfg_attr(feature = "datasize", data_size(skip))]
