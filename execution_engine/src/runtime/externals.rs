@@ -8,11 +8,11 @@ use casper_wasmi::{Externals, RuntimeArgs, RuntimeValue, Trap};
 use casper_storage::global_state::{error::Error as GlobalStateError, state::StateReader};
 use casper_types::{
     account::AccountHash,
-    addressable_entity::EntryPoints,
+    addressable_entity::{EntityEntryPoint, EntryPoints},
     api_error,
     bytesrepr::{self, ToBytes},
     contract_messages::MessageTopicOperation,
-    contracts::{ContractPackageHash, NamedKeys},
+    contracts::{ContractPackageHash, EntryPoints as ContractEntryPoints, NamedKeys},
     AddressableEntityHash, ApiError, EntityVersion, Gas, Group, HashAlgorithm, HostFunction,
     HostFunctionCost, Key, PackageHash, PackageStatus, PublicKey, Signature, StoredValue, URef,
     U512, UREF_SERIALIZED_LENGTH,
@@ -643,8 +643,18 @@ where
                 let contract_package_hash: ContractPackageHash =
                     self.t_from_mem(contract_package_hash_ptr, contract_package_hash_size)?;
                 let package_hash = PackageHash::new(contract_package_hash.value());
-                let entry_points: EntryPoints =
-                    self.t_from_mem(entry_points_ptr, entry_points_size)?;
+                let entry_points: EntryPoints = {
+                    let contract_entry_points: ContractEntryPoints =
+                        self.t_from_mem(entry_points_ptr, entry_points_size)?;
+
+                    let points: Vec<EntityEntryPoint> = contract_entry_points
+                        .take_entry_points()
+                        .into_iter()
+                        .map(EntityEntryPoint::from)
+                        .collect();
+
+                    points.into()
+                };
                 let named_keys: NamedKeys = self.t_from_mem(named_keys_ptr, named_keys_size)?;
                 let ret = self.add_contract_version(
                     package_hash,
