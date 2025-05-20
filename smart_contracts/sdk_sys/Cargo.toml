@@ -1,6 +1,6 @@
 [package]
 name = "casper-contract-sdk-sys"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Casper contract sdk sys package"
 authors = ["Michał Papierski <michal@casperlabs.io>"]
