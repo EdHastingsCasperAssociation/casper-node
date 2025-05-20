@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["Michał Papierski <michal@casper.network>"]
 description = "Casper executor interface package"
 homepage = "https://casper.network"
-repository = "https://github.com/casper-network/casper-node/tree/dev/executor/wasm-interface"
+repository = "https://github.com/casper-network/casper-node/tree/dev/executor/wasm_interface"
 license = "Apache-2.0"
 
 [dependencies]

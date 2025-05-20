@@ -3,6 +3,11 @@ name = "casper-contract-macros"
 version = "0.1.0"
 edition = "2021"
 authors = ["Michał Papierski <michal@casperlabs.io>"]
+description = "Casper contract macros package"
+documentation = "https://docs.rs/casper-contract-macros"
+homepage = "https://casper.network"
+repository = "https://github.com/casper-network/casper-node/tree/dev/smart_contracts/macros"
+license = "Apache-2.0"
 
 [lib]
 proc-macro = true
