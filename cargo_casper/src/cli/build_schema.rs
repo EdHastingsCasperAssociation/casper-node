@@ -28,7 +28,7 @@ pub fn build_schema_impl<W: Write>(
     // Get all of the direct user contract dependencies.
     //
     // This is a naive approach -- if a dep is feature gated, it won't be resolved correctly.
-    // In practice, we only care about casper-sdk and casper-macros being used, and there is
+    // In practice, we only care about casper-contract-sdk and casper-macros being used, and there is
     // little to no reason to feature gate them. So this approach should be good enough.
     let dependencies: Vec<String> = {
         let metadata = MetadataCommand::new().exec()?;
@@ -61,8 +61,8 @@ pub fn build_schema_impl<W: Write>(
     // Determine extra features based on the dependencies detected
     let mut features = Vec::new();
 
-    if dependencies.contains(&"casper-sdk".into()) {
-        features.push("casper-sdk/__abi_generator".to_owned());
+    if dependencies.contains(&"casper-contract-sdk".into()) {
+        features.push("casper-contract-sdk/__abi_generator".to_owned());
     }
 
     if dependencies.contains(&"casper-macros".into()) {

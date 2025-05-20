@@ -6,7 +6,7 @@ edition = "2021"
 description = "Types shared by many casper crates for use on the Casper network."
 readme = "README.md"
 documentation = "https://docs.rs/casper-types"
-homepage = "https://casperlabs.io"
+homepage = "https://casper.network"
 repository = "https://github.com/casper-network/casper-node/tree/master/types"
 license = "Apache-2.0"
 

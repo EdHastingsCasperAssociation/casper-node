@@ -1,7 +1,7 @@
 [package]
 name = "casper-node"
 version = "2.0.0" # when updating, also update 'html_root_url' in lib.rs
-authors = ["Ed Hastings <ed@casper.network>", "Karan Dhareshwar <karan@csper.network>"]
+authors = ["Ed Hastings <ed@casper.network>", "Karan Dhareshwar <karan@casper.network>"]
 edition = "2021"
 description = "The Casper blockchain node"
 documentation = "https://docs.rs/casper-node"
@@ -93,8 +93,8 @@ uuid = { version = "0.8.1", features = ["serde", "v4"] }
 warp = { version = "0.3.6", features = ["compression"] }
 wheelbuf = "0.2.0"
 
-casper-executor-wasm = { path = "../executor/wasm" }
-casper-executor-wasm-interface = { path = "../executor/wasm-interface" }
+casper-executor-wasm = { version = "0.1.0", path = "../executor/wasm" }
+casper-executor-wasm-interface = { version = "0.1.0", path = "../executor/wasm_interface" }
 
 [dev-dependencies]
 casper-binary-port = { version = "1.0.0", path = "../binary_port", features = ["testing"] }
