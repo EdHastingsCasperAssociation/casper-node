@@ -15,13 +15,13 @@ use crate::{
     Message, ToCallData,
 };
 
+use casper_contract_sdk_sys::casper_env_info;
 use casper_executor_wasm_common::{
     env_info::EnvInfo,
     error::{result_from_code, CommonResult, HOST_ERROR_SUCCESS},
     flags::ReturnFlags,
     keyspace::{Keyspace, KeyspaceTag},
 };
-use casper_contract_sdk_sys::casper_env_info;
 
 /// Print a message.
 #[inline]
@@ -52,7 +52,10 @@ pub fn copy_input_into<F: FnOnce(usize) -> Option<ptr::NonNull<u8>>>(
     alloc: Option<F>,
 ) -> Option<NonNull<u8>> {
     let ret = unsafe {
-        casper_contract_sdk_sys::casper_copy_input(alloc_callback::<F>, &alloc as *const _ as *mut c_void)
+        casper_contract_sdk_sys::casper_copy_input(
+            alloc_callback::<F>,
+            &alloc as *const _ as *mut c_void,
+        )
     };
     NonNull::<u8>::new(ret)
 }
@@ -177,8 +180,9 @@ pub fn remove(key: Keyspace) -> Result<(), CommonResult> {
         Keyspace::NamedKey(key_bytes) => (KeyspaceTag::NamedKey as u64, key_bytes.as_bytes()),
         Keyspace::PaymentInfo(payload) => (KeyspaceTag::PaymentInfo as u64, payload.as_bytes()),
     };
-    let ret =
-        unsafe { casper_contract_sdk_sys::casper_remove(key_space, key_bytes.as_ptr(), key_bytes.len()) };
+    let ret = unsafe {
+        casper_contract_sdk_sys::casper_remove(key_space, key_bytes.as_ptr(), key_bytes.len())
+    };
     result_from_code(ret)
 }
 
@@ -517,7 +521,11 @@ pub fn transferred_value() -> u64 {
 pub fn transfer(target_account: &Address, amount: u64) -> Result<(), CallError> {
     let amount: *const c_void = &amount as *const _ as *const c_void;
     let result_code = unsafe {
-        casper_contract_sdk_sys::casper_transfer(target_account.as_ptr(), target_account.len(), amount)
+        casper_contract_sdk_sys::casper_transfer(
+            target_account.as_ptr(),
+            target_account.len(),
+            amount,
+        )
     };
     call_result_from_code(result_code)
 }
@@ -532,7 +540,12 @@ pub fn get_block_time() -> u64 {
 #[doc(hidden)]
 pub fn emit_raw(topic: &str, payload: &[u8]) -> Result<(), CommonResult> {
     let ret = unsafe {
-        casper_contract_sdk_sys::casper_emit(topic.as_ptr(), topic.len(), payload.as_ptr(), payload.len())
+        casper_contract_sdk_sys::casper_emit(
+            topic.as_ptr(),
+            topic.len(),
+            payload.as_ptr(),
+            payload.len(),
+        )
     };
     result_from_code(ret)
 }

@@ -686,9 +686,11 @@ mod tests {
     fn can_call_exported_function() {
         super::yet_another_exported_function(1234u64, "Hello, world!".to_string());
 
-        let input_data =
-            casper_contract_sdk::serializers::borsh::to_vec(&(4321u64, "!world, Hello".to_string()))
-                .unwrap();
+        let input_data = casper_contract_sdk::serializers::borsh::to_vec(&(
+            4321u64,
+            "!world, Hello".to_string(),
+        ))
+        .unwrap();
 
         dispatch_with(Environment::default().with_input_data(input_data), || {
             native::invoke_export_by_name("yet_another_exported_function");

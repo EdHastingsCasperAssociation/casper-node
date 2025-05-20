@@ -31,7 +31,10 @@ pub fn build_impl(
             None,
             vec![("__CARGO_CASPER_INJECT_SCHEMA_MARKER", &contract_schema)],
         )
-        .dispatch("wasm32-unknown-unknown", ["casper-contract-sdk/__embed_schema"])
+        .dispatch(
+            "wasm32-unknown-unknown",
+            ["casper-contract-sdk/__embed_schema"],
+        )
         .context("Failed to compile user wasm")?
         .get_artifact_by_extension("wasm")
         .context("Build artifacts for contract wasm didn't include a wasm file")?;

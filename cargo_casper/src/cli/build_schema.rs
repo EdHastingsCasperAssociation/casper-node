@@ -28,8 +28,8 @@ pub fn build_schema_impl<W: Write>(
     // Get all of the direct user contract dependencies.
     //
     // This is a naive approach -- if a dep is feature gated, it won't be resolved correctly.
-    // In practice, we only care about casper-contract-sdk and casper-macros being used, and there is
-    // little to no reason to feature gate them. So this approach should be good enough.
+    // In practice, we only care about casper-contract-sdk and casper-macros being used, and there
+    // is little to no reason to feature gate them. So this approach should be good enough.
     let dependencies: Vec<String> = {
         let metadata = MetadataCommand::new().exec()?;
 
