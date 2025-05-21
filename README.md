@@ -35,6 +35,7 @@ The Casper MainNet is live.
 
 - [Discord Server](https://discord.gg/caspernetwork)
 - [Telegram Channel](https://t.me/casperofficialann)
+- [X (Twitter)](https://x.com/Casper_Network)
 
 
 
