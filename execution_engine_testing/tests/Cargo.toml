@@ -40,5 +40,4 @@ walrus = "0.20.2"
 wat = "1.0.47"
 
 [features]
-use-as-wasm = ["casper-engine-test-support/use-as-wasm"]
 fixture-generators = []
