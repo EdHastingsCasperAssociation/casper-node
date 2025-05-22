@@ -1,12 +1,12 @@
 [package]
 name = "casper-execution-engine"
 version = "8.0.1" # when updating, also update 'html_root_url' in lib.rs
-authors = ["Henry Till <henrytill@gmail.com>", "Ed Hastings <ed@casperlabs.io>"]
+authors = ["Henry Till <henrytill@gmail.com>", "Ed Hastings <ed@casper.network>", "Michał Papierski <michal@casper.network>"]
 edition = "2021"
 description = "Casper execution engine crates."
 readme = "README.md"
 documentation = "https://docs.rs/casper-execution-engine"
-homepage = "https://casperlabs.io"
+homepage = "https://casper.network"
 repository = "https://github.com/casper-network/casper-node/tree/master/execution_engine"
 license = "Apache-2.0"
 
