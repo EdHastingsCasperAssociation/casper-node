@@ -36,9 +36,6 @@ version-sync = "0.9.3"
 toml_edit = "=0.21.0"
 humantime = "2"
 
-[features]
-use-as-wasm = []
-
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

@@ -63,27 +63,11 @@ static MAYBE_CARGO_TARGET_DIR_WASM_PATH: Lazy<Option<PathBuf>> = Lazy::new(|| {
             .join("release")
     })
 });
-// The location of compiled Wasm files if compiled from the Rust sources within the casper-node
-// repo, i.e. 'casper-node/target/wasm32-unknown-unknown/release/'.
-#[cfg(feature = "use-as-wasm")]
-static ASSEMBLY_SCRIPT_WORKSPACE_WASM_PATH: Lazy<PathBuf> = Lazy::new(|| {
-    let path = RUST_WORKSPACE_PATH.join("target_as");
-
-    assert!(
-        path.exists(),
-        "AssemblyScript WASM path {} does not exist.",
-        path.display()
-    );
-    path
-});
 static WASM_PATHS: Lazy<Vec<PathBuf>> = Lazy::new(get_compiled_wasm_paths);
 
 /// Constructs a list of paths that should be considered while looking for a compiled wasm file.
 fn get_compiled_wasm_paths() -> Vec<PathBuf> {
     let mut ret = vec![
-        // Contracts compiled with typescript are tried first
-        #[cfg(feature = "use-as-wasm")]
-        ASSEMBLY_SCRIPT_WORKSPACE_WASM_PATH.clone(),
         RUST_WORKSPACE_WASM_PATH.clone(),
         RUST_TOOL_WASM_PATH.clone(),
     ];
