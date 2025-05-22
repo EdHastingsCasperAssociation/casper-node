@@ -2,7 +2,7 @@
 name = "casper-contract-macros"
 version = "0.1.1"
 edition = "2021"
-authors = ["Michał Papierski <michal@casperlabs.io>"]
+authors = ["Michał Papierski <michal@casper.network>"]
 description = "Casper contract macros package"
 documentation = "https://docs.rs/casper-contract-macros"
 homepage = "https://casper.network"
